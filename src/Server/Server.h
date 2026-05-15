@@ -50,10 +50,9 @@ public:
     void bindCollect(MotionCollectGate* g);
 
     // 图像源 -> UDP 通道。按当前订阅位图与 PixelFormat 自动选择是否真正发送。
-    // Raw16 与 Preview8 均来自同一原始帧；都订阅时一次性产出两路。
+    // Raw16 来自原始帧。
     void pushRaw(const RawFrame& frame);
     void pushSliceStitch(const cv::Mat& img16);
-    void pushRegionStitch(const cv::Mat& img16);
 
 private:
     void registerHandlers();
@@ -61,10 +60,6 @@ private:
 
     // 把 16bit Mat 转为 vector<uint8_t>（Mono16 raw bytes）；非连续时按行拷贝
     static std::shared_ptr<std::vector<uint8_t>> mat16ToBytes(const cv::Mat& m);
-    // 把 16bit 数据 min-max 归一化为 Mono8 bytes
-    static std::shared_ptr<std::vector<uint8_t>> mat16ToPreview8(const cv::Mat& m);
-    static std::shared_ptr<std::vector<uint8_t>> raw16ToPreview8(const uint16_t* data,
-                                                                  size_t count);
 
     Config cfg_;
     boost::asio::io_context io_;

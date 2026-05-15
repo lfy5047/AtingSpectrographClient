@@ -26,9 +26,7 @@ enum class MsgType : uint16_t {
 // 图像通道 ID。位编号即订阅位图位号。
 enum class StreamChannel : uint8_t {
     Raw16          = 1,
-    Preview8       = 2,
     SliceStitch16  = 3,
-    RegionStitch16 = 4,
 };
 
 enum class PixelFormat : uint16_t {

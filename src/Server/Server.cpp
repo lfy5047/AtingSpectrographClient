@@ -21,17 +21,13 @@ namespace {
 // 字符串 <-> 通道 ID
 StreamChannel parseChannel(const std::string& s) {
     if (s == "raw16")           return StreamChannel::Raw16;
-    if (s == "preview8")        return StreamChannel::Preview8;
     if (s == "slice_stitch16")  return StreamChannel::SliceStitch16;
-    if (s == "region_stitch16") return StreamChannel::RegionStitch16;
     throw RpcError(-3, "unknown channel: " + s);
 }
 const char* channelName(StreamChannel c) {
     switch (c) {
     case StreamChannel::Raw16:          return "raw16";
-    case StreamChannel::Preview8:       return "preview8";
     case StreamChannel::SliceStitch16:  return "slice_stitch16";
-    case StreamChannel::RegionStitch16: return "region_stitch16";
     }
     return "?";
 }
@@ -128,44 +124,21 @@ void Server::onConnChanged(bool connected, std::string peer_ip) {
 
 void Server::pushRaw(const RawFrame& f) {
     const uint32_t mask = udp_.enabledMask();
-    if (!mask) return;
-    const bool wantRaw     = mask & channelBit(StreamChannel::Raw16);
-    const bool wantPreview = mask & channelBit(StreamChannel::Preview8);
-    if (!wantRaw && !wantPreview) return;
+    if (!(mask & channelBit(StreamChannel::Raw16))) return;
 
-    if (wantRaw) {
-        auto bytes = std::make_shared<std::vector<uint8_t>>(f.data.size() * sizeof(uint16_t));
-        std::memcpy(bytes->data(), f.data.data(), bytes->size());
-        udp_.pushFrame({StreamChannel::Raw16,
-                        static_cast<uint16_t>(f.width),
-                        static_cast<uint16_t>(f.height),
-                        PixelFormat::Mono16,
-                        bytes});
-    }
-    if (wantPreview) {
-        auto bytes = raw16ToPreview8(f.data.data(), f.data.size());
-        udp_.pushFrame({StreamChannel::Preview8,
-                        static_cast<uint16_t>(f.width),
-                        static_cast<uint16_t>(f.height),
-                        PixelFormat::Mono8,
-                        bytes});
-    }
+    auto bytes = std::make_shared<std::vector<uint8_t>>(f.data.size() * sizeof(uint16_t));
+    std::memcpy(bytes->data(), f.data.data(), bytes->size());
+    udp_.pushFrame({StreamChannel::Raw16,
+                    static_cast<uint16_t>(f.width),
+                    static_cast<uint16_t>(f.height),
+                    PixelFormat::Mono16,
+                    bytes});
 }
 
 void Server::pushSliceStitch(const cv::Mat& img16) {
     if (img16.empty() || img16.type() != CV_16UC1) return;
     if (!(udp_.enabledMask() & channelBit(StreamChannel::SliceStitch16))) return;
     udp_.pushFrame({StreamChannel::SliceStitch16,
-                    static_cast<uint16_t>(img16.cols),
-                    static_cast<uint16_t>(img16.rows),
-                    PixelFormat::Mono16,
-                    mat16ToBytes(img16)});
-}
-
-void Server::pushRegionStitch(const cv::Mat& img16) {
-    if (img16.empty() || img16.type() != CV_16UC1) return;
-    if (!(udp_.enabledMask() & channelBit(StreamChannel::RegionStitch16))) return;
-    udp_.pushFrame({StreamChannel::RegionStitch16,
                     static_cast<uint16_t>(img16.cols),
                     static_cast<uint16_t>(img16.rows),
                     PixelFormat::Mono16,
@@ -185,22 +158,6 @@ std::shared_ptr<std::vector<uint8_t>> Server::mat16ToBytes(const cv::Mat& m) {
             std::memcpy(out->data() + r * row_bytes, m.ptr<uint16_t>(r), row_bytes);
     }
     return out;
-}
-
-std::shared_ptr<std::vector<uint8_t>> Server::raw16ToPreview8(const uint16_t* p, size_t n) {
-    cv::Mat src(1, static_cast<int>(n), CV_16UC1,
-                const_cast<void*>(static_cast<const void*>(p)));
-    cv::Mat dst;
-    cv::normalize(src, dst, 0, 255, cv::NORM_MINMAX, CV_8UC1);
-    auto out = std::make_shared<std::vector<uint8_t>>(n);
-    std::memcpy(out->data(), dst.ptr<uint8_t>(), n);
-    return out;
-}
-
-std::shared_ptr<std::vector<uint8_t>> Server::mat16ToPreview8(const cv::Mat& m) {
-    cv::Mat dst;
-    cv::normalize(m, dst, 0, 255, cv::NORM_MINMAX, CV_8UC1);
-    return mat16ToBytes(dst);
 }
 
 // ── 命令路由表 ────────────────────────────────────────────────────────────────
@@ -380,8 +337,8 @@ void Server::registerHandlers() {
     });
     router_.registerCmd("stream.status", [this](const J&) {
         std::vector<std::string> active;
-        for (auto ch : {StreamChannel::Raw16, StreamChannel::Preview8,
-                        StreamChannel::SliceStitch16, StreamChannel::RegionStitch16})
+        for (auto ch : {StreamChannel::Raw16,
+                        StreamChannel::SliceStitch16})
             if (udp_.isSubscribed(ch)) active.emplace_back(channelName(ch));
         return J{{"channels", active},
                  {"frames_sent", udp_.framesSent()},

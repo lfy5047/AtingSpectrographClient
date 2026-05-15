@@ -15,6 +15,7 @@
 #include "widgets/ImageView.h"
 #include "widgets/StatusBarPanel.h"
 #include "Protocol.h"
+#include "plog/Log.h"
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -46,12 +47,12 @@ MainWindow::MainWindow(QWidget* parent)
         int tabIdx = -1;
         using namespace cli::proto;
         switch (channel) {
-        case Preview8:       tabIdx = 0; break;
-        case Raw16:          tabIdx = 1; break;
-        case SliceStitch16:  tabIdx = 2; break;
-        case RegionStitch16: tabIdx = 3; break;
+        case Raw16:          tabIdx = 0; break;
+        case SliceStitch16:  tabIdx = 1; break;
         default: return;
         }
+
+        LOGD << "frameReady: channel=" << channel << ", width=" << width << ", height=" << height << ", pixfmt=" << pixfmt << ", data.size=" << data.size();
 
         QImage img;
         if (pixfmt == Mono8) {
@@ -155,8 +156,8 @@ void MainWindow::setupSidebar()
 void MainWindow::setupCentral()
 {
     imageTabs_ = new QTabWidget(this);
-    QStringList chNames = {"Preview8", "Raw16", "SliceStitch16", "RegionStitch16"};
-    for (int i = 0; i < 4; ++i) {
+    QStringList chNames = {"Raw16", "SliceStitch16"};
+    for (int i = 0; i < 2; ++i) {
         imageViews_[i] = new ImageView(this);
         imageTabs_->addTab(imageViews_[i], chNames[i]);
     }

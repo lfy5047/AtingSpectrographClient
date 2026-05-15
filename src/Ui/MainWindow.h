@@ -51,6 +51,6 @@ private:
     StreamPanel*     streamPanel_  = nullptr;
     LogPanel*        logPanel_     = nullptr;
 
-    ImageView*      imageViews_[4] = {};
+    ImageView*      imageViews_[2] = {};
     StatusBarPanel* statusPanel_   = nullptr;
 };

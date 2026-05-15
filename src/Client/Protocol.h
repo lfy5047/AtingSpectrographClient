@@ -18,9 +18,7 @@ enum MsgType : uint16_t {
 
 enum StreamChannel : uint8_t {
     Raw16          = 1,
-    Preview8       = 2,
     SliceStitch16  = 3,
-    RegionStitch16 = 4,
 };
 
 enum PixelFormat : uint16_t {
