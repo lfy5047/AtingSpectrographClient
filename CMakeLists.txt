@@ -1,0 +1,48 @@
+cmake_minimum_required(VERSION 3.10)
+project(AtingSpectrographClient VERSION 0.1.0 LANGUAGES CXX)
+
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+if(MSVC)
+    add_compile_options("/utf-8")
+endif()
+
+add_definitions(-DNEW_ALGORITHM)
+
+include(libs/libsdefine.cmake)
+
+# Qt
+find_package(Qt5 COMPONENTS Widgets PrintSupport Network REQUIRED)
+set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
+
+file(GLOB_RECURSE CLIENT_SRCS
+    src/main.cpp
+    src/Client/*.h   src/Client/*.cpp
+    src/Ui/*.h       src/Ui/*.cpp
+)
+
+set(RESOURCES resources/resources.qrc)
+
+add_executable(${PROJECT_NAME} WIN32 ${CLIENT_SRCS} ${RESOURCES})
+
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Client
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Ui
+    ${CMAKE_CURRENT_SOURCE_DIR}/Common/include
+)
+
+target_link_libraries(${PROJECT_NAME} PRIVATE
+    Qt5::Widgets
+    Qt5::PrintSupport
+    Qt5::Network
+)
+
+if(WIN32)
+    set_target_properties(${PROJECT_NAME} PROPERTIES
+        WIN32_EXECUTABLE false
+    )
+endif()
