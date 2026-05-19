@@ -6,7 +6,7 @@
 ImageView::ImageView(QWidget* parent) : QWidget(parent)
 {
     setMinimumSize(320, 240);
-    setStyleSheet("background-color: #1A1E24;");
+    setStyleSheet("background-color: #0A0E14;");
 }
 
 void ImageView::setImage(const QImage& img)
@@ -30,11 +30,27 @@ void ImageView::paintEvent(QPaintEvent*)
     p.fillRect(rect(), QColor(0x1A, 0x1E, 0x24));
 
     if (noSignal_ || image_.isNull()) {
-        p.setPen(QColor(0x55, 0x5D, 0x67));
-        QFont f = p.font();
-        f.setPointSize(16);
+        // No-signal display
+        QColor ringColor(0x4C, 0x8E, 0xF7, 40);
+        QColor textColor(0x54, 0x5D, 0x68);
+
+        p.setPen(Qt::NoPen);
+        p.setBrush(ringColor);
+        int cx = rect().center().x();
+        int cy = rect().center().y();
+        int radius = 30;
+        p.drawEllipse(QPoint(cx, cy), radius, radius);
+
+        p.setPen(QPen(ringColor.lighter(150), 1.5));
+        p.setBrush(Qt::NoBrush);
+        p.drawEllipse(QPoint(cx, cy), radius + 4, radius + 4);
+
+        QFont f("Microsoft YaHei UI", 11);
         p.setFont(f);
-        p.drawText(rect(), Qt::AlignCenter, "No Signal");
+        p.setPen(textColor);
+        p.drawText(QRect(cx - 100, cy + radius + 20, 200, 24),
+                   Qt::AlignHCenter | Qt::AlignTop,
+                   QString::fromUtf8("等待数据流..."));
         return;
     }
 
@@ -53,11 +69,11 @@ void ImageView::paintEvent(QPaintEvent*)
     p.drawImage(QRectF(x, y, w, h), image_);
 
     // corner info
-    p.setPen(QColor(0x9A, 0xA3, 0xAD));
-    QFont f("Consolas", 8);
+    p.setPen(QColor(0x7D, 0x85, 0x90));
+    QFont f("Consolas", 9);
     p.setFont(f);
-    QString info = QString("%1x%2").arg(image_.width()).arg(image_.height());
-    p.drawText(10, 18, info);
+    QString info = QString("%1x%2  |  %3%").arg(image_.width()).arg(image_.height()).arg(static_cast<int>(scale_ * 100));
+    p.drawText(10, height() - 10, info);
 }
 
 void ImageView::wheelEvent(QWheelEvent* e)

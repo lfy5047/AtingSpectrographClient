@@ -1,0 +1,1026 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AtingSpectrograph Client — Spectra Pro</title>
+<style>
+/* ===== Reset & Base ===== */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+:root {
+  --bg-deepest: #0A0E14;
+  --bg-surface: #12171D;
+  --bg-input: #1A1F28;
+  --bg-card: #161B23;
+  --border: #21262E;
+  --border-light: #2A3039;
+  --accent: #4C8EF7;
+  --accent-hover: #6BA5FA;
+  --accent-subtle: rgba(76,142,247,0.12);
+  --accent-glow: rgba(76,142,247,0.25);
+  --purple: #7C6FF7;
+  --purple-subtle: rgba(124,111,247,0.12);
+  --green: #26A641;
+  --green-subtle: rgba(38,166,65,0.12);
+  --yellow: #D29922;
+  --yellow-subtle: rgba(210,153,34,0.12);
+  --red: #E5484D;
+  --red-subtle: rgba(229,72,77,0.12);
+  --text-primary: #E6EDF3;
+  --text-secondary: #7D8590;
+  --text-tertiary: #545D68;
+  --radius-sm: 6px;
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --shadow-sm: 0 1px 2px rgba(0,0,0,0.3);
+  --shadow: 0 2px 8px rgba(0,0,0,0.4);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.5);
+  --transition: 180ms cubic-bezier(0.4,0,0.2,1);
+  --transition-slow: 280ms cubic-bezier(0.4,0,0.2,1);
+  --sidebar-width: 210px;
+  --sidebar-collapsed: 56px;
+  --topbar-height: 88px;
+  --logbar-collapsed: 36px;
+  --logbar-expanded: 200px;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
+  background: var(--bg-deepest);
+  color: var(--text-primary);
+  height: 100vh; overflow: hidden;
+  display: flex;
+  user-select: none;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ===== Sidebar ===== */
+.sidebar {
+  width: var(--sidebar-width);
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border);
+  display: flex; flex-direction: column;
+  transition: width var(--transition-slow);
+  position: relative; z-index: 10;
+  flex-shrink: 0;
+}
+.sidebar.collapsed { width: var(--sidebar-collapsed); }
+
+.sidebar-logo {
+  padding: 18px 16px; display: flex; align-items: center; gap: 10px;
+  border-bottom: 1px solid var(--border); min-height: 56px; overflow: hidden;
+  white-space: nowrap;
+}
+.sidebar-logo .logo-icon {
+  width: 32px; height: 32px; border-radius: var(--radius);
+  background: linear-gradient(135deg, var(--accent), var(--purple));
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0; font-size: 16px; font-weight: 700; color: #fff;
+}
+.sidebar-logo .logo-text {
+  font-size: 13px; font-weight: 700; letter-spacing: 0.3px;
+  color: var(--text-primary); transition: opacity var(--transition-slow);
+}
+.sidebar.collapsed .logo-text { opacity: 0; pointer-events: none; }
+
+.sidebar-nav { flex: 1; padding: 8px; overflow-y: auto; overflow-x: hidden; }
+.sidebar-nav::-webkit-scrollbar { width: 3px; }
+.sidebar-nav::-webkit-scrollbar-thumb { background: var(--bg-input); border-radius: 3px; }
+
+.nav-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 12px; border-radius: var(--radius);
+  cursor: pointer; transition: all var(--transition);
+  color: var(--text-secondary); font-size: 13px; font-weight: 500;
+  margin-bottom: 2px; position: relative; white-space: nowrap; overflow: hidden;
+}
+.nav-item:hover { background: var(--accent-subtle); color: var(--text-primary); }
+.nav-item.active {
+  background: var(--accent-subtle); color: var(--accent);
+  box-shadow: inset 3px 0 0 var(--accent);
+  border-radius: var(--radius); border-top-left-radius: 0; border-bottom-left-radius: 0;
+  margin-left: -8px; padding-left: 20px;
+}
+.nav-item svg { width: 20px; height: 20px; flex-shrink: 0; opacity: 0.75; }
+.nav-item.active svg, .nav-item:hover svg { opacity: 1; }
+.nav-item .nav-label { transition: opacity var(--transition-slow); }
+.sidebar.collapsed .nav-label { opacity: 0; pointer-events: none; width: 0; }
+
+.sidebar-footer {
+  padding: 8px; border-top: 1px solid var(--border);
+  display: flex; flex-direction: column; gap: 4px;
+}
+.sidebar-collapse-btn {
+  display: flex; align-items: center; gap: 10px; padding: 8px 12px;
+  border-radius: var(--radius); cursor: pointer; transition: all var(--transition);
+  color: var(--text-tertiary); font-size: 12px; border: none; background: none;
+  white-space: nowrap; overflow: hidden;
+}
+.sidebar-collapse-btn:hover { background: var(--accent-subtle); color: var(--text-secondary); }
+.sidebar-collapse-btn svg { width: 16px; height: 16px; flex-shrink: 0; }
+.sidebar.collapsed .sidebar-collapse-btn svg { transform: rotate(180deg); }
+
+.conn-indicator {
+  display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+  border-radius: var(--radius); font-size: 11px; color: var(--text-secondary);
+  white-space: nowrap; overflow: hidden;
+}
+.conn-dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.conn-dot.online { background: var(--green); box-shadow: 0 0 6px var(--green); }
+.conn-dot.offline { background: var(--text-tertiary); }
+
+/* ===== Main Content ===== */
+.main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+/* ===== Top Metrics Bar ===== */
+.topbar {
+  height: var(--topbar-height); padding: 12px 16px;
+  display: flex; gap: 10px; align-items: stretch;
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.metric-card {
+  flex: 1; background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 10px 14px;
+  display: flex; flex-direction: column; justify-content: center;
+  transition: all var(--transition); min-width: 0;
+}
+.metric-card:hover { border-color: var(--border-light); }
+.metric-card .metric-header {
+  display: flex; align-items: center; gap: 6px; margin-bottom: 4px;
+}
+.metric-card .metric-header svg { width: 14px; height: 14px; opacity: 0.6; flex-shrink: 0; }
+.metric-card .metric-label {
+  font-size: 11px; color: var(--text-secondary); font-weight: 500;
+  letter-spacing: 0.2px; text-transform: uppercase;
+}
+.metric-card .metric-value {
+  font-size: 22px; font-weight: 700; letter-spacing: -0.5px;
+  font-variant-numeric: tabular-nums; color: var(--text-primary);
+}
+.metric-card .metric-sub {
+  font-size: 10px; color: var(--text-tertiary); margin-top: 2px;
+}
+.metric-conn .metric-value { font-size: 16px; font-weight: 600; }
+.metric-conn.online .metric-value { color: var(--green); }
+.metric-conn.offline .metric-value { color: var(--text-tertiary); }
+
+/* ===== Content Area ===== */
+.content { flex: 1; display: flex; min-height: 0; }
+
+/* ===== Image Viewer ===== */
+.viewer {
+  flex: 1; background: var(--bg-deepest); position: relative;
+  display: flex; align-items: center; justify-content: center;
+  border-right: 1px solid var(--border); min-width: 0;
+}
+.viewer-canvas {
+  width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
+}
+.viewer-img {
+  max-width: 96%; max-height: 96%; border-radius: 4px;
+  box-shadow: 0 0 40px rgba(76,142,247,0.06);
+}
+.viewer-nosignal {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  color: var(--text-tertiary);
+}
+.viewer-nosignal .pulse-ring {
+  width: 64px; height: 64px; border-radius: 50%;
+  border: 2px solid var(--border);
+  display: flex; align-items: center; justify-content: center;
+  animation: pulse-ring 2s ease-in-out infinite;
+}
+@keyframes pulse-ring {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(76,142,247,0.2); }
+  50% { box-shadow: 0 0 0 16px rgba(76,142,247,0); }
+}
+.viewer-nosignal span { font-size: 13px; font-weight: 500; }
+
+.viewer-toolbar {
+  position: absolute; bottom: 16px; left: 50%; transform: translateX(-50%);
+  display: flex; align-items: center; gap: 4px;
+  background: rgba(18,23,29,0.85); backdrop-filter: blur(12px);
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 6px; box-shadow: var(--shadow-lg);
+}
+.tool-btn {
+  width: 32px; height: 32px; border-radius: var(--radius);
+  display: flex; align-items: center; justify-content: center;
+  background: none; border: none; color: var(--text-secondary);
+  cursor: pointer; transition: all var(--transition); position: relative;
+}
+.tool-btn:hover { background: var(--accent-subtle); color: var(--accent); }
+.tool-btn svg { width: 16px; height: 16px; }
+.tool-divider { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
+.tool-zoom { font-size: 11px; color: var(--text-secondary); padding: 0 8px; min-width: 52px; text-align: center; font-variant-numeric: tabular-nums; font-weight: 500; }
+.tool-info { font-size: 10px; color: var(--text-tertiary); padding: 0 8px; }
+
+.channel-tabs {
+  position: absolute; top: 12px; left: 50%; transform: translateX(-50%);
+  display: flex; background: rgba(18,23,29,0.85); backdrop-filter: blur(12px);
+  border: 1px solid var(--border); border-radius: var(--radius-lg);
+  padding: 3px; gap: 2px; box-shadow: var(--shadow);
+}
+.channel-tab {
+  padding: 6px 14px; border-radius: 6px; font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all var(--transition);
+  color: var(--text-secondary); border: none; background: none;
+}
+.channel-tab.active { background: var(--accent); color: #fff; }
+.channel-tab:hover:not(.active) { color: var(--text-primary); }
+
+/* ===== Right Panel ===== */
+.panel {
+  width: 340px; background: var(--bg-surface); display: flex; flex-direction: column;
+  flex-shrink: 0; overflow: hidden;
+}
+.panel-tabs {
+  display: flex; border-bottom: 1px solid var(--border); padding: 0 12px; gap: 0;
+  flex-shrink: 0;
+}
+.panel-tab {
+  padding: 10px 14px; font-size: 12px; font-weight: 600; cursor: pointer;
+  color: var(--text-secondary); border-bottom: 2px solid transparent;
+  transition: all var(--transition); background: none; border-top: none;
+  border-left: none; border-right: none; margin-bottom: -1px;
+}
+.panel-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+.panel-tab:hover:not(.active) { color: var(--text-primary); }
+.panel-content { flex: 1; overflow-y: auto; padding: 12px; }
+.panel-content::-webkit-scrollbar { width: 4px; }
+.panel-content::-webkit-scrollbar-thumb { background: var(--bg-input); border-radius: 3px; }
+
+.card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 14px; margin-bottom: 10px;
+}
+.card-header { font-size: 11px; font-weight: 700; color: var(--text-secondary); text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 10px; display: flex; align-items: center; gap: 6px; }
+.card-header svg { width: 14px; height: 14px; opacity: 0.7; }
+.form-row { display: flex; gap: 8px; margin-bottom: 8px; align-items: center; }
+.form-row:last-child { margin-bottom: 0; }
+.form-label { font-size: 11px; color: var(--text-secondary); font-weight: 500; min-width: 36px; flex-shrink: 0; }
+.form-input {
+  flex: 1; background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 7px 10px; font-size: 12px;
+  color: var(--text-primary); font-family: inherit; transition: all var(--transition);
+  outline: none; min-width: 0;
+}
+.form-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-glow); }
+.form-input::placeholder { color: var(--text-tertiary); }
+input[type="number"].form-input { width: 70px; flex: 0 0 auto; }
+
+.btn {
+  padding: 7px 16px; border-radius: var(--radius-sm); font-size: 12px; font-weight: 600;
+  cursor: pointer; transition: all var(--transition); border: 1px solid transparent;
+  font-family: inherit; display: inline-flex; align-items: center; gap: 6px;
+  white-space: nowrap;
+}
+.btn:active { transform: scale(0.97); }
+.btn-primary { background: var(--accent); color: #fff; border-color: var(--accent); }
+.btn-primary:hover { background: var(--accent-hover); box-shadow: 0 2px 8px var(--accent-glow); }
+.btn-secondary { background: transparent; color: var(--text-secondary); border-color: var(--border); }
+.btn-secondary:hover { background: var(--bg-input); color: var(--text-primary); border-color: var(--border-light); }
+.btn-danger { background: transparent; color: var(--red); border-color: var(--red); }
+.btn-danger:hover { background: var(--red-subtle); }
+.btn-ghost { background: none; color: var(--text-secondary); border: none; padding: 6px 8px; }
+.btn-ghost:hover { color: var(--text-primary); background: var(--bg-input); }
+.btn-sm { padding: 4px 10px; font-size: 11px; }
+.btn-group { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; }
+
+.status-badge {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 20px; font-size: 11px; font-weight: 600;
+}
+.status-badge.ok { background: var(--green-subtle); color: var(--green); }
+.status-badge.err { background: var(--red-subtle); color: var(--red); }
+.status-badge.warn { background: var(--yellow-subtle); color: var(--yellow); }
+.status-badge .dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; }
+
+.slider-row { display: flex; align-items: center; gap: 8px; }
+.slider-row input[type="range"] {
+  flex: 1; appearance: none; height: 5px; border-radius: 3px;
+  background: var(--bg-input); outline: none; cursor: pointer;
+}
+.slider-row input[type="range"]::-webkit-slider-thumb {
+  appearance: none; width: 16px; height: 16px; border-radius: 50%;
+  background: var(--accent); cursor: pointer; box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+  transition: all var(--transition);
+}
+.slider-row input[type="range"]::-webkit-slider-thumb:hover { transform: scale(1.15); }
+.slider-value { font-size: 12px; font-weight: 600; width: 32px; text-align: right; font-variant-numeric: tabular-nums; color: var(--text-primary); flex-shrink: 0; }
+
+.readout {
+  font-size: 15px; font-weight: 700; font-family: "Cascadia Code", "Fira Code", "Consolas", "SF Mono", monospace;
+  color: var(--text-primary); letter-spacing: -0.3px;
+}
+.readout-sm { font-size: 12px; font-weight: 600; }
+.readout-label { font-size: 10px; color: var(--text-secondary); }
+
+.check-row { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.check-row input[type="checkbox"] {
+  appearance: none; width: 16px; height: 16px; border-radius: 3px; border: 1.5px solid var(--border);
+  background: var(--bg-input); cursor: pointer; flex-shrink: 0; transition: all var(--transition);
+  position: relative;
+}
+.check-row input[type="checkbox"]:checked {
+  background: var(--accent); border-color: var(--accent);
+}
+.check-row input[type="checkbox"]:checked::after {
+  content: ''; position: absolute; left: 4px; top: 1px; width: 6px; height: 10px;
+  border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg);
+}
+.check-row label { font-size: 12px; color: var(--text-primary); cursor: pointer; }
+
+.select-input {
+  background: var(--bg-input); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); padding: 7px 10px; font-size: 12px;
+  color: var(--text-primary); font-family: inherit; outline: none; cursor: pointer;
+  transition: all var(--transition);
+}
+.select-input:focus { border-color: var(--accent); }
+
+.empty-state {
+  text-align: center; padding: 40px 20px; color: var(--text-tertiary);
+}
+.empty-state svg { width: 48px; height: 48px; opacity: 0.3; margin-bottom: 12px; }
+.empty-state p { font-size: 12px; }
+
+/* ===== Dashboard ===== */
+.dashboard { padding: 16px; overflow-y: auto; flex: 1; }
+.dashboard-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 12px; }
+.dash-card {
+  background: var(--bg-card); border: 1px solid var(--border);
+  border-radius: var(--radius-lg); padding: 16px;
+  transition: all var(--transition);
+}
+.dash-card:hover { border-color: var(--border-light); }
+.dash-card.full { grid-column: 1 / -1; }
+.dash-card h3 { font-size: 13px; font-weight: 600; margin-bottom: 10px; color: var(--text-primary); display: flex; align-items: center; gap: 8px; }
+.dash-card h3 svg { width: 16px; height: 16px; opacity: 0.7; }
+.dash-stat { display: flex; justify-content: space-between; padding: 6px 0; border-bottom: 1px solid var(--border); font-size: 12px; }
+.dash-stat:last-child { border-bottom: none; }
+.dash-stat .key { color: var(--text-secondary); }
+.dash-stat .val { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* ===== Log Panel (Bottom) ===== */
+.log-panel {
+  height: var(--logbar-collapsed); background: var(--bg-surface);
+  border-top: 1px solid var(--border); flex-shrink: 0;
+  transition: height var(--transition-slow); display: flex; flex-direction: column;
+  overflow: hidden;
+}
+.log-panel.expanded { height: var(--logbar-expanded); }
+.log-panel-header {
+  display: flex; align-items: center; gap: 8px; padding: 6px 12px;
+  cursor: pointer; flex-shrink: 0; min-height: var(--logbar-collapsed);
+  transition: background var(--transition);
+}
+.log-panel-header:hover { background: var(--bg-card); }
+.log-panel-header svg { width: 14px; height: 14px; color: var(--text-secondary); transition: transform var(--transition); }
+.log-panel.expanded .log-panel-header svg.chevron { transform: rotate(180deg); }
+.log-panel-title { font-size: 11px; font-weight: 600; color: var(--text-secondary); letter-spacing: 0.3px; text-transform: uppercase; }
+.log-panel-badge { font-size: 10px; padding: 1px 6px; border-radius: 10px; font-weight: 600; }
+.log-panel-badge.info { background: var(--accent-subtle); color: var(--accent); }
+.log-panel-badge.warn { background: var(--yellow-subtle); color: var(--yellow); }
+.log-panel-badge.error { background: var(--red-subtle); color: var(--red); }
+.log-panel-spacer { flex: 1; }
+.log-panel-actions { display: flex; gap: 4px; align-items: center; }
+.log-filter-tag {
+  font-size: 10px; padding: 2px 8px; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--border); color: var(--text-secondary); background: none;
+  transition: all var(--transition); font-family: inherit;
+}
+.log-filter-tag.active { background: var(--accent-subtle); color: var(--accent); border-color: var(--accent); }
+.log-filter-tag:hover { border-color: var(--border-light); }
+
+.log-content {
+  flex: 1; overflow-y: auto; padding: 0 12px 8px;
+  font-family: "Cascadia Code", "Fira Code", "Consolas", "SF Mono", monospace;
+  font-size: 11px; line-height: 1.6; color: var(--text-secondary);
+}
+.log-content::-webkit-scrollbar { width: 4px; }
+.log-content::-webkit-scrollbar-thumb { background: var(--bg-input); border-radius: 3px; }
+.log-line { padding: 1px 0; white-space: nowrap; }
+.log-line .time { color: var(--text-tertiary); margin-right: 8px; }
+.log-line.info .tag { color: var(--accent); }
+.log-line.warn .tag { color: var(--yellow); }
+.log-line.error .tag { color: var(--red); }
+
+/* ===== Scrollbar Global ===== */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--bg-input); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--border-light); }
+
+/* ===== Utility ===== */
+.hidden { display: none !important; }
+.flex-1 { flex: 1; }
+.mt-2 { margin-top: 8px; }
+</style>
+</head>
+<body>
+
+<!-- ===== Sidebar ===== -->
+<aside class="sidebar" id="sidebar">
+  <div class="sidebar-logo">
+    <div class="logo-icon">A</div>
+    <span class="logo-text">Spectrograph</span>
+  </div>
+  <nav class="sidebar-nav" id="sidebarNav">
+    <div class="nav-item active" data-panel="dashboard" data-title="仪表盘">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>
+      <span class="nav-label">仪表盘</span>
+    </div>
+    <div class="nav-item" data-panel="connection" data-title="设备连接">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>
+      <span class="nav-label">设备连接</span>
+    </div>
+    <div class="nav-item" data-panel="camera" data-title="相机设置">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+      <span class="nav-label">相机设置</span>
+    </div>
+    <div class="nav-item" data-panel="mirror" data-title="转镜控制">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+      <span class="nav-label">转镜控制</span>
+    </div>
+    <div class="nav-item" data-panel="ir" data-title="红外热像">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 14.76V3.5a2.5 2.5 0 0 0-5 0v11.26a4.5 4.5 0 1 0 5 0z"/></svg>
+      <span class="nav-label">红外热像</span>
+    </div>
+    <div class="nav-item" data-panel="collect" data-title="数据采集">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>
+      <span class="nav-label">数据采集</span>
+    </div>
+    <div class="nav-item" data-panel="stream" data-title="流通道">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+      <span class="nav-label">流通道</span>
+    </div>
+    <div class="nav-item" data-panel="logs" data-title="系统日志">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+      <span class="nav-label">系统日志</span>
+    </div>
+  </nav>
+  <div class="sidebar-footer">
+    <div class="conn-indicator">
+      <span class="conn-dot offline" id="sidebarConnDot"></span>
+      <span id="sidebarConnText">未连接</span>
+    </div>
+    <button class="sidebar-collapse-btn" id="collapseBtn" title="折叠侧边栏">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 18 9 12 15 6"/></svg>
+      <span class="nav-label">折叠菜单</span>
+    </button>
+  </div>
+</aside>
+
+<!-- ===== Main ===== -->
+<main class="main">
+  <!-- Top Metrics Bar -->
+  <div class="topbar" id="topbar">
+    <div class="metric-card metric-conn offline" id="metricConn">
+      <div class="metric-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg><span class="metric-label">连接状态</span></div>
+      <div class="metric-value">未连接</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg><span class="metric-label">帧率 FPS</span></div>
+      <div class="metric-value" id="metricFps">--</div>
+      <div class="metric-sub">Raw16 / Slice</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="3"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg><span class="metric-label">总帧数</span></div>
+      <div class="metric-value" id="metricFrames">0</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg><span class="metric-label">丢帧</span></div>
+      <div class="metric-value" id="metricDropped">0</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg><span class="metric-label">转镜角度</span></div>
+      <div class="metric-value" id="metricAngle">--°</div>
+    </div>
+    <div class="metric-card">
+      <div class="metric-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg><span class="metric-label">设备 IP</span></div>
+      <div class="metric-value" style="font-size:16px;font-weight:600;" id="metricIP">---</div>
+    </div>
+  </div>
+
+  <!-- Content Area -->
+  <div class="content">
+    <!-- Image Viewer -->
+    <div class="viewer" id="viewer">
+      <div class="channel-tabs" id="channelTabs">
+        <button class="channel-tab active" data-channel="raw16">Raw16</button>
+        <button class="channel-tab" data-channel="slice">SliceStitch16</button>
+      </div>
+      <div class="viewer-canvas" id="viewerCanvas">
+        <div class="viewer-nosignal" id="nosignal">
+          <div class="pulse-ring">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#545D68" stroke-width="1.5"><circle cx="12" cy="12" r="3"/><path d="M12 1v4m0 14v4M4.22 4.22l2.83 2.83m9.9 9.9l2.83 2.83M1 12h4m14 0h4M4.22 19.78l2.83-2.83m9.9-9.9l2.83-2.83"/></svg>
+          </div>
+          <span>等待数据流...</span>
+        </div>
+        <canvas id="spectrumCanvas" style="display:none; max-width:96%; max-height:96%; border-radius:4px; box-shadow:0 0 40px rgba(76,142,247,0.06);"></canvas>
+      </div>
+      <div class="viewer-toolbar">
+        <button class="tool-btn" id="btnZoomOut" title="缩小"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>
+        <span class="tool-zoom" id="zoomLevel">100%</span>
+        <button class="tool-btn" id="btnZoomIn" title="放大"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/></svg></button>
+        <div class="tool-divider"></div>
+        <button class="tool-btn" id="btnFit" title="适应窗口"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/></svg></button>
+        <button class="tool-btn" id="btnReset" title="1:1"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2"/><line x1="2" y1="8" x2="22" y2="8"/></svg></button>
+        <div class="tool-divider"></div>
+        <span class="tool-info" id="imgInfo">--</span>
+      </div>
+    </div>
+
+    <!-- Right Panel -->
+    <div class="panel" id="panel">
+      <div class="panel-tabs" id="panelTabs"></div>
+      <div class="panel-content" id="panelContent">
+        <div class="empty-state">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="3"/><line x1="9" y1="9" x2="15" y2="15"/><line x1="15" y1="9" x2="9" y2="15"/></svg>
+          <p>从左侧导航选择功能面板</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Bottom Log Panel -->
+  <div class="log-panel" id="logPanel">
+    <div class="log-panel-header" id="logPanelHeader">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+      <span class="log-panel-title">系统日志</span>
+      <span class="log-panel-badge info">12</span>
+      <span class="log-panel-badge warn">3</span>
+      <span class="log-panel-badge error">1</span>
+      <span class="log-panel-spacer"></span>
+      <span class="log-panel-actions">
+        <button class="log-filter-tag active" data-level="all">全部</button>
+        <button class="log-filter-tag" data-level="info">INFO</button>
+        <button class="log-filter-tag" data-level="warn">WARN</button>
+        <button class="log-filter-tag" data-level="error">ERROR</button>
+      </span>
+      <svg class="chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px;color:var(--text-secondary);"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+    <div class="log-content" id="logContent"></div>
+  </div>
+</main>
+
+<script>
+// ===== State =====
+let state = {
+  activePanel: 'dashboard',
+  channel: 'raw16',
+  zoom: 1,
+  logExpanded: false,
+  connected: false,
+  fps: 0, frames: 0, dropped: 0, angle: 0,
+};
+
+// ===== Sidebar Navigation =====
+const sidebar = document.getElementById('sidebar');
+const sidebarNav = document.getElementById('sidebarNav');
+const collapseBtn = document.getElementById('collapseBtn');
+
+collapseBtn.addEventListener('click', () => sidebar.classList.toggle('collapsed'));
+
+sidebarNav.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => {
+    sidebarNav.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    item.classList.add('active');
+    const panel = item.dataset.panel;
+    state.activePanel = panel;
+    renderPanel(panel);
+    updatePanelTabs(panel);
+  });
+});
+
+// ===== Panel Tabs =====
+function updatePanelTabs(panel) {
+  const tabsContainer = document.getElementById('panelTabs');
+  const tabsConfig = {
+    dashboard: [],
+    connection: ['TCP 连接'],
+    camera: ['分辨率', '采集控制'],
+    mirror: ['角度控制', '速度', '预设'],
+    ir: ['图像参数', '查询操作', '原始指令'],
+    collect: ['采集控制'],
+    stream: ['通道订阅', '状态'],
+    logs: ['日志查看'],
+  };
+  const tabs = tabsConfig[panel] || [];
+  if (tabs.length <= 1) {
+    tabsContainer.innerHTML = '';
+    return;
+  }
+  tabsContainer.innerHTML = tabs.map((t, i) =>
+    `<button class="panel-tab${i === 0 ? ' active' : ''}" data-idx="${i}">${t}</button>`
+  ).join('');
+  tabsContainer.querySelectorAll('.panel-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabsContainer.querySelectorAll('.panel-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+    });
+  });
+}
+
+// ===== Panel Content Renderers =====
+const panelContent = document.getElementById('panelContent');
+
+function renderPanel(panel) {
+  const renderers = {
+    dashboard: renderDashboard,
+    connection: renderConnection,
+    camera: renderCamera,
+    mirror: renderMirror,
+    ir: renderIr,
+    collect: renderCollect,
+    stream: renderStream,
+    logs: renderLogs,
+  };
+  (renderers[panel] || (() => {}))();
+}
+
+function renderDashboard() {
+  panelContent.innerHTML = `
+    <div class="card">
+      <div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="6" x2="12" y2="12"/><line x1="12" y1="12" x2="16" y2="14"/></svg>设备概览</div>
+      <div class="dash-stat"><span class="key">TCP 地址</span><span class="val">192.168.10.128:9000</span></div>
+      <div class="dash-stat"><span class="key">UDP 端口</span><span class="val">1400</span></div>
+      <div class="dash-stat"><span class="key">连接状态</span><span class="val" style="color:var(--text-tertiary)">未连接</span></div>
+      <div class="dash-stat"><span class="key">设备版本</span><span class="val">---</span></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>流统计</div>
+      <div class="dash-stat"><span class="key">Raw16 帧率</span><span class="val" id="dashFpsRaw">--</span></div>
+      <div class="dash-stat"><span class="key">SliceStitch16 帧率</span><span class="val" id="dashFpsSlice">--</span></div>
+      <div class="dash-stat"><span class="key">总接收帧数</span><span class="val">${state.frames.toLocaleString()}</span></div>
+      <div class="dash-stat"><span class="key">丢帧数</span><span class="val">${state.dropped.toLocaleString()}</span></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>转镜信息</div>
+      <div class="dash-stat"><span class="key">当前角度</span><span class="val">${state.connected ? state.angle.toFixed(3) + '°' : '---'}</span></div>
+      <div class="dash-stat"><span class="key">运动状态</span><span class="val" style="color:var(--green)">已停止</span></div>
+    </div>
+    <div class="card">
+      <div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/></svg>系统信息</div>
+      <div class="dash-stat"><span class="key">应用版本</span><span class="val">Spectra Pro v2.0</span></div>
+      <div class="dash-stat"><span class="key">运行时间</span><span class="val">02:34:17</span></div>
+      <div class="dash-stat"><span class="key">订阅通道</span><span class="val">Raw16, SliceStitch16</span></div>
+    </div>
+  `;
+}
+
+function renderConnection() {
+  panelContent.innerHTML = `
+    <div class="card">
+      <div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/></svg>服务器地址</div>
+      <div class="form-row"><span class="form-label">主机</span><input class="form-input" value="192.168.10.128" placeholder="IP 地址"></div>
+      <div class="form-row"><span class="form-label">TCP</span><input class="form-input" type="number" value="9000" style="width:80px;flex:0 0 auto;"></div>
+      <div class="form-row"><span class="form-label">UDP</span><input class="form-input" type="number" value="1400" style="width:80px;flex:0 0 auto;"></div>
+      <div class="btn-group mt-2">
+        <button class="btn btn-primary" onclick="simulateConnect()">连接设备</button>
+        <button class="btn btn-danger" onclick="simulateDisconnect()">断开</button>
+        <button class="btn btn-secondary btn-sm">Ping</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">连接状态</div>
+      <div class="form-row"><span class="form-label">状态</span><span class="status-badge err" id="connBadge"><span class="dot"></span>未连接</span></div>
+      <div class="form-row"><span class="form-label">版本</span><span class="readout readout-sm" id="connVersion">---</span></div>
+      <div class="form-row"><span class="form-label">延迟</span><span class="readout readout-sm" id="connPing">---</span></div>
+    </div>
+  `;
+}
+
+function renderCamera() {
+  panelContent.innerHTML = `
+    <div class="card">
+      <div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="2"/></svg>分辨率设置</div>
+      <div class="form-row"><span class="form-label">当前</span><span class="readout readout-sm">1280 × 1024</span></div>
+      <div class="form-row"><span class="form-label">宽</span><input class="form-input" type="number" value="1280" step="8" max="4096" style="width:80px;flex:0 0 auto;"></div>
+      <div class="form-row"><span class="form-label">高</span><input class="form-input" type="number" value="1024" step="8" max="4096" style="width:80px;flex:0 0 auto;"></div>
+      <div class="btn-group mt-2">
+        <button class="btn btn-secondary">应用分辨率</button>
+        <button class="btn btn-ghost btn-sm">刷新</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">采集控制</div>
+      <div class="btn-group">
+        <button class="btn btn-primary">开始采集</button>
+        <button class="btn btn-danger">停止采集</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderMirror() {
+  panelContent.innerHTML = `
+    <div class="card">
+      <div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>实时状态</div>
+      <div class="form-row"><span class="form-label">角度</span><span class="readout">${state.connected ? state.angle.toFixed(3) + '°' : '---°'}</span></div>
+      <div class="form-row"><span class="form-label">状态</span><span class="status-badge ok"><span class="dot"></span>已停止</span></div>
+    </div>
+    <div class="card">
+      <div class="card-header">角度控制</div>
+      <div class="form-row"><span class="form-label">目标</span><input class="form-input" type="number" value="45.000" step="0.001" style="width:90px;flex:0 0 auto;"></div>
+      <div class="btn-group mt-2">
+        <button class="btn btn-primary">相对移动</button>
+        <button class="btn btn-secondary">绝对移动</button>
+        <button class="btn btn-secondary">开始</button>
+        <button class="btn btn-danger btn-sm">停止</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">速度设置</div>
+      <div class="form-row"><span class="form-label">慢速</span><input class="form-input" type="number" value="400" style="width:80px;flex:0 0 auto;"></div>
+      <div class="form-row"><span class="form-label">快速</span><input class="form-input" type="number" value="400" style="width:80px;flex:0 0 auto;"></div>
+      <div class="btn-group mt-2"><button class="btn btn-secondary">应用速度</button></div>
+    </div>
+    <div class="card">
+      <div class="card-header">预设位置</div>
+      <div class="form-row">
+        <select class="select-input" style="flex:1"><option>Preset 0</option><option>Preset 1</option><option>Preset 2</option><option>Preset 3</option></select>
+        <button class="btn btn-secondary btn-sm">转到</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderIr() {
+  panelContent.innerHTML = `
+    <div class="card">
+      <div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/></svg>图像参数</div>
+      <div class="form-row"><span class="form-label">亮度</span></div>
+      <div class="slider-row"><input type="range" min="0" max="255" value="128"><span class="slider-value">128</span></div>
+      <div class="form-row"><span class="form-label">对比度</span></div>
+      <div class="slider-row"><input type="range" min="0" max="255" value="128"><span class="slider-value">128</span></div>
+      <div class="form-row"><span class="form-label">积分</span><input class="form-input" type="number" value="1000" style="width:80px;flex:0 0 auto;"></div>
+      <div class="btn-group mt-2">
+        <button class="btn btn-secondary">设亮度</button>
+        <button class="btn btn-secondary">设对比</button>
+        <button class="btn btn-secondary">设积分</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">查询与操作</div>
+      <div class="btn-group">
+        <button class="btn btn-secondary btn-sm">触发标定</button>
+        <button class="btn btn-secondary btn-sm">自检</button>
+        <button class="btn btn-secondary btn-sm">读温度</button>
+        <button class="btn btn-secondary btn-sm">读模组ID</button>
+      </div>
+      <div style="margin-top:8px;font-size:11px;color:var(--text-tertiary);">结果: 无</div>
+    </div>
+    <div class="card">
+      <div class="card-header">原始指令</div>
+      <div class="form-row"><input class="form-input" placeholder="指令 Hex" style="flex:1;"></div>
+      <div class="form-row"><input class="form-input" placeholder="数据 Hex" style="flex:1;"></div>
+      <button class="btn btn-secondary btn-sm mt-2">发送</button>
+    </div>
+  `;
+}
+
+function renderCollect() {
+  panelContent.innerHTML = `
+    <div class="card">
+      <div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>采集状态</div>
+      <div class="form-row"><span class="form-label">状态</span><span class="status-badge ok"><span class="dot"></span>就绪</span></div>
+      <div class="btn-group mt-2">
+        <button class="btn btn-primary">开始采集</button>
+        <button class="btn btn-danger">停止采集</button>
+        <button class="btn btn-secondary btn-sm">刷新</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderStream() {
+  panelContent.innerHTML = `
+    <div class="card">
+      <div class="card-header"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>通道订阅</div>
+      <div class="check-row"><input type="checkbox" id="chkRaw16" checked><label for="chkRaw16">Raw16</label></div>
+      <div class="check-row"><input type="checkbox" id="chkSlice" checked><label for="chkSlice">SliceStitch16</label></div>
+      <div class="btn-group mt-2">
+        <button class="btn btn-primary">应用订阅</button>
+        <button class="btn btn-danger btn-sm">取消全部</button>
+      </div>
+    </div>
+    <div class="card">
+      <div class="card-header">流状态</div>
+      <div class="form-row"><span class="form-label">已订阅</span><span style="font-size:12px;color:var(--text-primary)">raw16, slice_stitch16</span></div>
+      <div class="form-row"><span class="form-label">已推送</span><span class="readout readout-sm">${state.frames.toLocaleString()}</span></div>
+      <div class="form-row"><span class="form-label">丢帧</span><span class="readout readout-sm" style="color:${state.dropped > 0 ? 'var(--red)' : 'var(--text-primary)'}">${state.dropped}</span></div>
+    </div>
+  `;
+}
+
+function renderLogs() {
+  panelContent.innerHTML = `
+    <div class="card" style="flex:1;display:flex;flex-direction:column;">
+      <div class="card-header">TCP 日志</div>
+      <div style="flex:1;overflow-y:auto;font-family:'Cascadia Code','Fira Code','Consolas',monospace;font-size:11px;color:var(--text-secondary);line-height:1.6;max-height:300px;" id="inlineLogs">
+        ${generateLogLines()}
+      </div>
+    </div>
+  `;
+}
+
+// ===== Channel Tabs =====
+document.getElementById('channelTabs').addEventListener('click', (e) => {
+  if (!e.target.classList.contains('channel-tab')) return;
+  document.querySelectorAll('.channel-tab').forEach(t => t.classList.remove('active'));
+  e.target.classList.add('active');
+  state.channel = e.target.dataset.channel;
+  if (state.connected) generateSpectrum();
+});
+
+// ===== Viewer Toolbar =====
+let simZoom = 1;
+document.getElementById('btnZoomIn').addEventListener('click', () => {
+  simZoom = Math.min(5, simZoom + 0.2);
+  updateZoom();
+});
+document.getElementById('btnZoomOut').addEventListener('click', () => {
+  simZoom = Math.max(0.2, simZoom - 0.2);
+  updateZoom();
+});
+document.getElementById('btnFit').addEventListener('click', () => { simZoom = 1; updateZoom(); });
+document.getElementById('btnReset').addEventListener('click', () => { simZoom = 1; updateZoom(); });
+function updateZoom() {
+  document.getElementById('zoomLevel').textContent = Math.round(simZoom * 100) + '%';
+}
+
+// ===== Log Panel =====
+const logPanel = document.getElementById('logPanel');
+document.getElementById('logPanelHeader').addEventListener('click', () => {
+  state.logExpanded = !state.logExpanded;
+  logPanel.classList.toggle('expanded', state.logExpanded);
+});
+
+document.querySelectorAll('.log-filter-tag').forEach(tag => {
+  tag.addEventListener('click', (e) => {
+    e.stopPropagation();
+    document.querySelectorAll('.log-filter-tag').forEach(t => t.classList.remove('active'));
+    tag.classList.add('active');
+  });
+});
+
+function generateLogLines() {
+  const lines = [
+    { time: '14:32:01.234', level: 'info', msg: '[ControlClient] 已连接到 192.168.10.128:9000' },
+    { time: '14:32:01.456', level: 'info', msg: '[DeviceClient] 设备版本: v3.2.1' },
+    { time: '14:32:02.102', level: 'info', msg: '[StreamClient] UDP 绑定端口 1400' },
+    { time: '14:32:02.345', level: 'info', msg: '[StreamClient] 订阅通道: raw16' },
+    { time: '14:32:03.001', level: 'info', msg: '[FrameAssembler] 开始接收 Raw16 帧, 分辨率 1280x1024' },
+    { time: '14:32:05.678', level: 'warn', msg: '[FrameAssembler] 帧 #42 丢包 2/16, 等待重传' },
+    { time: '14:32:05.890', level: 'info', msg: '[FrameAssembler] 帧 #42 重组完成' },
+    { time: '14:32:10.123', level: 'info', msg: '[MirrorPanel] 转镜角度: 45.032°' },
+    { time: '14:32:15.456', level: 'info', msg: '[CameraPanel] 分辨率查询: 1280x1024' },
+    { time: '14:32:20.789', level: 'warn', msg: '[StreamClient] Raw16 帧率下降至 12.3 FPS' },
+    { time: '14:32:25.012', level: 'warn', msg: '[ControlClient] Ping 超时, 重试中...' },
+    { time: '14:32:25.234', level: 'info', msg: '[ControlClient] Ping 恢复, RTT=2.3ms' },
+    { time: '14:32:30.567', level: 'info', msg: '[StreamClient] SliceStitch16 订阅成功' },
+    { time: '14:32:31.890', level: 'error', msg: '[FrameAssembler] 帧 #156 CRC 校验失败, 已丢弃' },
+    { time: '14:32:35.123', level: 'info', msg: '[IrPanel] 机芯温度: 32.5°C, 焦面温度: 28.3°C' },
+    { time: '14:32:40.456', level: 'info', msg: '[DeviceClient] 心跳正常' },
+  ];
+  return lines.map(l =>
+    `<div class="log-line ${l.level}"><span class="time">${l.time}</span><span class="tag">[${l.level.toUpperCase()}]</span> ${l.msg}</div>`
+  ).join('');
+}
+document.getElementById('logContent').innerHTML = generateLogLines();
+
+// ===== Simulate Connection =====
+window.simulateConnect = function() {
+  state.connected = true;
+  updateConnectionUI(true);
+  generateSpectrum();
+  updateLogBadges();
+};
+window.simulateDisconnect = function() {
+  state.connected = false;
+  state.fps = 0;
+  updateConnectionUI(false);
+  document.getElementById('spectrumCanvas').style.display = 'none';
+  document.getElementById('nosignal').style.display = 'flex';
+  document.getElementById('imgInfo').textContent = '--';
+};
+
+function updateConnectionUI(connected) {
+  // Sidebar dot
+  const dot = document.getElementById('sidebarConnDot');
+  const txt = document.getElementById('sidebarConnText');
+  dot.className = 'conn-dot ' + (connected ? 'online' : 'offline');
+  txt.textContent = connected ? '已连接' : '未连接';
+
+  // Topbar metric
+  const mc = document.getElementById('metricConn');
+  mc.className = 'metric-card metric-conn ' + (connected ? 'online' : 'offline');
+  mc.querySelector('.metric-value').textContent = connected ? '已连接' : '未连接';
+
+  // IP
+  document.getElementById('metricIP').textContent = connected ? '192.168.10.128' : '---';
+
+  // Angle
+  document.getElementById('metricAngle').textContent = connected ? state.angle.toFixed(3) + '°' : '--°';
+
+  // FPS simulation
+  if (connected) {
+    state.fps = 25;
+    document.getElementById('metricFps').textContent = '25.0';
+    document.getElementById('metricFrames').textContent = '1,280';
+    document.getElementById('imgInfo').textContent = '1280 × 1024 | Mono16';
+  } else {
+    document.getElementById('metricFps').textContent = '--';
+    document.getElementById('metricFrames').textContent = '0';
+    document.getElementById('imgInfo').textContent = '--';
+  }
+}
+
+function updateLogBadges() {
+  const badges = document.querySelectorAll('.log-panel-badge');
+  if (badges.length >= 3) {
+    badges[0].textContent = state.connected ? '15' : '12';
+    badges[1].textContent = state.connected ? '4' : '3';
+    badges[2].textContent = state.connected ? '2' : '1';
+  }
+}
+
+// ===== Spectrum Canvas =====
+function generateSpectrum() {
+  const canvas = document.getElementById('spectrumCanvas');
+  const nosignal = document.getElementById('nosignal');
+  const w = 640, h = 512;
+  canvas.width = w; canvas.height = h;
+  canvas.style.display = 'block';
+  canvas.style.width = 'auto';
+  canvas.style.height = 'auto';
+  nosignal.style.display = 'none';
+  document.getElementById('imgInfo').textContent = '1280 × 1024 | Mono16';
+
+  const ctx = canvas.getContext('2d');
+  const imgData = ctx.createImageData(w, h);
+
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = (y * w + x) * 4;
+      // Simulate spectral data: horizontal bands with noise
+      let val;
+      if (state.channel === 'slice') {
+        // SliceStitch: vertical band pattern
+        const band = Math.sin(x * 0.05) * 0.4 + 0.5;
+        const noise = (Math.random() - 0.5) * 0.15;
+        const gradient = y / h;
+        val = Math.floor((band * 0.6 + gradient * 0.3 + noise) * 255);
+      } else {
+        // Raw16: spectral lines
+        const line1 = Math.exp(-Math.pow((x - w * 0.3) / 20, 2)) * 0.8;
+        const line2 = Math.exp(-Math.pow((x - w * 0.55) / 15, 2)) * 0.6;
+        const line3 = Math.exp(-Math.pow((x - w * 0.72) / 25, 2)) * 0.7;
+        const base = Math.sin(x * 0.02) * 0.08 + 0.15;
+        const noise = (Math.random() - 0.5) * 0.08;
+        const gradient = y / h * 0.15;
+        val = Math.floor(Math.min(1, Math.max(0, base + line1 + line2 + line3 + noise + gradient)) * 255);
+      }
+      imgData.data[idx] = val;
+      imgData.data[idx + 1] = val;
+      imgData.data[idx + 2] = val;
+      imgData.data[idx + 3] = 255;
+    }
+  }
+  ctx.putImageData(imgData, 0, 0);
+
+  // Add overlay text
+  ctx.fillStyle = 'rgba(255,255,255,0.7)';
+  ctx.font = '10px "Cascadia Code", "Consolas", monospace';
+  ctx.fillText(`${w} × ${h} | ${state.channel === 'slice' ? 'SliceStitch16' : 'Raw16'}`, 8, h - 8);
+}
+
+// ===== Simulate FPS updates =====
+setInterval(() => {
+  if (!state.connected) return;
+  state.angle = (state.angle + 0.017) % 360;
+  state.frames += 1;
+  if (Math.random() < 0.05) state.dropped += 1;
+  document.getElementById('metricAngle').textContent = state.angle.toFixed(3) + '°';
+  document.getElementById('metricFrames').textContent = state.frames.toLocaleString();
+  document.getElementById('metricDropped').textContent = state.dropped.toLocaleString();
+  document.getElementById('metricFps').textContent = (24.5 + Math.random() * 1.5).toFixed(1);
+}, 1000);
+
+// ===== Init =====
+renderPanel('dashboard');
+updatePanelTabs('dashboard');
+
+// Keyboard shortcut for sidebar toggle
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'b' && e.ctrlKey) {
+    e.preventDefault();
+    sidebar.classList.toggle('collapsed');
+  }
+});
+</script>
+</body>
+</html>

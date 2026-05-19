@@ -1,14 +1,16 @@
 #pragma once
 
 #include <QMainWindow>
-#include <QListWidget>
-#include <QStackedWidget>
 #include <QSplitter>
+#include <QStackedWidget>
 #include <QLabel>
-#include <QTabWidget>
-#include <QScrollArea>
+#include <QPushButton>
+#include <QElapsedTimer>
 
 class DeviceClient;
+class SidebarWidget;
+class TopBarWidget;
+class DashboardPanel;
 class ConnectionPanel;
 class CameraPanel;
 class MirrorPanel;
@@ -17,7 +19,6 @@ class CollectPanel;
 class StreamPanel;
 class LogPanel;
 class ImageView;
-class StatusBarPanel;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -27,32 +28,59 @@ public:
 
 protected:
     void closeEvent(QCloseEvent* e) override;
+    bool eventFilter(QObject* obj, QEvent* event) override;
 
 private:
     void setupUi();
-    void setupSidebar();
-    void setupCentral();
     void setupPanels();
-    void setupStatusBar();
+    void setupConnections();
     void loadSettings();
     void saveSettings();
+    void onPanelSelected(int index);
+    void updateChannelTabStyle(int tab);
 
     DeviceClient* device_ = nullptr;
 
+    // New layout components
+    SidebarWidget*  sidebar_     = nullptr;
+    TopBarWidget*   topBar_      = nullptr;
     QSplitter*      mainSplitter_ = nullptr;
-    QListWidget*    sidebar_      = nullptr;
-    QLabel*         panelTitle_   = nullptr;
-    QStackedWidget* panelStack_   = nullptr;
-    QTabWidget*     imageTabs_    = nullptr;
 
-    ConnectionPanel* connPanel_    = nullptr;
-    CameraPanel*     cameraPanel_  = nullptr;
-    MirrorPanel*     mirrorPanel_  = nullptr;
-    IrPanel*         irPanel_      = nullptr;
-    CollectPanel*    collectPanel_ = nullptr;
-    StreamPanel*     streamPanel_  = nullptr;
-    LogPanel*        logPanel_     = nullptr;
+    // Viewer area
+    QWidget*        viewerContainer_ = nullptr;
+    QWidget*        channelTabBar_   = nullptr;
+    QPushButton*    chTabRaw16_      = nullptr;
+    QPushButton*    chTabSlice_      = nullptr;
+    QStackedWidget* viewerStack_     = nullptr;
+    ImageView*      imageViewRaw_    = nullptr;
+    ImageView*      imageViewSlice_  = nullptr;
 
-    ImageView*      imageViews_[2] = {};
-    StatusBarPanel* statusPanel_   = nullptr;
+    // Zoom overlay
+    QWidget*        zoomBar_       = nullptr;
+    QLabel*         imgInfoLabel_  = nullptr;
+    int             currentChannel_ = 0;
+
+    // Right panel
+    QWidget*        rightPanel_    = nullptr;
+    QLabel*         panelTitle_    = nullptr;
+    QStackedWidget* panelStack_    = nullptr;
+
+    // Panels
+    DashboardPanel*  dashPanel_     = nullptr;
+    ConnectionPanel* connPanel_     = nullptr;
+    CameraPanel*     cameraPanel_   = nullptr;
+    MirrorPanel*     mirrorPanel_   = nullptr;
+    IrPanel*         irPanel_       = nullptr;
+    CollectPanel*    collectPanel_  = nullptr;
+    StreamPanel*     streamPanel_   = nullptr;
+
+    // Bottom log
+    LogPanel*       logPanel_      = nullptr;
+
+    // metadata
+    QString hostIp_;
+    quint16 tcpPort_ = 9000;
+    quint16 udpPort_ = 1400;
+    QString deviceVersion_;
+    QElapsedTimer uptime_;
 };
