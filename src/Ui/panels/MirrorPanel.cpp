@@ -5,6 +5,7 @@
 #include <QGroupBox>
 #include <QFormLayout>
 #include <QMessageBox>
+#include <QStyle>
 
 MirrorPanel::MirrorPanel(DeviceClient* dev, QWidget* parent)
     : QWidget(parent), dev_(dev)
@@ -116,7 +117,8 @@ MirrorPanel::MirrorPanel(DeviceClient* dev, QWidget* parent)
             [this](double angle, bool moving, qint64) {
         angleLabel_->setText(QString::number(angle, 'f', 3) + QString::fromUtf8("°"));
         movingLabel_->setText(moving ? QString::fromUtf8("运动中") : QString::fromUtf8("已停止"));
-        movingLabel_->setStyleSheet(moving ? "color: #E9B949;" : "color: #3FB950;");
+        movingLabel_->setProperty("moving", moving ? "true" : "false");
+        movingLabel_->style()->polish(movingLabel_);
     });
 }
 
@@ -126,6 +128,8 @@ void MirrorPanel::onQueryAngle()
         if (ok) {
             angleLabel_->setText(QString::number(angle, 'f', 3) + QString::fromUtf8("°"));
             movingLabel_->setText(moving ? QString::fromUtf8("运动中") : QString::fromUtf8("已停止"));
+            movingLabel_->setProperty("moving", moving ? "true" : "false");
+            movingLabel_->style()->polish(movingLabel_);
         } else {
             QMessageBox::warning(this, "Mirror", err);
         }

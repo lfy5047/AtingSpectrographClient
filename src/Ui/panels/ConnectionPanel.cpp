@@ -5,6 +5,7 @@
 #include <QGroupBox>
 #include <QFormLayout>
 #include <QDateTime>
+#include <QStyle>
 
 ConnectionPanel::ConnectionPanel(DeviceClient* dev, QWidget* parent)
     : QWidget(parent), dev_(dev)
@@ -104,16 +105,17 @@ void ConnectionPanel::onConnectionChanged(bool connected, const QString& ip)
     tcpPortSpin_->setEnabled(!connected);
 
     if (connected) {
-        statusLabel_->setText(QString::fromUtf8("已连接 ") + ip); // 已连接
-        statusLabel_->setStyleSheet("color: #3FB950;");
+        statusLabel_->setText(QString::fromUtf8("已连接 ") + ip);
+        statusLabel_->setProperty("connState", "ok");
 
         dev_->version([this](bool ok, int ver, const QString& name, const QString&) {
             if (ok) versionLabel_->setText(QString("%1 v%2").arg(name).arg(ver));
         });
     } else {
-        statusLabel_->setText(QString::fromUtf8("未连接")); // 未连接
-        statusLabel_->setStyleSheet("color: #E5484D;");
+        statusLabel_->setText(QString::fromUtf8("未连接"));
+        statusLabel_->setProperty("connState", "err");
         versionLabel_->setText("-");
         pingLabel_->setText("-");
     }
+    statusLabel_->style()->polish(statusLabel_);
 }

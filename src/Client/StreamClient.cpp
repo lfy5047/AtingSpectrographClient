@@ -1,6 +1,12 @@
 #include "StreamClient.h"
 #include <cstring>
 #include <QHostAddress>
+#include "plog/Log.h"
+
+#ifdef Q_OS_WIN
+#include <winsock2.h>
+#pragma comment(lib, "ws2_32.lib")
+#endif
 
 using namespace cli::proto;
 
@@ -17,9 +23,19 @@ StreamClient::StreamClient(QObject* parent)
 bool StreamClient::bind(quint16 localPort)
 {
     close();
-    sock_.setSocketOption(QAbstractSocket::ReceiveBufferSizeSocketOption, 8 * 1024 * 1024);
     bound_ = sock_.bind(QHostAddress::Any, localPort, QUdpSocket::ShareAddress);
     if (bound_) {
+        constexpr int kRcvBuf = 1024 * 1024 * 64;
+#ifdef Q_OS_WIN
+        int val = kRcvBuf;
+        ::setsockopt(static_cast<SOCKET>(sock_.socketDescriptor()),
+                     SOL_SOCKET, SO_RCVBUF,
+                     reinterpret_cast<const char*>(&val), sizeof(val));
+#else
+        sock_.setSocketOption(QAbstractSocket::ReceiveBufferSizeSocketOption, kRcvBuf);
+#endif
+        int actual = sock_.socketOption(QAbstractSocket::ReceiveBufferSizeSocketOption).toInt();
+        PLOGI << "StreamClient: SO_RCVBUF requested=" << kRcvBuf << " actual=" << actual;
         port_ = localPort;
         fpsTimer_.start();
     }
@@ -39,8 +55,8 @@ void StreamClient::close()
 
 void StreamClient::onReadyRead()
 {
+    QByteArray dg;
     while (sock_.hasPendingDatagrams()) {
-        QByteArray dg;
         dg.resize(static_cast<int>(sock_.pendingDatagramSize()));
         sock_.readDatagram(dg.data(), dg.size());
 

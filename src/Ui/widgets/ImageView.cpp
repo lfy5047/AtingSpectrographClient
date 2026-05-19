@@ -1,6 +1,7 @@
 #include "ImageView.h"
 #include <QPainter>
 #include <QWheelEvent>
+#include "plog/Log.h"
 
 ImageView::ImageView(QWidget* parent) : QWidget(parent)
 {

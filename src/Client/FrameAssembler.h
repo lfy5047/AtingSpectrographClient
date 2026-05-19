@@ -43,6 +43,6 @@ private:
     quint64 framesReceived_ = 0;
     quint64 framesDropped_  = 0;
 
-    static const int kMaxSlots   = 16;
-    static const int kTimeoutMs  = 200;
+    static const int kMaxSlots   = 32;
+    static const int kTimeoutMs  = 300;
 };

@@ -1,9 +1,16 @@
 #include <QApplication>
 #include <QFile>
 #include "Ui/MainWindow.h"
+#include "plog/Initializers/RollingFileInitializer.h"
+#include "plog/Appenders/ColorConsoleAppender.h"
 
 int main(int argc, char* argv[])
 {
+
+    plog::init(plog::debug, "log/log.txt", 1024 * 1024, 10);
+    plog::ColorConsoleAppender<plog::TxtFormatter> consoleAppender;
+    plog::get()->addAppender(&consoleAppender);
+
     QApplication app(argc, argv);
     app.setOrganizationName("AtingSpectrograph");
     app.setApplicationName("AtingSpectrographClient");

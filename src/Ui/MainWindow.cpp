@@ -4,6 +4,7 @@
 #include <QStatusBar>
 #include <QSettings>
 #include <QCloseEvent>
+#include <QScrollArea>
 #include "DeviceClient.h"
 #include "panels/ConnectionPanel.h"
 #include "panels/CameraPanel.h"
@@ -15,7 +16,6 @@
 #include "widgets/ImageView.h"
 #include "widgets/StatusBarPanel.h"
 #include "Protocol.h"
-#include "plog/Log.h"
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -44,6 +44,9 @@ MainWindow::MainWindow(QWidget* parent)
     // frame -> ImageView + stats
     connect(device_, &DeviceClient::frameReady, this,
             [this](int channel, int width, int height, int pixfmt, QByteArray data) {
+        // 注意：此连接使用 Qt::QueuedConnection，避免图像转换阻塞
+        // StreamClient::onReadyRead 中的 UDP 读取 while 循环
+        // 从而防止接收缓冲区溢出丢包。
         int tabIdx = -1;
         using namespace cli::proto;
         switch (channel) {
@@ -51,8 +54,6 @@ MainWindow::MainWindow(QWidget* parent)
         case SliceStitch16:  tabIdx = 1; break;
         default: return;
         }
-
-        LOGD << "frameReady: channel=" << channel << ", width=" << width << ", height=" << height << ", pixfmt=" << pixfmt << ", data.size=" << data.size();
 
         QImage img;
         if (pixfmt == Mono8) {
@@ -83,7 +84,7 @@ MainWindow::MainWindow(QWidget* parent)
         statusPanel_->setFps(device_->stream()->fps());
         statusPanel_->setFrames(device_->stream()->framesReceived());
         statusPanel_->setDropped(device_->stream()->framesDropped());
-    });
+    }, Qt::QueuedConnection);
 
     // TCP raw log -> log panel
     connect(device_->control(), &ControlClient::rawLog, this,
@@ -120,7 +121,20 @@ void MainWindow::setupUi()
     mainSplitter_->addWidget(imageTabs_);
 
     setupPanels();
-    mainSplitter_->addWidget(panelStack_);
+
+    // 右侧面板区：标题栏 + 可滚动内容
+    auto* rightPane = new QWidget(this);
+    auto* rightLayout = new QVBoxLayout(rightPane);
+    rightLayout->setContentsMargins(0, 0, 0, 0);
+    rightLayout->setSpacing(0);
+
+    panelTitle_ = new QLabel(QString::fromUtf8("连接"), rightPane);
+    panelTitle_->setObjectName("panelTitle");
+    panelTitle_->setFixedHeight(42);
+    rightLayout->addWidget(panelTitle_);
+    rightLayout->addWidget(panelStack_, 1);
+
+    mainSplitter_->addWidget(rightPane);
 
     mainSplitter_->setStretchFactor(0, 1);
     mainSplitter_->setStretchFactor(1, 0);
@@ -129,38 +143,48 @@ void MainWindow::setupUi()
     setupStatusBar();
 }
 
+static const char* kPanelNames[] = {
+    "连接", "相机", "转镜", "红外", "采集", "通道", "日志"
+};
+
 void MainWindow::setupSidebar()
 {
     sidebar_ = new QListWidget(this);
-    sidebar_->setFixedWidth(120);
-    sidebar_->setIconSize(QSize(20, 20));
+    sidebar_->setObjectName("sidebar");
+    sidebar_->setFixedWidth(160);
+    sidebar_->setIconSize(QSize(16, 16));
 
-    QStringList items = {
-        QString::fromUtf8("连接"),
-        QString::fromUtf8("相机"),
-        QString::fromUtf8("转镜"),
-        QString::fromUtf8("红外"),
-        QString::fromUtf8("采集"),
-        QString::fromUtf8("通道"),
-        QString::fromUtf8("日志"),
-    };
-    sidebar_->addItems(items);
+    for (const char* name : kPanelNames)
+        sidebar_->addItem(QString::fromUtf8(name));
     sidebar_->setCurrentRow(0);
 
     connect(sidebar_, &QListWidget::currentRowChanged, this, [this](int row) {
-        if (panelStack_ && row >= 0 && row < panelStack_->count())
+        if (panelStack_ && row >= 0 && row < panelStack_->count()) {
             panelStack_->setCurrentIndex(row);
+            if (panelTitle_)
+                panelTitle_->setText(QString::fromUtf8(kPanelNames[row]));
+        }
     });
 }
 
 void MainWindow::setupCentral()
 {
     imageTabs_ = new QTabWidget(this);
+    imageTabs_->setDocumentMode(true);
     QStringList chNames = {"Raw16", "SliceStitch16"};
     for (int i = 0; i < 2; ++i) {
         imageViews_[i] = new ImageView(this);
         imageTabs_->addTab(imageViews_[i], chNames[i]);
     }
+}
+
+static QScrollArea* wrapInScroll(QWidget* w)
+{
+    auto* area = new QScrollArea;
+    area->setWidgetResizable(true);
+    area->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+    area->setWidget(w);
+    return area;
 }
 
 void MainWindow::setupPanels()
@@ -177,13 +201,14 @@ void MainWindow::setupPanels()
     streamPanel_  = new StreamPanel(device_, this);
     logPanel_     = new LogPanel(this);
 
-    panelStack_->addWidget(connPanel_);    // 0
-    panelStack_->addWidget(cameraPanel_);  // 1
-    panelStack_->addWidget(mirrorPanel_);  // 2
-    panelStack_->addWidget(irPanel_);      // 3
-    panelStack_->addWidget(collectPanel_); // 4
-    panelStack_->addWidget(streamPanel_);  // 5
-    panelStack_->addWidget(logPanel_);     // 6
+    // 控制类面板包入 QScrollArea，日志面板自身已全充满不需要
+    panelStack_->addWidget(wrapInScroll(connPanel_));    // 0
+    panelStack_->addWidget(wrapInScroll(cameraPanel_));  // 1
+    panelStack_->addWidget(wrapInScroll(mirrorPanel_));  // 2
+    panelStack_->addWidget(wrapInScroll(irPanel_));      // 3
+    panelStack_->addWidget(wrapInScroll(collectPanel_)); // 4
+    panelStack_->addWidget(wrapInScroll(streamPanel_));  // 5
+    panelStack_->addWidget(logPanel_);                   // 6
 
     // stream integration
     connect(streamPanel_, &StreamPanel::subscribeRequested, this,

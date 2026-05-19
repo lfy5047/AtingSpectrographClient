@@ -64,7 +64,7 @@ IrPanel::IrPanel(DeviceClient* dev, QWidget* parent)
 
     resultLabel_ = new QLabel("-", this);
     resultLabel_->setWordWrap(true);
-    resultLabel_->setStyleSheet("font-family: Consolas; font-size: 9pt; color: #9AA3AD;");
+    resultLabel_->setProperty("secondary", true);
 
     auto* calibBtn    = new QPushButton(QString::fromUtf8("触发标定"), this);
     auto* queryIntBtn = new QPushButton(QString::fromUtf8("查询积分时间"), this);
@@ -119,7 +119,7 @@ IrPanel::IrPanel(DeviceClient* dev, QWidget* parent)
     rawLenSpin_->setValue(1);
     rawResultLabel_ = new QLabel("-", this);
     rawResultLabel_->setWordWrap(true);
-    rawResultLabel_->setStyleSheet("font-family: Consolas; font-size: 9pt; color: #9AA3AD;");
+    rawResultLabel_->setProperty("secondary", true);
 
     rawForm->addRow("CMD (hex)", rawCmdEdit_);
     rawForm->addRow("DATA (hex)", rawDataEdit_);

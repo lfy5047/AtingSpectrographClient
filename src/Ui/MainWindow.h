@@ -6,6 +6,7 @@
 #include <QSplitter>
 #include <QLabel>
 #include <QTabWidget>
+#include <QScrollArea>
 
 class DeviceClient;
 class ConnectionPanel;
@@ -40,6 +41,7 @@ private:
 
     QSplitter*      mainSplitter_ = nullptr;
     QListWidget*    sidebar_      = nullptr;
+    QLabel*         panelTitle_   = nullptr;
     QStackedWidget* panelStack_   = nullptr;
     QTabWidget*     imageTabs_    = nullptr;
 

@@ -44,5 +44,6 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
 if(WIN32)
     set_target_properties(${PROJECT_NAME} PROPERTIES
         WIN32_EXECUTABLE false
+        # WIN32_EXECUTABLE true
     )
 endif()
