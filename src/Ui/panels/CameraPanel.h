@@ -4,6 +4,7 @@
 #include <QSpinBox>
 #include <QPushButton>
 #include <QLabel>
+#include <QComboBox>
 
 class DeviceClient;
 
@@ -15,9 +16,19 @@ public:
 private slots:
     void refreshResolution();
     void onApplyResolution();
+    void refreshDevices();
+    void onDeviceChanged(int index);
 
 private:
+    void reloadDeviceUi();
+    void applySelectedMac(const QString& mac);
+
     DeviceClient* dev_;
+    QComboBox*   deviceCombo_ = nullptr;
+    QPushButton* deviceRefreshBtn_ = nullptr;
+    bool         deviceRefreshing_ = false;
+    QString      deviceSelectedMac_;
+
     QLabel*      curResLabel_;
     QSpinBox*    widthSpin_;
     QSpinBox*    heightSpin_;

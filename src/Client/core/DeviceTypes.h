@@ -1,6 +1,7 @@
 #pragma once
 
 #include <functional>
+#include <vector>
 #include <QtGlobal>
 #include <QString>
 #include "json.hpp"
@@ -12,3 +13,11 @@ using VersionCallback = std::function<void(bool ok, int ver, const QString& name
 using MirrorAngleCallback = std::function<void(bool ok, double angle, bool moving, const QString& err)>;
 using ResolutionCallback = std::function<void(bool ok, int w, int h, const QString& err)>;
 using CollectStatusCallback = std::function<void(bool ok, bool collecting, const QString& err)>;
+
+struct CameraDeviceOption {
+    QString name;
+    QString mac;
+};
+
+using CameraSelectedDeviceCallback = std::function<void(bool ok, const QString& mac, const QString& err)>;
+using CameraDeviceOptionsCallback = std::function<void(bool ok, const std::vector<CameraDeviceOption>& options, const QString& err)>;

@@ -35,6 +35,10 @@ static const char* const StartStream = "camera.start_stream";
 static const char* const StopStream = "camera.stop_stream";
 static const char* const GetResolution = "camera.get_resolution";
 static const char* const SetResolution = "camera.set_resolution";
+static const char* const SelectDevice = "camera.select_device";
+static const char* const ClearSelectedDevice = "camera.clear_selected_device";
+static const char* const GetSelectedDevice = "camera.get_selected_device";
+static const char* const DeviceOptions = "camera.device_options";
 }
 
 namespace Ir {
