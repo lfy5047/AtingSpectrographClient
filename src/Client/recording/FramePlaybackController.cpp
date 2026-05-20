@@ -223,6 +223,11 @@ void FramePlaybackController::play()
         }
     }
     if (playing_) return;
+
+    if (currentIndex_ >= static_cast<quint64>(index_.size())) {
+        currentIndex_ = 0;
+    }
+
     playing_ = true;
     windowStartIndex_ = currentIndex_;
     const quint64 remaining = static_cast<quint64>(index_.size()) - windowStartIndex_;
