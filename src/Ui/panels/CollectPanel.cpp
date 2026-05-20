@@ -38,8 +38,8 @@ CollectPanel::CollectPanel(DeviceClient* dev, QWidget* parent)
         else refreshStatus();
     };
 
-    connect(startBtn_, &QPushButton::clicked, this, [this, cb]() { dev_->collectStart(cb); });
-    connect(stopBtn_, &QPushButton::clicked, this, [this, cb]() { dev_->collectStop(cb); });
+    connect(startBtn_, &QPushButton::clicked, this, [this, cb]() { dev_->collect()->start(this, cb); });
+    connect(stopBtn_, &QPushButton::clicked, this, [this, cb]() { dev_->collect()->stop(this, cb); });
     connect(refreshBtn_, &QPushButton::clicked, this, &CollectPanel::refreshStatus);
 
     connect(dev, &DeviceClient::connectionChanged, this, [this](bool c, const QString&) {
@@ -49,7 +49,7 @@ CollectPanel::CollectPanel(DeviceClient* dev, QWidget* parent)
 
 void CollectPanel::refreshStatus()
 {
-    dev_->collectStatus([this](bool ok, bool collecting, const QString&) {
+    dev_->collect()->status(this, [this](bool ok, bool collecting, const QString&) {
         if (ok)
             statusLabel_->setText(collecting
                 ? QString::fromUtf8("采集中")

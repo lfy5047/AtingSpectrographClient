@@ -44,7 +44,7 @@ private:
         QTimer* timer = nullptr;
     };
 
-    void sendFrame(cli::proto::MsgType type, uint32_t seq, const nlohmann::json& payload);
+    bool sendFrame(cli::proto::MsgType type, uint32_t seq, const nlohmann::json& payload);
     void tryConsume();
     void failAllPending(const QString& reason);
 

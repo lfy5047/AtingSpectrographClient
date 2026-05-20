@@ -55,8 +55,8 @@ CameraPanel::CameraPanel(DeviceClient* dev, QWidget* parent)
 
     connect(applyBtn_, &QPushButton::clicked, this, &CameraPanel::onApplyResolution);
     connect(refreshBtn_, &QPushButton::clicked, this, &CameraPanel::refreshResolution);
-    connect(startBtn_, &QPushButton::clicked, this, [this, simpleCb]() { dev_->cameraStartStream(simpleCb); });
-    connect(stopBtn_, &QPushButton::clicked, this, [this, simpleCb]() { dev_->cameraStopStream(simpleCb); });
+    connect(startBtn_, &QPushButton::clicked, this, [this, simpleCb]() { dev_->camera()->startStream(this, simpleCb); });
+    connect(stopBtn_, &QPushButton::clicked, this, [this, simpleCb]() { dev_->camera()->stopStream(this, simpleCb); });
 
     connect(dev, &DeviceClient::connectionChanged, this, [this](bool c, const QString&) {
         if (c) refreshResolution();
@@ -65,7 +65,7 @@ CameraPanel::CameraPanel(DeviceClient* dev, QWidget* parent)
 
 void CameraPanel::refreshResolution()
 {
-    dev_->cameraGetResolution([this](bool ok, int w, int h, const QString&) {
+    dev_->camera()->getResolution(this, [this](bool ok, int w, int h, const QString&) {
         if (ok) {
             curResLabel_->setText(QString("%1 x %2").arg(w).arg(h));
             widthSpin_->setValue(w);
@@ -80,7 +80,7 @@ void CameraPanel::onApplyResolution()
     if (QMessageBox::question(this, "Camera",
         QString::fromUtf8("确认修改分辨率为 %1x%2？").arg(w).arg(h)) == QMessageBox::Yes)
     {
-        dev_->cameraSetResolution(w, h, [this](bool ok, const QString& err) {
+        dev_->camera()->setResolution(this, w, h, [this](bool ok, const QString& err) {
             if (ok) refreshResolution();
             else QMessageBox::warning(this, "Camera", err);
         });

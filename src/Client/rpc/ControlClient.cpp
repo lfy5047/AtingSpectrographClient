@@ -14,7 +14,7 @@ ControlClient::ControlClient(QObject* parent)
     connect(sock_, &QTcpSocket::connected,    this, &ControlClient::onConnected);
     connect(sock_, &QTcpSocket::disconnected, this, &ControlClient::onDisconnected);
     connect(sock_, &QTcpSocket::readyRead,    this, &ControlClient::onReadyRead);
-    connect(sock_, QOverload<QAbstractSocket::SocketError>::of(&QAbstractSocket::error),
+    connect(sock_, &QAbstractSocket::errorOccurred,
             this, &ControlClient::onError);
 
     reconnTimer_ = new QTimer(this);
@@ -179,7 +179,6 @@ void ControlClient::request(const QString& cmd,
 
     uint32_t seq = nextSeq_++;
     nlohmann::json payload = {{"cmd", cmd.toStdString()}, {"params", params}};
-    sendFrame(MsgType::Request, seq, payload);
 
     Pending p;
     p.cb = cb;
@@ -198,13 +197,27 @@ void ControlClient::request(const QString& cmd,
     pending_.insert(seq, p);
     p.timer->start(timeout_ms);
 
+    if (!sendFrame(MsgType::Request, seq, payload)) {
+        auto it = pending_.find(seq);
+        if (it != pending_.end()) {
+            Pending pp = it.value();
+            pending_.erase(it);
+            if (pp.timer) {
+                pp.timer->stop();
+                pp.timer->deleteLater();
+            }
+            if (pp.cb) pp.cb(RpcResult::error(-253, "send failed"));
+        }
+        return;
+    }
+
     emit rawLog(QString("[TCP] req seq=%1 cmd=%2").arg(seq).arg(cmd));
 }
 
-void ControlClient::sendFrame(MsgType type, uint32_t seq, const nlohmann::json& payload)
+bool ControlClient::sendFrame(MsgType type, uint32_t seq, const nlohmann::json& payload)
 {
     std::string body = payload.dump();
-    QByteArray buf(sizeof(CtrlHeader) + body.size(), '\0');
+    QByteArray buf(static_cast<int>(sizeof(CtrlHeader) + body.size()), '\0');
 
     CtrlHeader hdr;
     hdr.magic       = kCtrlMagic;
@@ -215,7 +228,7 @@ void ControlClient::sendFrame(MsgType type, uint32_t seq, const nlohmann::json& 
     std::memcpy(buf.data(), &hdr, sizeof(hdr));
     std::memcpy(buf.data() + sizeof(hdr), body.data(), body.size());
 
-    sock_->write(buf);
+    return sock_->write(buf) >= 0;
 }
 
 void ControlClient::failAllPending(const QString& reason)

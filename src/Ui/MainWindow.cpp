@@ -300,7 +300,7 @@ void MainWindow::setupConnections()
                 device_->stream()->bind(port);
 
             // Query version
-            device_->version([this](bool ok, int ver, const QString& name, const QString&) {
+            device_->systemApi()->version(this, [this](bool ok, int ver, const QString& name, const QString&) {
                 if (ok) {
                     deviceVersion_ = QString("%1 v%2").arg(name).arg(ver);
                     dashPanel_->setConnectionInfo(hostIp_, tcpPort_, udpPort_,

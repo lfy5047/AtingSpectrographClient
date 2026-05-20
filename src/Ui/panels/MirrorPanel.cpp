@@ -86,30 +86,30 @@ MirrorPanel::MirrorPanel(DeviceClient* dev, QWidget* parent)
 
     // connections
     connect(setTargetBtn_, &QPushButton::clicked, this, [this, simpleCb]() {
-        dev_->mirrorSetTarget(targetSpin_->value(), simpleCb);
+        dev_->mirror()->setTarget(this, targetSpin_->value(), simpleCb);
     });
     connect(setAbsBtn_, &QPushButton::clicked, this, [this, simpleCb]() {
-        dev_->mirrorSetTargetAbsolute(targetSpin_->value(), simpleCb);
+        dev_->mirror()->setTargetAbsolute(this, targetSpin_->value(), simpleCb);
     });
     connect(startBtn_, &QPushButton::clicked, this, [this, simpleCb]() {
-        dev_->mirrorStartMove(simpleCb);
+        dev_->mirror()->startMove(this, simpleCb);
     });
     connect(stopBtn_, &QPushButton::clicked, this, [this, simpleCb]() {
-        dev_->mirrorStopMove(simpleCb);
+        dev_->mirror()->stopMove(this, simpleCb);
     });
     connect(applySpeedBtn_, &QPushButton::clicked, this, [this, simpleCb]() {
-        dev_->mirrorSetSpeed(sSpeedSpin_->value(), fSpeedSpin_->value(), simpleCb);
+        dev_->mirror()->setSpeed(this, sSpeedSpin_->value(), fSpeedSpin_->value(), simpleCb);
     });
     connect(homeBtn_, &QPushButton::clicked, this, [this, simpleCb]() {
-        dev_->mirrorHome(simpleCb);
+        dev_->mirror()->home(this, simpleCb);
     });
     connect(setHomeBtn_, &QPushButton::clicked, this, [this, simpleCb]() {
         if (QMessageBox::question(this, "Mirror",
             QString::fromUtf8("确认设置当前位置为原点？")) == QMessageBox::Yes)
-            dev_->mirrorSetHome(simpleCb);
+            dev_->mirror()->setHome(this, simpleCb);
     });
     connect(gotoPresetBtn_, &QPushButton::clicked, this, [this, simpleCb]() {
-        dev_->mirrorGotoPreset(presetCombo_->currentData().toInt(), simpleCb);
+        dev_->mirror()->gotoPreset(this, presetCombo_->currentData().toInt(), simpleCb);
     });
     connect(queryBtn_, &QPushButton::clicked, this, &MirrorPanel::onQueryAngle);
 
@@ -124,7 +124,7 @@ MirrorPanel::MirrorPanel(DeviceClient* dev, QWidget* parent)
 
 void MirrorPanel::onQueryAngle()
 {
-    dev_->mirrorQueryAngle([this](bool ok, double angle, bool moving, const QString& err) {
+    dev_->mirror()->queryAngle(this, [this](bool ok, double angle, bool moving, const QString& err) {
         if (ok) {
             angleLabel_->setText(QString::number(angle, 'f', 3) + QString::fromUtf8("°"));
             movingLabel_->setText(moving ? QString::fromUtf8("运动中") : QString::fromUtf8("已停止"));

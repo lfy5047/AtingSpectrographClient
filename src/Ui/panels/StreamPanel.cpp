@@ -68,19 +68,19 @@ void StreamPanel::onApply()
 {
     auto chs = selectedChannels();
     if (chs.isEmpty()) return;
-    dev_->streamSubscribe(udpPort_, chs, [](bool, const QString&) {});
+    dev_->streamControl()->subscribe(this, udpPort_, chs, [](bool, const QString&) {});
     emit subscribeRequested(udpPort_, chs);
 }
 
 void StreamPanel::onUnsubAll()
 {
-    dev_->streamUnsubscribeAll([](bool, const QString&) {});
+    dev_->streamControl()->unsubscribeAll(this, [](bool, const QString&) {});
 }
 
 void StreamPanel::refreshStatus()
 {
     if (!dev_->isConnected()) return;
-    dev_->streamStatus([this](bool ok, const nlohmann::json& data, const QString&) {
+    dev_->streamControl()->status(this, [this](bool ok, const nlohmann::json& data, const QString&) {
         if (!ok) return;
         auto chs = data.value("channels", std::vector<std::string>{});
         QStringList sl;

@@ -31,6 +31,10 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Client
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Client/core
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Client/rpc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Client/services
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Client/stream
     ${CMAKE_CURRENT_SOURCE_DIR}/src/Ui
     ${CMAKE_CURRENT_SOURCE_DIR}/Common/include
 )

@@ -22,6 +22,20 @@ signals:
     void frameReady(int channel, int width, int height, int pixfmt, QByteArray data);
 
 private:
+    struct FrameKey {
+        uint8_t  channel  = 0;
+        uint64_t frameId  = 0;
+
+        FrameKey() = default;
+        FrameKey(uint8_t ch, uint64_t fid) : channel(ch), frameId(fid) {}
+
+        bool operator<(const FrameKey& other) const
+        {
+            if (channel != other.channel) return channel < other.channel;
+            return frameId < other.frameId;
+        }
+    };
+
     struct Slot {
         QByteArray buf;
         QBitArray  got;
@@ -34,15 +48,19 @@ private:
         int        payloadSize = 0;
         int        received    = 0;
         qint64     created     = 0;
+        qint64     lastSeen    = 0;
     };
 
     void purgeStale();
+    void dropOldestSlot(const char* reason);
 
-    QMap<uint64_t, Slot> slots_;
+    QMap<FrameKey, Slot> slots_;
     QTimer* purgeTimer_ = nullptr;
     quint64 framesReceived_ = 0;
     quint64 framesDropped_  = 0;
+    qint64 bufferedBytes_ = 0;
 
-    static const int kMaxSlots   = 32;
-    static const int kTimeoutMs  = 300;
+    static const int kMaxSlots   = 256;
+    static const int kTimeoutMs  = 2000;
+    static const qint64 kMaxBufferedBytes = 256 * 1024 * 1024;
 };

@@ -46,15 +46,15 @@ IrPanel::IrPanel(DeviceClient* dev, QWidget* parent)
     root->addWidget(paramGrp);
 
     connect(applyBright, &QPushButton::clicked, this, [this]() {
-        dev_->irSetBrightness(static_cast<quint8>(brightSpin_->value()),
+        dev_->ir()->setBrightness(this, static_cast<quint8>(brightSpin_->value()),
             [this](bool ok, const QString& err) { if (!ok) QMessageBox::warning(this, "IR", err); });
     });
     connect(applyContrast, &QPushButton::clicked, this, [this]() {
-        dev_->irSetContrast(static_cast<quint8>(contrastSpin_->value()),
+        dev_->ir()->setContrast(this, static_cast<quint8>(contrastSpin_->value()),
             [this](bool ok, const QString& err) { if (!ok) QMessageBox::warning(this, "IR", err); });
     });
     connect(applyInteg, &QPushButton::clicked, this, [this]() {
-        dev_->irSetIntegration(static_cast<quint16>(integSpin_->value()),
+        dev_->ir()->setIntegration(this, static_cast<quint16>(integSpin_->value()),
             [this](bool ok, const QString& err) { if (!ok) QMessageBox::warning(this, "IR", err); });
     });
 
@@ -89,24 +89,24 @@ IrPanel::IrPanel(DeviceClient* dev, QWidget* parent)
     };
 
     connect(calibBtn, &QPushButton::clicked, this, [this]() {
-        dev_->irTriggerCalibration([this](bool ok, const QString& err) {
+        dev_->ir()->triggerCalibration(this, [this](bool ok, const QString& err) {
             resultLabel_->setText(ok ? "OK" : err);
         });
     });
     connect(queryIntBtn, &QPushButton::clicked, this, [this, showCb]() {
-        dev_->irQueryIntegrationTime(showCb(QString::fromUtf8("积分时间")));
+        dev_->ir()->queryIntegrationTime(this, showCb(QString::fromUtf8("积分时间")));
     });
     connect(selfChkBtn, &QPushButton::clicked, this, [this, showCb]() {
-        dev_->irReadSelfCheck(showCb(QString::fromUtf8("自检")));
+        dev_->ir()->readSelfCheck(this, showCb(QString::fromUtf8("自检")));
     });
     connect(coreTempBtn, &QPushButton::clicked, this, [this, showCb]() {
-        dev_->irReadCoreTemp(showCb(QString::fromUtf8("机芯温度")));
+        dev_->ir()->readCoreTemp(this, showCb(QString::fromUtf8("机芯温度")));
     });
     connect(focusTempBtn, &QPushButton::clicked, this, [this, showCb]() {
-        dev_->irReadFocusPlaneTemp(showCb(QString::fromUtf8("焦面温度")));
+        dev_->ir()->readFocusPlaneTemp(this, showCb(QString::fromUtf8("焦面温度")));
     });
     connect(modIdBtn, &QPushButton::clicked, this, [this, showCb]() {
-        dev_->irReadModuleId(showCb(QString::fromUtf8("模组 ID")));
+        dev_->ir()->readModuleId(this, showCb(QString::fromUtf8("模组 ID")));
     });
 
     // raw command
@@ -136,7 +136,7 @@ IrPanel::IrPanel(DeviceClient* dev, QWidget* parent)
         if (!ok) { QMessageBox::warning(this, "IR", "Invalid CMD hex"); return; }
         QByteArray data = QByteArray::fromHex(rawDataEdit_->text().toLatin1());
         quint8 len = static_cast<quint8>(rawLenSpin_->value());
-        dev_->irSendRaw(cmd, data, len, [this](bool ok2, const nlohmann::json& d, const QString& err) {
+        dev_->ir()->sendRaw(this, cmd, data, len, [this](bool ok2, const nlohmann::json& d, const QString& err) {
             if (ok2)
                 rawResultLabel_->setText("cmd=" + QString::number(d.value("cmd", 0)) + " data=" + bytesToHex(d["data"]));
             else

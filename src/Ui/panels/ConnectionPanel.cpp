@@ -86,7 +86,7 @@ void ConnectionPanel::onConnectClicked()
 void ConnectionPanel::onPingClicked()
 {
     qint64 t0 = QDateTime::currentMSecsSinceEpoch();
-    dev_->ping([this, t0](bool ok, qint64, const QString& err) {
+    dev_->systemApi()->ping(this, [this, t0](bool ok, qint64, const QString& err) {
         if (ok) {
             qint64 rtt = QDateTime::currentMSecsSinceEpoch() - t0;
             pingLabel_->setText(QString("%1 ms").arg(rtt));
@@ -108,7 +108,7 @@ void ConnectionPanel::onConnectionChanged(bool connected, const QString& ip)
         statusLabel_->setText(QString::fromUtf8("已连接 ") + ip);
         statusLabel_->setProperty("connState", "ok");
 
-        dev_->version([this](bool ok, int ver, const QString& name, const QString&) {
+        dev_->systemApi()->version(this, [this](bool ok, int ver, const QString& name, const QString&) {
             if (ok) versionLabel_->setText(QString("%1 v%2").arg(name).arg(ver));
         });
     } else {
