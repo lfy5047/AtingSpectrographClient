@@ -1,9 +1,11 @@
 #pragma once
 
+#include <QByteArray>
 #include <QObject>
+#include <QString>
 
-class QFile;
 class QThread;
+class FrameRecorderWriterWorker;
 
 class FrameRecorder : public QObject {
     Q_OBJECT
@@ -32,9 +34,6 @@ signals:
     void statsChanged();
 
 private:
-    class WriterWorker;
-
-    WriterWorker* worker_ = nullptr;
+    FrameRecorderWriterWorker* worker_ = nullptr;
     QThread* thread_ = nullptr;
 };
-
