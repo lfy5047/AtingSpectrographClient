@@ -10,6 +10,10 @@
 #include "panels/IrPanel.h"
 #include "panels/CollectPanel.h"
 #include "panels/StreamPanel.h"
+#include "panels/RecordPlaybackPanel.h"
+#include "Client/recording/FrameRecorder.h"
+#include "Client/recording/FramePlaybackController.h"
+#include "Client/recording/RecordedFrame.h"
 #include "panels/LogPanel.h"
 #include "Protocol.h"
 #include <QVBoxLayout>
@@ -22,6 +26,7 @@
 #include <QEvent>
 #include <QApplication>
 #include <QStatusBar>
+#include <QMessageBox>
 
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
@@ -55,6 +60,26 @@ MainWindow::~MainWindow() = default;
 
 void MainWindow::closeEvent(QCloseEvent* e)
 {
+    if (recordPlaybackPanel_ && recordPlaybackPanel_->recorder() &&
+        recordPlaybackPanel_->recorder()->isRecording()) {
+        const auto ret = QMessageBox::question(
+            this,
+            QString::fromUtf8("录制"),
+            QString::fromUtf8("正在录制中，是否停止录制并退出？"),
+            QMessageBox::Yes | QMessageBox::No,
+            QMessageBox::No);
+        if (ret != QMessageBox::Yes) {
+            e->ignore();
+            return;
+        }
+        QString err;
+        if (!recordPlaybackPanel_->recorder()->stopRecording(5000, &err)) {
+            QMessageBox::warning(this, QString::fromUtf8("录制"), err);
+        }
+    }
+    if (recordPlaybackPanel_ && recordPlaybackPanel_->playback()) {
+        recordPlaybackPanel_->playback()->stop();
+    }
     saveSettings();
     device_->disconnect();
     QMainWindow::closeEvent(e);
@@ -120,9 +145,14 @@ void MainWindow::setupUi()
     chTabSlice_->setObjectName("channelTab");
     chTabSlice_->setFixedHeight(28);
     chTabSlice_->setCursor(Qt::PointingHandCursor);
+    chTabPlayback_ = new QPushButton("Playback", channelTabBar_);
+    chTabPlayback_->setObjectName("channelTab");
+    chTabPlayback_->setFixedHeight(28);
+    chTabPlayback_->setCursor(Qt::PointingHandCursor);
 
     chTabLayout->addWidget(chTabRaw16_);
     chTabLayout->addWidget(chTabSlice_);
+    chTabLayout->addWidget(chTabPlayback_);
     chTabLayout->addStretch();
 
     // Position channel tabs at top-center of viewer
@@ -136,8 +166,10 @@ void MainWindow::setupUi()
 
     imageViewRaw_ = new ImageView(viewerStack_);
     imageViewSlice_ = new ImageView(viewerStack_);
+    imageViewPlayback_ = new ImageView(viewerStack_);
     viewerStack_->addWidget(imageViewRaw_);   // 0
     viewerStack_->addWidget(imageViewSlice_); // 1
+    viewerStack_->addWidget(imageViewPlayback_); // 2
 
     viewerLayout->addWidget(viewerStack_, 1);
 
@@ -150,6 +182,11 @@ void MainWindow::setupUi()
         currentChannel_ = 1;
         viewerStack_->setCurrentIndex(1);
         updateChannelTabStyle(1);
+    });
+    connect(chTabPlayback_, &QPushButton::clicked, this, [this]() {
+        currentChannel_ = 2;
+        viewerStack_->setCurrentIndex(2);
+        updateChannelTabStyle(2);
     });
 
     // Zoom toolbar (overlay at bottom-center)
@@ -221,6 +258,41 @@ void MainWindow::updateChannelTabStyle(int tab)
     chTabRaw16_->style()->polish(chTabRaw16_);
     chTabSlice_->setProperty("active", tab == 1);
     chTabSlice_->style()->polish(chTabSlice_);
+    chTabPlayback_->setProperty("active", tab == 2);
+    chTabPlayback_->style()->polish(chTabPlayback_);
+}
+
+void MainWindow::renderFrameToView(ImageView* target, int width, int height, int pixfmt, const QByteArray& data)
+{
+    using namespace cli::proto;
+
+    if (!target) return;
+
+    QImage img;
+    if (pixfmt == Mono8) {
+        if (data.size() < width * height) return;
+        img = QImage(reinterpret_cast<const uchar*>(data.constData()),
+                     width, height, width, QImage::Format_Grayscale8).copy();
+    } else {
+        const int pixels = width * height;
+        if (data.size() < pixels * 2) return;
+        const uint16_t* src = reinterpret_cast<const uint16_t*>(data.constData());
+        uint16_t mn = 0xFFFF, mx = 0;
+        for (int i = 0; i < pixels; ++i) {
+            if (src[i] < mn) mn = src[i];
+            if (src[i] > mx) mx = src[i];
+        }
+        QByteArray buf8(pixels, '\0');
+        if (mx > mn) {
+            const double s = 255.0 / (mx - mn);
+            for (int i = 0; i < pixels; ++i)
+                buf8[i] = static_cast<char>(static_cast<uint8_t>((src[i] - mn) * s));
+        }
+        img = QImage(reinterpret_cast<const uchar*>(buf8.constData()),
+                     width, height, width, QImage::Format_Grayscale8).copy();
+    }
+
+    target->setImage(img);
 }
 
 // ── Panels ──
@@ -245,6 +317,7 @@ void MainWindow::setupPanels()
     irPanel_      = new IrPanel(device_, this);
     collectPanel_ = new CollectPanel(device_, this);
     streamPanel_  = new StreamPanel(device_, this);
+    recordPlaybackPanel_ = new RecordPlaybackPanel(this);
 
     // Panel 0: Dashboard (no scroll wrap — its own internal scroll)
     panelStack_->addWidget(wrapInScroll(dashPanel_));
@@ -255,21 +328,23 @@ void MainWindow::setupPanels()
     panelStack_->addWidget(wrapInScroll(irPanel_));
     panelStack_->addWidget(wrapInScroll(collectPanel_));
     panelStack_->addWidget(wrapInScroll(streamPanel_));
+    panelStack_->addWidget(wrapInScroll(recordPlaybackPanel_));
     // Panel 7: Logs — jumps to bottom log panel
 }
 
 void MainWindow::onPanelSelected(int index)
 {
-    if (index < 0 || index > 7) return;
+    if (index < 0 || index > 8) return;
 
-    // Panel 7 (logs) toggles bottom log panel expansion
-    if (index == 7) {
+    // Panel 8 (logs) toggles bottom log panel expansion
+    if (index == 8) {
         logPanel_->toggleExpanded();
         return;
     }
 
     panelStack_->setCurrentIndex(index);
-    panelTitle_->setText(QString::fromUtf8(kPanelNames[index]));
+    if (index == 7) panelTitle_->setText(QString::fromUtf8("录制回放"));
+    else panelTitle_->setText(QString::fromUtf8(kPanelNames[index]));
 
     if (index == 0) {
         // Update dashboard info
@@ -323,6 +398,11 @@ void MainWindow::setupConnections()
     connect(device_, &DeviceClient::frameReady, this,
             [this](int channel, int width, int height, int pixfmt, QByteArray data) {
         using namespace cli::proto;
+
+        if (recordPlaybackPanel_ && recordPlaybackPanel_->recorder()) {
+            recordPlaybackPanel_->recorder()->recordFrame(channel, width, height, pixfmt, data);
+        }
+
         ImageView* target = nullptr;
         switch (channel) {
         case Raw16:          target = imageViewRaw_; break;
@@ -330,34 +410,7 @@ void MainWindow::setupConnections()
         default: return;
         }
 
-        QImage img;
-        if (pixfmt == Mono8) {
-            img = QImage(reinterpret_cast<const uchar*>(data.constData()),
-                         width, height, width, QImage::Format_Grayscale8).copy();
-        } else {
-            int pixels = width * height;
-            if (data.size() < pixels * 2) return;
-            const uint16_t* src = reinterpret_cast<const uint16_t*>(data.constData());
-            uint16_t mn = 0xFFFF, mx = 0;
-            for (int i = 0; i < pixels; ++i) {
-                if (src[i] < mn) mn = src[i];
-                if (src[i] > mx) mx = src[i];
-            }
-            QByteArray buf8(pixels, '\0');
-            if (mx > mn) {
-                double s = 255.0 / (mx - mn);
-                for (int i = 0; i < pixels; ++i)
-                    buf8[i] = static_cast<char>(static_cast<uint8_t>((src[i] - mn) * s));
-            }
-            img = QImage(reinterpret_cast<const uchar*>(buf8.constData()),
-                         width, height, width, QImage::Format_Grayscale8).copy();
-        }
-
-        if (target) {
-            target->setImage(img);
-            // imgInfoLabel_->setText(QString("%1 x %2 | Mono%3")
-            //     .arg(width).arg(height).arg(pixfmt == Mono8 ? "8" : "16"));
-        }
+        renderFrameToView(target, width, height, pixfmt, data);
 
         topBar_->setFps(device_->stream()->fps());
         topBar_->setFrames(device_->stream()->framesReceived());
@@ -381,6 +434,19 @@ void MainWindow::setupConnections()
         if (!device_->stream()->isBound())
             device_->stream()->bind(port);
     });
+
+    // Record/Playback panel -> switch viewer to Playback
+    connect(recordPlaybackPanel_, &RecordPlaybackPanel::requestSwitchToPlaybackView, this, [this]() {
+        currentChannel_ = 2;
+        viewerStack_->setCurrentIndex(2);
+        updateChannelTabStyle(2);
+    });
+
+    // Playback frames -> Playback ImageView
+    connect(recordPlaybackPanel_, &RecordPlaybackPanel::playbackFrameReady, this,
+            [this](const RecordedFrame& f) {
+        renderFrameToView(imageViewPlayback_, f.width, f.height, f.pixfmt, f.data);
+    }, Qt::QueuedConnection);
 }
 
 // ── Settings ──

@@ -3,6 +3,7 @@
 #include <QHBoxLayout>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPolygonF>
 #include <QPen>
 #include <QBrush>
 #include <QLinearGradient>
@@ -91,11 +92,31 @@ void SidebarWidget::setupUi()
         btn->setCursor(Qt::PointingHandCursor);
         btn->setFixedHeight(36);
         connect(btn, &QPushButton::clicked, this, [this, i]() {
-            setActivePanel(i);
-            emit panelSelected(i);
+            const int panelIndex = (i == 7) ? 8 : i; // insert Record/Playback at index 7
+            setActivePanel(panelIndex);
+            emit panelSelected(panelIndex);
         });
         navBtns_.append(btn);
         navLayout->addWidget(btn);
+    }
+
+    // Insert Record/Playback button before Logs
+    {
+        auto* btn = new QPushButton(navArea_);
+        btn->setObjectName("navItem");
+        btn->setText(QString::fromUtf8("录制回放"));
+        btn->setProperty("fullText", QString::fromUtf8("录制回放"));
+        btn->setIcon(QIcon(makeIcon(8, iconColor)));
+        btn->setIconSize(QSize(20, 20));
+        btn->setCursor(Qt::PointingHandCursor);
+        btn->setFixedHeight(36);
+        connect(btn, &QPushButton::clicked, this, [this]() {
+            setActivePanel(7);
+            emit panelSelected(7);
+        });
+
+        navBtns_.insert(7, btn);
+        navLayout->insertWidget(7, btn);
     }
     navLayout->addStretch();
     root->addWidget(navArea_, 1);
@@ -206,6 +227,11 @@ static void drawIcon(QPainter& p, int type, const QColor& c, int sz)
             p.drawPath(corner);
         }
         break;
+    case 8: // Record/Playback
+        p.drawEllipse(QPointF(8.0f, 12.0f), 2.5f, 2.5f); // record dot
+        p.drawRoundedRect(12, 6, 9, 12, 2, 2); // screen
+        p.drawPolygon(QPolygonF() << QPointF(15, 9) << QPointF(15, 15) << QPointF(19, 12)); // play
+        break;
     }
 }
 
@@ -239,7 +265,8 @@ void SidebarWidget::setActivePanel(int index)
     for (int i = 0; i < navBtns_.size(); ++i) {
         navBtns_[i]->setProperty("active", i == index);
         navBtns_[i]->style()->polish(navBtns_[i]);
-        navBtns_[i]->setIcon(QIcon(makeIcon(kNavItems[i].iconType, i == index ? active : normal)));
+        const int iconType = (i == 7) ? 8 : kNavItems[i >= 8 ? 7 : i].iconType;
+        navBtns_[i]->setIcon(QIcon(makeIcon(iconType, i == index ? active : normal)));
     }
 }
 

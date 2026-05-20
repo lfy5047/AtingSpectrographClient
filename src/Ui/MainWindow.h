@@ -19,6 +19,7 @@ class CollectPanel;
 class StreamPanel;
 class LogPanel;
 class ImageView;
+class RecordPlaybackPanel;
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -38,6 +39,7 @@ private:
     void saveSettings();
     void onPanelSelected(int index);
     void updateChannelTabStyle(int tab);
+    void renderFrameToView(ImageView* target, int width, int height, int pixfmt, const QByteArray& data);
 
     DeviceClient* device_ = nullptr;
 
@@ -51,9 +53,11 @@ private:
     QWidget*        channelTabBar_   = nullptr;
     QPushButton*    chTabRaw16_      = nullptr;
     QPushButton*    chTabSlice_      = nullptr;
+    QPushButton*    chTabPlayback_   = nullptr;
     QStackedWidget* viewerStack_     = nullptr;
     ImageView*      imageViewRaw_    = nullptr;
     ImageView*      imageViewSlice_  = nullptr;
+    ImageView*      imageViewPlayback_ = nullptr;
 
     // Zoom overlay
     QWidget*        zoomBar_       = nullptr;
@@ -73,6 +77,7 @@ private:
     IrPanel*         irPanel_       = nullptr;
     CollectPanel*    collectPanel_  = nullptr;
     StreamPanel*     streamPanel_   = nullptr;
+    RecordPlaybackPanel* recordPlaybackPanel_ = nullptr;
 
     // Bottom log
     LogPanel*       logPanel_      = nullptr;
