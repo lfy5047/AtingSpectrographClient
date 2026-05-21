@@ -10,6 +10,7 @@
 
 class QFile;
 class QThread;
+class FramePlaybackScanWorker;
 
 class FramePlaybackController : public QObject {
     Q_OBJECT
@@ -75,8 +76,7 @@ private:
         quint16 pixfmt = 0;
     };
 
-    class ScanWorker;
-    friend class ScanWorker;
+    friend class FramePlaybackScanWorker;
 
     bool loadFrameAt(quint64 idx, RecordedFrame& out, QString* err);
     void updateTimer();
@@ -91,7 +91,7 @@ private:
     std::unique_ptr<QFile> file_;
 
     QThread* scanThread_ = nullptr;
-    ScanWorker* scanWorker_ = nullptr;
+    FramePlaybackScanWorker* scanWorker_ = nullptr;
     bool scanning_ = false;
     bool indexReady_ = false;
 
