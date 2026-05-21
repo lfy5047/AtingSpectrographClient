@@ -305,6 +305,7 @@ static const char* kPanelNames[] = {
     "红外热像",
     "数据采集",
     "流通道",
+    "录制回放",
     "系统日志",
 };
 
@@ -321,7 +322,7 @@ void MainWindow::setupPanels()
 
     // Panel 0: Dashboard (no scroll wrap — its own internal scroll)
     panelStack_->addWidget(wrapInScroll(dashPanel_));
-    // Panel 1-6: control panels
+    // Panel 1-7: control panels
     panelStack_->addWidget(wrapInScroll(connPanel_));
     panelStack_->addWidget(wrapInScroll(cameraPanel_));
     panelStack_->addWidget(wrapInScroll(mirrorPanel_));
@@ -329,7 +330,7 @@ void MainWindow::setupPanels()
     panelStack_->addWidget(wrapInScroll(collectPanel_));
     panelStack_->addWidget(wrapInScroll(streamPanel_));
     panelStack_->addWidget(wrapInScroll(recordPlaybackPanel_));
-    // Panel 7: Logs — jumps to bottom log panel
+    // Panel 8: Logs — jumps to bottom log panel
 }
 
 void MainWindow::onPanelSelected(int index)
@@ -343,8 +344,7 @@ void MainWindow::onPanelSelected(int index)
     }
 
     panelStack_->setCurrentIndex(index);
-    if (index == 7) panelTitle_->setText(QString::fromUtf8("录制回放"));
-    else panelTitle_->setText(QString::fromUtf8(kPanelNames[index]));
+    panelTitle_->setText(QString::fromUtf8(kPanelNames[index]));
 
     if (index == 0) {
         // Update dashboard info
