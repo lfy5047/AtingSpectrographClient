@@ -37,11 +37,24 @@ public:
     QImage render(const SpectralRenderOptions& opts) const;
 
 private:
+    struct RangeAverageCache {
+        bool valid = false;
+        int bandStart = 0;
+        int bandEnd = 0;
+        int bands = 0;
+        int height = 0;
+        int pixfmt = 0;
+        quint64 columnVersion = 0;
+        int cachedColumns = 0;
+        QVector<int> columnValues;
+    };
+
     bool hasCompatibleGeometry(int bands, int height, int pixfmt) const;
     bool appendColumn(const QByteArray& data);
     bool readSample(const QByteArray& col, int pixelIndex, int& sample) const;
 
     QVector<QByteArray> columns_;
+    quint64 columnVersion_ = 0;
     quint64 lastStreamFrameId_ = 0;
     quint64 streamFrameIdStep_ = 0;
     int bands_ = 0;
@@ -50,4 +63,5 @@ private:
     bool active_ = false;
     bool tailSeen_ = false;
     quint64 gapFillColumns_ = 0;
+    mutable RangeAverageCache rangeAverageCache_;
 };

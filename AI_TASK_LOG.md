@@ -111,3 +111,22 @@
 - 文件变更：
 - 验证：
 - 备注/后续风险：
+## 2026-05-22 Spectral range render performance optimization
+
+- Goal: reduce UI freeze when selecting large spectral band ranges.
+- Files changed:
+  - `src/Ui/SpectralScanBuilder.h`
+  - `src/Ui/SpectralScanBuilder.cpp`
+  - `src/Ui/MainWindow.cpp`
+  - `AI_TASK_LOG.md`
+- Implementation:
+  - Added `columnVersion_` and `mutable RangeAverageCache` in `SpectralScanBuilder`.
+  - Incremented version on normal append, reset, and each gap-fill append.
+  - Reworked non-RGB render path to incremental column cache + per-frame min/max rescale.
+  - Kept `render(...) const` unchanged and updated cache inside mutable members.
+  - Gated spectral timer render by `currentChannel_ == 2`.
+  - Removed synchronous `updateSpectralView()` on `SpectralPanel::settingsChanged`.
+  - Refreshed spectral source/stats when switching back to Spectral tab.
+  - Limited per-frame `refreshSpectralStats()` to visible and source/channel-matched cases.
+- Verification:
+  - Ran `.\make.bat`, build passed and linked `Release\AtingSpectrographClient.exe`.

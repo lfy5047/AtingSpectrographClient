@@ -59,7 +59,7 @@ MainWindow::MainWindow(QWidget* parent)
     spectralRenderTimer_ = new QTimer(this);
     spectralRenderTimer_->setInterval(33);
     connect(spectralRenderTimer_, &QTimer::timeout, this, [this]() {
-        if (!spectralDirty_) return;
+        if (!spectralDirty_ || currentChannel_ != 2) return;
         updateSpectralView();
         spectralDirty_ = false;
     });
@@ -206,6 +206,8 @@ void MainWindow::setupUi()
         currentChannel_ = 2;
         viewerStack_->setCurrentIndex(2);
         updateChannelTabStyle(2);
+        refreshSpectralSource();
+        refreshSpectralStats();
     });
     connect(chTabPlayback_, &QPushButton::clicked, this, [this]() {
         currentChannel_ = 3;
@@ -488,16 +490,13 @@ void MainWindow::setupConnections()
         connect(recordPlaybackPanel_->playback(), &FramePlaybackController::playbackStopped, this, [this]() {
             playbackActive_ = false;
             refreshSpectralSource();
-            spectralDirty_ = true;
             refreshSpectralStats();
         });
     }
 
     connect(spectralPanel_, &SpectralPanel::settingsChanged, this, [this]() {
         refreshSpectralSource();
-        spectralDirty_ = true;
-        updateSpectralView();
-        refreshStreamStats();
+        refreshSpectralStats();
     });
 }
 
@@ -557,7 +556,6 @@ void MainWindow::refreshSpectralSource()
 {
     spectralSource_ = effectiveSpectralSource();
     spectralDirty_ = true;
-    refreshSpectralStats();
 }
 
 SpectralScanBuilder* MainWindow::builderFor(SpectralSource source, int channel)
@@ -606,8 +604,13 @@ void MainWindow::handleLiveFrame(const StreamFrame& frame)
     SpectralScanBuilder* b = builderFor(SpectralSource::Live, frame.channel);
     if (!b) return;
     b->feedFrame(frame.frameType, frame.streamFrameId, frame.width, frame.height, frame.pixfmt, frame.data);
-    refreshSpectralStats();
-    if (spectralSource_ == SpectralSource::Live) {
+    const bool spectralVisible = currentChannel_ == 2;
+    const bool sourceMatches = (spectralSource_ == SpectralSource::Live);
+    const bool channelMatches = sourceMatches && spectralPanel_ && spectralPanel_->sourceChannel() == frame.channel;
+    if (spectralVisible && channelMatches) {
+        refreshSpectralStats();
+    }
+    if (sourceMatches) {
         spectralDirty_ = true;
     }
 }
@@ -622,8 +625,13 @@ void MainWindow::handlePlaybackFrame(const RecordedFrame& frame)
     SpectralScanBuilder* b = builderFor(SpectralSource::Playback, frame.channel);
     if (!b) return;
     b->feedFrame(frame.frameType, frame.streamFrameId, frame.width, frame.height, frame.pixfmt, frame.data);
-    refreshSpectralStats();
-    if (spectralSource_ == SpectralSource::Playback) {
+    const bool spectralVisible = currentChannel_ == 2;
+    const bool sourceMatches = (spectralSource_ == SpectralSource::Playback);
+    const bool channelMatches = sourceMatches && spectralPanel_ && spectralPanel_->sourceChannel() == frame.channel;
+    if (spectralVisible && channelMatches) {
+        refreshSpectralStats();
+    }
+    if (sourceMatches) {
         spectralDirty_ = true;
     }
 }

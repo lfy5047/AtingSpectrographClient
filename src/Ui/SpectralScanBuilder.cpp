@@ -17,6 +17,7 @@ int clampBand(int v, int bands)
 void SpectralScanBuilder::reset()
 {
     columns_.clear();
+    ++columnVersion_;
     lastStreamFrameId_ = 0;
     streamFrameIdStep_ = 0;
     bands_ = 0;
@@ -25,6 +26,7 @@ void SpectralScanBuilder::reset()
     active_ = false;
     tailSeen_ = false;
     gapFillColumns_ = 0;
+    rangeAverageCache_ = RangeAverageCache();
 }
 
 bool SpectralScanBuilder::hasCompatibleGeometry(int bands, int height, int pixfmt) const
@@ -44,6 +46,7 @@ bool SpectralScanBuilder::appendColumn(const QByteArray& data)
     } else {
         columns_.append(data.left(expectedBytes));
     }
+    ++columnVersion_;
     return true;
 }
 
@@ -94,6 +97,7 @@ void SpectralScanBuilder::feedFrame(quint8 frameType, quint64 streamFrameId, int
         const QByteArray prev = columns_.last();
         for (quint64 i = 0; i < missingColumns; ++i) {
             columns_.append(prev);
+            ++columnVersion_;
         }
         gapFillColumns_ += missingColumns;
     }
@@ -192,34 +196,86 @@ QImage SpectralScanBuilder::render(const SpectralRenderOptions& opts) const
         std::swap(bandStart, bandEnd);
     }
 
-    QVector<int> grayValues(pixels, 0);
+    const int count = std::max(1, bandEnd - bandStart + 1);
+    const bool cacheCompatible =
+        rangeAverageCache_.valid &&
+        rangeAverageCache_.bandStart == bandStart &&
+        rangeAverageCache_.bandEnd == bandEnd &&
+        rangeAverageCache_.bands == bands &&
+        rangeAverageCache_.height == h &&
+        rangeAverageCache_.pixfmt == pixfmt_;
+
+    const bool versionMismatch = rangeAverageCache_.valid && (rangeAverageCache_.columnVersion != columnVersion_);
+    if (!cacheCompatible || versionMismatch) {
+        rangeAverageCache_ = RangeAverageCache();
+        rangeAverageCache_.valid = true;
+        rangeAverageCache_.bandStart = bandStart;
+        rangeAverageCache_.bandEnd = bandEnd;
+        rangeAverageCache_.bands = bands;
+        rangeAverageCache_.height = h;
+        rangeAverageCache_.pixfmt = pixfmt_;
+    }
+
+    if (rangeAverageCache_.cachedColumns > w) {
+        rangeAverageCache_.cachedColumns = 0;
+        rangeAverageCache_.columnValues.clear();
+    }
+
+    const int oldColumns = rangeAverageCache_.cachedColumns;
+    if (oldColumns < w) {
+        rangeAverageCache_.columnValues.resize(w * h);
+        if (pixfmt_ == cli::proto::Mono8) {
+            for (int x = oldColumns; x < w; ++x) {
+                const QByteArray& col = columns_[x];
+                const uchar* src = reinterpret_cast<const uchar*>(col.constData());
+                for (int y = 0; y < h; ++y) {
+                    const int base = y * bands + bandStart;
+                    qint64 acc = 0;
+                    for (int b = 0; b < count; ++b) {
+                        acc += src[base + b];
+                    }
+                    rangeAverageCache_.columnValues[x * h + y] = static_cast<int>(acc / count);
+                }
+            }
+        } else {
+            for (int x = oldColumns; x < w; ++x) {
+                const QByteArray& col = columns_[x];
+                // Windows x86/x64 target accepts unaligned reads for uint16 payload.
+                const uint16_t* src = reinterpret_cast<const uint16_t*>(col.constData());
+                for (int y = 0; y < h; ++y) {
+                    const int base = y * bands + bandStart;
+                    qint64 acc = 0;
+                    for (int b = 0; b < count; ++b) {
+                        acc += src[base + b];
+                    }
+                    rangeAverageCache_.columnValues[x * h + y] = static_cast<int>(acc / count);
+                }
+            }
+        }
+        rangeAverageCache_.cachedColumns = w;
+    }
+    rangeAverageCache_.columnVersion = columnVersion_;
+
     int minV = 0x7FFFFFFF;
     int maxV = 0;
-    const int count = std::max(1, bandEnd - bandStart + 1);
-
     for (int x = 0; x < w; ++x) {
-        const QByteArray& col = columns_[x];
+        const int columnBase = x * h;
         for (int y = 0; y < h; ++y) {
-            const int base = y * bands;
-            int acc = 0;
-            for (int b = bandStart; b <= bandEnd; ++b) {
-                int sample = 0;
-                if (!readSample(col, base + b, sample)) continue;
-                acc += sample;
-            }
-            const int v = acc / count;
+            const int v = rangeAverageCache_.columnValues[columnBase + y];
             minV = std::min(minV, v);
             maxV = std::max(maxV, v);
-            grayValues[y * w + x] = v;
         }
     }
 
     QByteArray gray(pixels, '\0');
     if (maxV > minV) {
         const double s = 255.0 / (maxV - minV);
-        for (int i = 0; i < grayValues.size(); ++i) {
-            const int v = grayValues[i];
-            gray[i] = static_cast<char>(std::min(255, std::max(0, static_cast<int>((v - minV) * s))));
+        for (int y = 0; y < h; ++y) {
+            const int rowBase = y * w;
+            for (int x = 0; x < w; ++x) {
+                const int v = rangeAverageCache_.columnValues[x * h + y];
+                gray[rowBase + x] = static_cast<char>(std::min(255, std::max(0, static_cast<int>((v - minV) * s))));
+            }
         }
     } else {
         gray.fill('\0');
