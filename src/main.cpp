@@ -1,6 +1,7 @@
 #include <QApplication>
 #include <QFile>
 #include "Ui/MainWindow.h"
+#include "Client/stream/StreamFrame.h"
 #include "plog/Initializers/RollingFileInitializer.h"
 #include "plog/Appenders/ColorConsoleAppender.h"
 
@@ -12,6 +13,7 @@ int main(int argc, char* argv[])
     plog::get()->addAppender(&consoleAppender);
 
     QApplication app(argc, argv);
+    qRegisterMetaType<StreamFrame>("StreamFrame");
     app.setOrganizationName("AtingSpectrograph");
     app.setApplicationName("AtingSpectrographClient");
 

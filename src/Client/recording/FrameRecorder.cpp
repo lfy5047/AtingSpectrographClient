@@ -81,9 +81,10 @@ bool FrameRecorder::stopRecording(int waitTimeoutMs, QString* err)
     return true;
 }
 
-void FrameRecorder::recordFrame(int channel, int width, int height, int pixfmt, const QByteArray& data)
+void FrameRecorder::recordFrame(int channel, int width, int height, int pixfmt, quint8 frameType,
+                                quint64 streamFrameId, const QByteArray& data)
 {
     if (!worker_) return;
     if (!isRecording()) return;
-    worker_->enqueueFrame(channel, width, height, pixfmt, data);
+    worker_->enqueueFrame(channel, width, height, pixfmt, frameType, streamFrameId, data);
 }

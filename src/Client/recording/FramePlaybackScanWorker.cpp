@@ -44,12 +44,13 @@ void FramePlaybackScanWorker::scan(const QString& path)
         }
 
         FramePlaybackController::IndexEntry e;
-        e.frameIndex = fh.frameIndex;
+        e.streamFrameId = fh.frameIndex;
         e.timestampMs = fh.timestampMs;
         e.frameHeaderOffset = static_cast<quint64>(headerPos);
         e.payloadOffset = static_cast<quint64>(f.pos());
         e.payloadBytes = fh.dataBytes;
         e.crc32 = fh.crc32;
+        e.frameType = fh.reserved8;
         e.channel = fh.channel;
         e.width = fh.width;
         e.height = fh.height;

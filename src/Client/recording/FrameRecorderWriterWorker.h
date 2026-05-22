@@ -28,7 +28,8 @@ public:
 
     void start(const QString& path);
     void stop();
-    void enqueueFrame(int channel, int width, int height, int pixfmt, const QByteArray& data);
+    void enqueueFrame(int channel, int width, int height, int pixfmt, quint8 frameType,
+                      quint64 streamFrameId, const QByteArray& data);
     void writerLoop();
 
 signals:
@@ -44,7 +45,9 @@ private:
         int height = 0;
         int pixfmt = 0;
         quint64 frameIndex = 0;
+        quint64 streamFrameId = 0;
         quint64 timestampMs = 0;
+        quint8 frameType = 0;
         quint32 crc32 = 0;
         QByteArray data;
     };

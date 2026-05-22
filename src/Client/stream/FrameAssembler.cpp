@@ -45,6 +45,8 @@ void FrameAssembler::feedPacket(const cli::proto::StreamHeader& hdr,
         s.height = hdr.height;
         s.pixfmt = hdr.pixel_format;
         s.channel = hdr.channel;
+        s.streamFrameId = hdr.frame_id;
+        s.frameType = hdr.frame_type;
         s.buf.resize(static_cast<int>(hdr.frame_bytes));
         s.buf.fill('\0');
         s.got.resize(hdr.pkt_total);
@@ -63,11 +65,13 @@ void FrameAssembler::feedPacket(const cli::proto::StreamHeader& hdr,
 
     if (slot.pktTotal != hdr.pkt_total || slot.frameBytes != hdr.frame_bytes ||
         slot.width != hdr.width || slot.height != hdr.height ||
-        slot.pixfmt != hdr.pixel_format) {
+        slot.pixfmt != hdr.pixel_format || slot.frameType != hdr.frame_type) {
         PLOGW << "FrameAssembler: metadata changed channel=" << static_cast<int>(hdr.channel)
               << " fid=" << hdr.frame_id
               << " oldTotal=" << slot.pktTotal << " newTotal=" << hdr.pkt_total
-              << " oldBytes=" << slot.frameBytes << " newBytes=" << hdr.frame_bytes;
+              << " oldBytes=" << slot.frameBytes << " newBytes=" << hdr.frame_bytes
+              << " oldFrameType=" << static_cast<int>(slot.frameType)
+              << " newFrameType=" << static_cast<int>(hdr.frame_type);
         bufferedBytes_ -= slot.buf.size();
         slots_.erase(it);
         ++framesDropped_;
@@ -107,7 +111,15 @@ void FrameAssembler::feedPacket(const cli::proto::StreamHeader& hdr,
 
     if (slot.received >= slot.pktTotal) {
         ++framesReceived_;
-        emit frameReady(slot.channel, slot.width, slot.height, slot.pixfmt, slot.buf);
+        StreamFrame frame;
+        frame.channel = slot.channel;
+        frame.width = slot.width;
+        frame.height = slot.height;
+        frame.pixfmt = slot.pixfmt;
+        frame.streamFrameId = slot.streamFrameId;
+        frame.frameType = slot.frameType;
+        frame.data = slot.buf;
+        emit frameReady(frame);
         bufferedBytes_ -= slot.buf.size();
         slots_.erase(it);
     }

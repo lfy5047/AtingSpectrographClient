@@ -2,6 +2,25 @@
 
 > 最新记录放在最上方。后续 AI 变更项目时，请补充本文件。
 
+## 2026-05-22 新增 Spectral 波段显示与来源选择
+
+- 目标：新增 Spectral 主图像 Tab 与“光谱显示”面板，支持单波段、范围平均、RGB 合成，并可选择 Auto/Live/Playback 数据来源；打通 `frameType + streamFrameId` 在实时流、录制、回放链路中的透传，支持从回放帧重建 Spectral 扫描。
+- 文件变更：
+  - 新增 `src/Client/stream/StreamFrame.h`
+  - 新增 `src/Ui/SpectralScanBuilder.*`
+  - 新增 `src/Ui/panels/SpectralPanel.*`
+  - 修改 `src/Client/stream/FrameAssembler.*`、`src/Client/stream/StreamClient.*`、`src/Client/core/DeviceClient.h`
+  - 修改 `src/Client/recording/RecordedFrame.h`、`FrameRecorder*`、`FrameRecorderWriterWorker*`、`FramePlaybackController*`、`FramePlaybackScanWorker.cpp`
+  - 修改 `src/Ui/MainWindow.*`、`src/Ui/widgets/SidebarWidget.*`、`src/main.cpp`
+  - 修改 `PROJECT_CONTEXT.md`、`ARCHITECTURE.md`、`AI_TASK_LOG.md`
+- 验证：多次运行 `.\make.bat` 构建通过（Release 链接成功）。
+- 备注：
+  - 实时 Raw/Slice 图像仍渲染到旧图像页，Spectral 另行消费 `HeaderFrame/DataFrame/TailFrame`。
+  - 双通道订阅时，Spectral 构建器会学习同通道 `streamFrameId` 正常步长，避免把另一个通道的帧号间隔误判为缺列导致宽度翻倍。
+  - `StreamClient` 维护按通道 FPS，顶部 FPS 在 Spectral 页按所选源通道显示。
+  - 回放期间 Live Spectral 缓存继续更新；用户可在 Spectral 面板强制选择 Live 或 Playback。
+  - 旧 `window/panel` 设置增加了索引迁移（旧值 7/8 对应新版 8/9）。
+
 ## 2026-05-22 实施 UDP v2 协议升级
 
 - 目标：将客户端 UDP 流头从 32 字节升级到 v2 64 字节，拆分 TCP/UDP 协议版本常量，并增加 UDP 丢包限频日志。

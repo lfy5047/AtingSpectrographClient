@@ -6,6 +6,10 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QElapsedTimer>
+#include <QTimer>
+
+#include "Client/stream/StreamFrame.h"
+#include "SpectralScanBuilder.h"
 
 class DeviceClient;
 class SidebarWidget;
@@ -20,6 +24,13 @@ class StreamPanel;
 class LogPanel;
 class ImageView;
 class RecordPlaybackPanel;
+class SpectralPanel;
+struct RecordedFrame;
+
+enum class SpectralSource {
+    Live = 0,
+    Playback = 1,
+};
 
 class MainWindow : public QMainWindow {
     Q_OBJECT
@@ -40,6 +51,15 @@ private:
     void onPanelSelected(int index);
     void updateChannelTabStyle(int tab);
     void renderFrameToView(ImageView* target, int width, int height, int pixfmt, const QByteArray& data);
+    void refreshSpectralSource();
+    SpectralSource effectiveSpectralSource() const;
+    void handleLiveFrame(const StreamFrame& frame);
+    void handlePlaybackFrame(const RecordedFrame& frame);
+    void refreshStreamStats();
+    void updateSpectralView();
+    SpectralScanBuilder* builderFor(SpectralSource source, int channel);
+    const SpectralScanBuilder* builderFor(SpectralSource source, int channel) const;
+    void refreshSpectralStats();
 
     DeviceClient* device_ = nullptr;
 
@@ -53,10 +73,12 @@ private:
     QWidget*        channelTabBar_   = nullptr;
     QPushButton*    chTabRaw16_      = nullptr;
     QPushButton*    chTabSlice_      = nullptr;
+    QPushButton*    chTabSpectral_   = nullptr;
     QPushButton*    chTabPlayback_   = nullptr;
     QStackedWidget* viewerStack_     = nullptr;
     ImageView*      imageViewRaw_    = nullptr;
     ImageView*      imageViewSlice_  = nullptr;
+    ImageView*      imageViewSpectral_ = nullptr;
     ImageView*      imageViewPlayback_ = nullptr;
 
     // Zoom overlay
@@ -77,6 +99,7 @@ private:
     IrPanel*         irPanel_       = nullptr;
     CollectPanel*    collectPanel_  = nullptr;
     StreamPanel*     streamPanel_   = nullptr;
+    SpectralPanel*   spectralPanel_ = nullptr;
     RecordPlaybackPanel* recordPlaybackPanel_ = nullptr;
 
     // Bottom log
@@ -88,4 +111,13 @@ private:
     quint16 udpPort_ = 1400;
     QString deviceVersion_;
     QElapsedTimer uptime_;
+
+    SpectralScanBuilder liveRawSpectral_;
+    SpectralScanBuilder liveSliceSpectral_;
+    SpectralScanBuilder playbackRawSpectral_;
+    SpectralScanBuilder playbackSliceSpectral_;
+    SpectralSource spectralSource_ = SpectralSource::Live;
+    bool playbackActive_ = false;
+    QTimer* spectralRenderTimer_ = nullptr;
+    bool spectralDirty_ = false;
 };

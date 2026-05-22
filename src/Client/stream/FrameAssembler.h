@@ -7,6 +7,7 @@
 #include <QTimer>
 #include <cstdint>
 #include "Protocol.h"
+#include "StreamFrame.h"
 
 class FrameAssembler : public QObject {
     Q_OBJECT
@@ -19,7 +20,7 @@ public:
     quint64 framesDropped()  const { return framesDropped_; }
 
 signals:
-    void frameReady(int channel, int width, int height, int pixfmt, QByteArray data);
+    void frameReady(StreamFrame frame);
 
 private:
     struct FrameKey {
@@ -45,6 +46,8 @@ private:
         uint16_t   height      = 0;
         uint16_t   pixfmt      = 0;
         uint8_t    channel     = 0;
+        quint64    streamFrameId = 0;
+        quint8     frameType   = 0;
         int        payloadSize = 0;
         int        received    = 0;
         qint64     created     = 0;

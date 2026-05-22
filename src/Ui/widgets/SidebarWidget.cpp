@@ -10,16 +10,18 @@
 #include <QPropertyAnimation>
 #include <QStyle>
 
-// nav item data: label, icon type
-static const struct { const char* label; int iconType; } kNavItems[] = {
-    {"仪表盘", 0},
-    {"设备连接", 1},
-    {"相机设置", 2},
-    {"转镜控制", 3},
-    {"红外热像", 4},
-    {"数据采集", 5},
-    {"流通道", 6},
-    {"系统日志", 7},
+// nav item data: label, icon type, panel index
+static const struct { const char* label; int iconType; int panelIndex; } kNavItems[] = {
+    {"仪表盘", 0, 0},
+    {"设备连接", 1, 1},
+    {"相机设置", 2, 2},
+    {"转镜控制", 3, 3},
+    {"红外热像", 4, 4},
+    {"数据采集", 5, 5},
+    {"流通道", 6, 6},
+    {"光谱显示", 9, 7},
+    {"录制回放", 8, 8},
+    {"系统日志", 7, 9},
 };
 
 SidebarWidget::SidebarWidget(QWidget* parent)
@@ -82,7 +84,7 @@ void SidebarWidget::setupUi()
 
     QColor iconColor(0x7D, 0x85, 0x90);
 
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < static_cast<int>(sizeof(kNavItems) / sizeof(kNavItems[0])); ++i) {
         auto* btn = new QPushButton(navArea_);
         btn->setObjectName("navItem");
         btn->setText(QString::fromUtf8(kNavItems[i].label));
@@ -92,31 +94,12 @@ void SidebarWidget::setupUi()
         btn->setCursor(Qt::PointingHandCursor);
         btn->setFixedHeight(36);
         connect(btn, &QPushButton::clicked, this, [this, i]() {
-            const int panelIndex = (i == 7) ? 8 : i; // insert Record/Playback at index 7
+            const int panelIndex = kNavItems[i].panelIndex;
             setActivePanel(panelIndex);
             emit panelSelected(panelIndex);
         });
         navBtns_.append(btn);
         navLayout->addWidget(btn);
-    }
-
-    // Insert Record/Playback button before Logs
-    {
-        auto* btn = new QPushButton(navArea_);
-        btn->setObjectName("navItem");
-        btn->setText(QString::fromUtf8("录制回放"));
-        btn->setProperty("fullText", QString::fromUtf8("录制回放"));
-        btn->setIcon(QIcon(makeIcon(8, iconColor)));
-        btn->setIconSize(QSize(20, 20));
-        btn->setCursor(Qt::PointingHandCursor);
-        btn->setFixedHeight(36);
-        connect(btn, &QPushButton::clicked, this, [this]() {
-            setActivePanel(7);
-            emit panelSelected(7);
-        });
-
-        navBtns_.insert(7, btn);
-        navLayout->insertWidget(7, btn);
     }
     navLayout->addStretch();
     root->addWidget(navArea_, 1);
@@ -232,6 +215,13 @@ static void drawIcon(QPainter& p, int type, const QColor& c, int sz)
         p.drawRoundedRect(12, 6, 9, 12, 2, 2); // screen
         p.drawPolygon(QPolygonF() << QPointF(15, 9) << QPointF(15, 15) << QPointF(19, 12)); // play
         break;
+    case 9: // Spectral
+        p.drawRoundedRect(3, 4, 18, 16, 2, 2);
+        p.drawLine(6, 16, 6, 8);
+        p.drawLine(10, 16, 10, 6);
+        p.drawLine(14, 16, 14, 10);
+        p.drawLine(18, 16, 18, 12);
+        break;
     }
 }
 
@@ -258,15 +248,15 @@ void SidebarWidget::setConnected(bool connected)
 
 void SidebarWidget::setActivePanel(int index)
 {
-    if (index < 0 || index >= navBtns_.size()) return;
+    if (index < 0) return;
     activeIndex_ = index;
     QColor active(0x4C, 0x8E, 0xF7);
     QColor normal(0x7D, 0x85, 0x90);
     for (int i = 0; i < navBtns_.size(); ++i) {
-        navBtns_[i]->setProperty("active", i == index);
+        const bool isActive = (kNavItems[i].panelIndex == index);
+        navBtns_[i]->setProperty("active", isActive);
         navBtns_[i]->style()->polish(navBtns_[i]);
-        const int iconType = (i == 7) ? 8 : kNavItems[i >= 8 ? 7 : i].iconType;
-        navBtns_[i]->setIcon(QIcon(makeIcon(iconType, i == index ? active : normal)));
+        navBtns_[i]->setIcon(QIcon(makeIcon(kNavItems[i].iconType, isActive ? active : normal)));
     }
 }
 

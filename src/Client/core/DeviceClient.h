@@ -1,10 +1,10 @@
 #pragma once
 
 #include <QObject>
-#include <QByteArray>
 #include <QString>
 #include "ControlClient.h"
 #include "StreamClient.h"
+#include "StreamFrame.h"
 #include "SystemService.h"
 #include "MirrorService.h"
 #include "CameraService.h"
@@ -34,7 +34,7 @@ public:
 signals:
     void connectionChanged(bool connected, QString peerIp);
     void mirrorAngleEvent(double angle, bool isMoving, qint64 ts);
-    void frameReady(int channel, int width, int height, int pixfmt, QByteArray data);
+    void frameReady(StreamFrame frame);
 
 private:
     ControlClient ctrl_;

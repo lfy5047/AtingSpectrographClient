@@ -25,7 +25,8 @@ public:
     bool startRecording(const QString& path, QString* err = nullptr);
     bool stopRecording(int waitTimeoutMs, QString* err = nullptr);
 
-    void recordFrame(int channel, int width, int height, int pixfmt, const QByteArray& data);
+    void recordFrame(int channel, int width, int height, int pixfmt, quint8 frameType,
+                     quint64 streamFrameId, const QByteArray& data);
 
 signals:
     void recordingStarted(QString path);

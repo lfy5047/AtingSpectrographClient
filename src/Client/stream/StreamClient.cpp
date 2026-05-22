@@ -21,7 +21,10 @@ StreamClient::StreamClient(QObject* parent)
     : QObject(parent)
 {
     connect(&sock_, &QUdpSocket::readyRead, this, &StreamClient::onReadyRead);
-    connect(&assembler_, &FrameAssembler::frameReady, this, &StreamClient::frameReady);
+    connect(&assembler_, &FrameAssembler::frameReady, this, [this](const StreamFrame& frame) {
+        framesByChannel_[frame.channel] = framesByChannel_.value(frame.channel, 0) + 1;
+        emit frameReady(frame);
+    });
 
     fpsTimer_.setInterval(1000);
     connect(&fpsTimer_, &QTimer::timeout, this, &StreamClient::updateFps);
@@ -57,6 +60,11 @@ void StreamClient::close()
         bound_ = false;
         port_ = 0;
         fps_ = 0;
+        lastFrameCount_ = 0;
+        framesByChannel_.clear();
+        lastFrameCountByChannel_.clear();
+        fpsByChannel_.clear();
+        emit statsUpdated();
     }
 }
 
@@ -95,12 +103,13 @@ void StreamClient::onReadyRead()
             continue;
         }
 
+        if (hdr.frame_type > TailFrame) {
+            logDropRateLimited("invalid frame_type", &hdr, dg.size());
+            continue;
+        }
+
         const bool hasMeta = (hdr.meta_flags & HasRawFrameMeta) != 0;
         if (hasMeta) {
-            if (hdr.frame_type > TailFrame) {
-                logDropRateLimited("invalid frame_type", &hdr, dg.size());
-                continue;
-            }
             if (hdr.is_latest_mirror_frame > 1) {
                 logDropRateLimited("invalid is_latest_mirror_frame", &hdr, dg.size());
                 continue;
@@ -110,11 +119,7 @@ void StreamClient::onReadyRead()
             (void)mirrorAngle;
             (void)hdr.timestamp_ns;
             (void)hdr.mirror_timestamp_ns;
-            LOGD << "StreamClient: mirrorAngle=" << mirrorAngle 
-                 << " timestamp_ns=" << hdr.timestamp_ns
-                 << " mirror_timestamp_ns=" << hdr.mirror_timestamp_ns
-                 << " frame_type=" << static_cast<int>(hdr.frame_type)
-                 << " is_latest_mirror_frame=" << hdr.is_latest_mirror_frame;
+
         }
 
         assembler_.feedPacket(hdr, payload, payloadLen);
@@ -126,6 +131,15 @@ void StreamClient::updateFps()
     quint64 cur = assembler_.framesReceived();
     fps_ = static_cast<double>(cur - lastFrameCount_);
     lastFrameCount_ = cur;
+
+    for (auto it = framesByChannel_.cbegin(); it != framesByChannel_.cend(); ++it) {
+        const int channel = it.key();
+        const quint64 channelCur = it.value();
+        const quint64 channelLast = lastFrameCountByChannel_.value(channel, 0);
+        fpsByChannel_[channel] = static_cast<double>(channelCur - channelLast);
+        lastFrameCountByChannel_[channel] = channelCur;
+    }
+    emit statsUpdated();
 }
 
 void StreamClient::logDropRateLimited(const char* reason, const cli::proto::StreamHeader* hdr, int datagramBytes)

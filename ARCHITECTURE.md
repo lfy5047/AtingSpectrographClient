@@ -19,11 +19,12 @@
   - `IrPanel`：红外参数、校准、状态/温度/模块查询、原始命令发送。
   - `CollectPanel`：采集流程开始/停止/状态查询。
   - `StreamPanel`：Raw16/SliceStitch16 通道订阅、取消订阅、状态轮询。
+  - `SpectralPanel`：光谱显示来源、源通道、单波段/范围平均/RGB 合成参数与扫描状态。
   - `RecordPlaybackPanel`：实时帧录制、`.asrec` 文件选择、回放 FPS/帧数/循环控制、进度跳转与损坏帧统计。
   - `DashboardPanel`：连接、转镜、流统计、运行时间等摘要信息。
   - `LogPanel`：展示 TCP raw log。
 - `src/Ui/widgets/` 提供侧栏、顶栏、图像显示等复用部件。
-- 主图像区包含 Raw16、SliceStitch16、Playback 三个 `ImageView` 页面；回放开始时自动切到 Playback。
+- 主图像区包含 Raw16、SliceStitch16、Spectral、Playback 四个 `ImageView` 页面；回放开始时自动切到 Playback，Spectral 页可选择显示实时流或回放流。
 
 ### 设备聚合层
 
@@ -33,7 +34,7 @@
 - 持有 `SystemService`、`MirrorService`、`CameraService`、`IrService`、`CollectService`、`StreamControlService`。
 - 转发 TCP 连接状态为 `connectionChanged`。
 - 把控制事件 `mirror.angle` 转发为 `mirrorAngleEvent`。
-- 把 UDP 完整帧转发为 `frameReady`。
+- 把 UDP 完整帧以 `StreamFrame` 结构转发为 `frameReady`。
 
 ### TCP 控制面
 
@@ -65,14 +66,16 @@ Service 类继承或使用 `RpcServiceBase`，把业务 API 封装为命令名�
 
 - 默认由连接面板提供端口，当前默认 `1400`。
 - 成功绑定后把接收缓冲区尝试设置为 64 MiB。
-- 每秒根据 `FrameAssembler::framesReceived()` 增量计算 FPS。
+- 每秒根据 `FrameAssembler::framesReceived()` 增量计算总体 FPS，并维护 Raw16/SliceStitch16 的按通道 FPS。
 - 每个 UDP 包先检查 `StreamHeader` 的 magic 与版本，再交给 `FrameAssembler`。
+- `StreamHeader` 当前为 UDP v2 64 字节头，除通道、帧号、宽高、像素格式外，还携带 `meta_flags`、时间戳、转镜元数据和 `frame_type`。
 
 `FrameAssembler` 负责分片重组：
 
 - 以 `(channel, frame_id)` 作为帧 key。
 - 用 `QBitArray` 跟踪已收到分片。
-- 完整后发出 `frameReady(channel, width, height, pixfmt, data)`。
+- slot 记录并跨分片校验宽高、像素格式、通道和 `frameType`。
+- 完整后发出 `frameReady(StreamFrame)`，其中包含 `channel`、`width`、`height`、`pixfmt`、`streamFrameId`、`frameType` 和 payload。
 - 每 100 ms 清理超过 2000 ms 未更新的帧。
 - 最多缓存 256 个 frame slot，总缓冲上限 256 MiB。
 - slot 溢出时丢弃最早创建的 slot 并增加丢帧计数。
@@ -86,11 +89,12 @@ Service 类继承或使用 `RpcServiceBase`，把业务 API 封装为命令名�
 - `FrameRecorder` 是 UI 可见的录制门面，管理 worker 线程生命周期与统计查询。
 - `FrameRecorderWriterWorker` 在独立 `QThread` 中写文件，避免实时帧写入阻塞 UI。
 - `FramePlaybackController` 异步扫描录制文件建立索引，然后按定时器 FPS 读取并发出回放帧。
+- `RecordedFrame` 也携带 `streamFrameId` 与 `frameType`，用于回放时重建 Spectral。
 
 `.asrec` 文件结构：
 
 - 文件头 magic 为 `ASRC`，版本为 `1`，保存创建时间、帧数、时长和 flags。
-- 每帧由 `AFRM` 帧头加 payload 组成，帧头保存通道、宽高、像素格式、帧序号、时间戳、payload 长度和 CRC32。
+- 每帧由 `AFRM` 帧头加 payload 组成，帧头保存通道、`frameType`、宽高、像素格式、服务端 `streamFrameId`、时间戳、payload 长度和 CRC32。
 - 正常停止录制会重写文件头并设置 `FileFlagClosedOk`。
 - 回放扫描会用真实帧头/payload 偏移建立索引；未正常关闭或文件头统计为空时，使用扫描结果恢复帧数和时长。
 - 回放读取时校验 payload CRC，失败帧计入损坏帧统计。
@@ -120,16 +124,27 @@ Service 类继承或使用 `RpcServiceBase`，把业务 API 封装为命令名�
 2. `StreamControlService::subscribe()` 通知设备把指定通道推送到本地 UDP 端口。
 3. `MainWindow` 确保 `StreamClient` 已绑定该端口。
 4. `StreamClient` 持续读取 UDP 包并交给 `FrameAssembler`。
-5. 完整帧产生后发出 `frameReady`。
-6. `MainWindow` 按通道选择 `ImageView`，Mono8 直接显示，Mono16 做当前帧 min/max 拉伸到 8-bit 灰度。
-7. 顶栏与仪表盘更新 FPS、接收帧数、丢帧数。
+5. 完整帧产生后发出 `StreamFrame`。
+6. `MainWindow` 按通道选择 Raw/Slice `ImageView`，Mono8 直接显示，Mono16 做当前帧 min/max 拉伸到 8-bit 灰度。
+7. 对 `HeaderFrame/DataFrame/TailFrame`，`MainWindow` 同时将帧送入 Live `SpectralScanBuilder`。
+8. 顶栏与仪表盘更新按通道 FPS、接收帧数、丢帧数。
+
+### Spectral 光谱显示流程
+
+1. 服务端把高光谱红外数据拆成单列 UDP 帧，payload 排布为 `height x bands`，`StreamHeader.width` 表示 bands/通道数。
+2. `FrameAssembler` 透传 `frame_type` 与服务端 `frame_id`，UI 侧用 `streamFrameId` 识别列顺序和缺口。
+3. `SpectralScanBuilder` 遇到 `HeaderFrame` 开始/重置扫描，`DataFrame` 追加列，`TailFrame` 结束当前扫描；无活跃扫描时的 `DataFrame/TailFrame` 会被忽略。
+4. 如果同一源通道出现缺列，构建器用上一列补齐；双通道订阅造成的正常 `streamFrameId` 步长会被学习，不会导致宽度翻倍。
+5. `SpectralPanel` 控制源通道、显示模式和来源模式：Auto、Live、Playback。
+6. Auto 模式在回放活跃时显示 Playback Spectral，停止后显示 Live；强制 Live 或 Playback 时按用户选择显示。
+7. 回放过程中 Live 缓存仍持续接收实时帧，Playback 缓存由 `RecordedFrame` 构建；30 FPS 定时器只在脏标记时刷新 Spectral 视图。
 
 ### 录制流程
 
 1. 用户在 `RecordPlaybackPanel` 选择或生成 `.asrec` 路径并开始录制。
 2. `FrameRecorder` 启动 `FrameRecorderWriterWorker`，先写入占位文件头。
-3. `MainWindow` 每次收到 `DeviceClient::frameReady` 时，把原始帧数据同时交给 recorder。
-4. worker 为每帧生成帧头、CRC 和相对时间戳，进入队列后由写入线程落盘。
+3. `MainWindow` 每次收到 `DeviceClient::frameReady` 时，把原始帧数据、`frameType` 和 `streamFrameId` 同时交给 recorder。
+4. worker 为每帧生成帧头、CRC 和相对时间戳，进入队列后由写入线程落盘；`FrameHeader.frameIndex` 存服务端 `streamFrameId`，本地自增序号仅作内部统计。
 5. 停止录制时 worker drain 队列，重写文件头并发出停止信号。
 
 ### 回放流程
@@ -138,7 +153,7 @@ Service 类继承或使用 `RpcServiceBase`，把业务 API 封装为命令名�
 2. `FramePlaybackController` 的扫描线程读取文件头和所有帧头，建立随机访问索引。
 3. 用户设置 FPS、播放帧数限制和循环开关后开始回放。
 4. controller 按定时器读取当前索引对应的 payload，校验 CRC，发出 `RecordedFrame`。
-5. `RecordPlaybackPanel` 转发帧，`MainWindow` 渲染到 Playback `ImageView`。
+5. `RecordPlaybackPanel` 转发帧，`MainWindow` 渲染到 Playback `ImageView`，并把光谱帧送入 Playback `SpectralScanBuilder`。
 6. 进度条释放时调用 `seekTo()`；播放结束按循环设置回到窗口起点或停止。
 
 ## 存储与持久化
@@ -154,6 +169,7 @@ Service 类继承或使用 `RpcServiceBase`，把业务 API 封装为命令名�
 - 新增 RPC 命令：先改 `src/Client/rpc/RpcCommands.h`，再在 `src/Client/services/` 添加 service 方法，最后接入对应 panel。
 - 新增设备事件：在 `DeviceClient.cpp` 的 `eventReceived` lambda 中识别 `evt`，新增 signal 并在 UI 层连接。
 - 新增图像通道：更新 `Protocol.h` 的 `StreamChannel`，`StreamPanel` 的通道选择，`MainWindow::frameReady` 的通道分发与图像视图。
+- 调整 Spectral 重建：优先看 `src/Ui/SpectralScanBuilder.*`、`src/Ui/panels/SpectralPanel.*`、`MainWindow::handleLiveFrame()` 与 `MainWindow::handlePlaybackFrame()`。
 - 调整录制文件格式：优先改 `RecordingFileFormat.*`，再同步 `FrameRecorderWriterWorker` 写入逻辑与 `FramePlaybackController` 扫描/读取逻辑；注意兼容已录制文件。
 - 调整录制/回放 UI：改 `RecordPlaybackPanel.*`，必要时同步 `MainWindow` 的 Playback 视图切换和帧渲染连接。
 - 调整 UI 视觉：优先改 `resources/style/industrial.qss`；结构性布局改 `MainWindow` 或具体 panel/widget。

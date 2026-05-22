@@ -14,6 +14,7 @@ public:
 
     void setConnected(bool connected);
     void setActivePanel(int index);
+    int activePanel() const { return activeIndex_; }
     void setCollapsed(bool collapsed);
     bool isCollapsed() const { return collapsed_; }
     int sidebarWidth() const { return width(); }

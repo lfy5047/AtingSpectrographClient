@@ -2,17 +2,16 @@
 
 #include <QByteArray>
 #include <QMetaType>
+#include <QtGlobal>
 
-struct RecordedFrame {
+struct StreamFrame {
     int channel = 0;
     int width = 0;
     int height = 0;
     int pixfmt = 0;
     quint64 streamFrameId = 0;
-    quint64 timestampMs = 0;
     quint8 frameType = 0;
     QByteArray data;
-    quint32 crc32 = 0;
 };
 
-Q_DECLARE_METATYPE(RecordedFrame)
+Q_DECLARE_METATYPE(StreamFrame)

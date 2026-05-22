@@ -191,8 +191,9 @@ bool FramePlaybackController::loadFrameAt(quint64 idx, RecordedFrame& out, QStri
     out.width = fh.width;
     out.height = fh.height;
     out.pixfmt = fh.pixfmt;
-    out.frameIndex = fh.frameIndex;
+    out.streamFrameId = fh.frameIndex;
     out.timestampMs = fh.timestampMs;
+    out.frameType = fh.reserved8;
     out.data = payload;
     out.crc32 = crc;
     return true;

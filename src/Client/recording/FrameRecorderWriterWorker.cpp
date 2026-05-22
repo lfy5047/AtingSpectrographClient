@@ -114,7 +114,8 @@ void FrameRecorderWriterWorker::stop()
     // Drain is handled by writerLoop() when it sees stopRequested_.
 }
 
-void FrameRecorderWriterWorker::enqueueFrame(int channel, int width, int height, int pixfmt, const QByteArray& data)
+void FrameRecorderWriterWorker::enqueueFrame(int channel, int width, int height, int pixfmt, quint8 frameType,
+                                             quint64 streamFrameId, const QByteArray& data)
 {
     QByteArray copy = data;
     copy.detach();
@@ -141,6 +142,8 @@ void FrameRecorderWriterWorker::enqueueFrame(int channel, int width, int height,
     it.data = copy;
     it.timestampMs = static_cast<quint64>(timer_.elapsed());
     it.frameIndex = nextFrameIndex_++;
+    it.streamFrameId = streamFrameId;
+    it.frameType = frameType;
     it.crc32 = recording::crc32_ieee(it.data);
 
     queuedBytes_ += add;
@@ -193,7 +196,8 @@ bool FrameRecorderWriterWorker::writeOne(const QueuedItem& item)
         fh.width = static_cast<quint16>(item.width);
         fh.height = static_cast<quint16>(item.height);
         fh.pixfmt = static_cast<quint16>(item.pixfmt);
-        fh.frameIndex = item.frameIndex;
+        fh.reserved8 = item.frameType;
+        fh.frameIndex = item.streamFrameId;
         fh.timestampMs = item.timestampMs;
         fh.dataBytes = static_cast<quint32>(item.data.size());
         fh.crc32 = item.crc32;

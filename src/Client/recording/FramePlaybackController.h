@@ -64,12 +64,13 @@ private slots:
 
 private:
     struct IndexEntry {
-        quint64 frameIndex = 0;
+        quint64 streamFrameId = 0;
         quint64 timestampMs = 0;
         quint64 frameHeaderOffset = 0;
         quint64 payloadOffset = 0;
         quint32 payloadBytes = 0;
         quint32 crc32 = 0;
+        quint8 frameType = 0;
         quint8  channel = 0;
         quint16 width = 0;
         quint16 height = 0;

@@ -10,6 +10,7 @@
 #include "panels/IrPanel.h"
 #include "panels/CollectPanel.h"
 #include "panels/StreamPanel.h"
+#include "panels/SpectralPanel.h"
 #include "panels/RecordPlaybackPanel.h"
 #include "Client/recording/FrameRecorder.h"
 #include "Client/recording/FramePlaybackController.h"
@@ -54,6 +55,17 @@ MainWindow::MainWindow(QWidget* parent)
             .arg(s, 2, 10, QChar('0')));
     });
     uptimeTimer->start(1000);
+
+    spectralRenderTimer_ = new QTimer(this);
+    spectralRenderTimer_->setInterval(33);
+    connect(spectralRenderTimer_, &QTimer::timeout, this, [this]() {
+        if (!spectralDirty_) return;
+        updateSpectralView();
+        spectralDirty_ = false;
+    });
+    spectralRenderTimer_->start();
+
+    refreshSpectralStats();
 }
 
 MainWindow::~MainWindow() = default;
@@ -145,6 +157,10 @@ void MainWindow::setupUi()
     chTabSlice_->setObjectName("channelTab");
     chTabSlice_->setFixedHeight(28);
     chTabSlice_->setCursor(Qt::PointingHandCursor);
+    chTabSpectral_ = new QPushButton("Spectral", channelTabBar_);
+    chTabSpectral_->setObjectName("channelTab");
+    chTabSpectral_->setFixedHeight(28);
+    chTabSpectral_->setCursor(Qt::PointingHandCursor);
     chTabPlayback_ = new QPushButton("Playback", channelTabBar_);
     chTabPlayback_->setObjectName("channelTab");
     chTabPlayback_->setFixedHeight(28);
@@ -152,6 +168,7 @@ void MainWindow::setupUi()
 
     chTabLayout->addWidget(chTabRaw16_);
     chTabLayout->addWidget(chTabSlice_);
+    chTabLayout->addWidget(chTabSpectral_);
     chTabLayout->addWidget(chTabPlayback_);
     chTabLayout->addStretch();
 
@@ -166,10 +183,12 @@ void MainWindow::setupUi()
 
     imageViewRaw_ = new ImageView(viewerStack_);
     imageViewSlice_ = new ImageView(viewerStack_);
+    imageViewSpectral_ = new ImageView(viewerStack_);
     imageViewPlayback_ = new ImageView(viewerStack_);
     viewerStack_->addWidget(imageViewRaw_);   // 0
     viewerStack_->addWidget(imageViewSlice_); // 1
-    viewerStack_->addWidget(imageViewPlayback_); // 2
+    viewerStack_->addWidget(imageViewSpectral_); // 2
+    viewerStack_->addWidget(imageViewPlayback_); // 3
 
     viewerLayout->addWidget(viewerStack_, 1);
 
@@ -183,10 +202,15 @@ void MainWindow::setupUi()
         viewerStack_->setCurrentIndex(1);
         updateChannelTabStyle(1);
     });
-    connect(chTabPlayback_, &QPushButton::clicked, this, [this]() {
+    connect(chTabSpectral_, &QPushButton::clicked, this, [this]() {
         currentChannel_ = 2;
         viewerStack_->setCurrentIndex(2);
         updateChannelTabStyle(2);
+    });
+    connect(chTabPlayback_, &QPushButton::clicked, this, [this]() {
+        currentChannel_ = 3;
+        viewerStack_->setCurrentIndex(3);
+        updateChannelTabStyle(3);
     });
 
     // Zoom toolbar (overlay at bottom-center)
@@ -258,7 +282,9 @@ void MainWindow::updateChannelTabStyle(int tab)
     chTabRaw16_->style()->polish(chTabRaw16_);
     chTabSlice_->setProperty("active", tab == 1);
     chTabSlice_->style()->polish(chTabSlice_);
-    chTabPlayback_->setProperty("active", tab == 2);
+    chTabSpectral_->setProperty("active", tab == 2);
+    chTabSpectral_->style()->polish(chTabSpectral_);
+    chTabPlayback_->setProperty("active", tab == 3);
     chTabPlayback_->style()->polish(chTabPlayback_);
 }
 
@@ -305,6 +331,7 @@ static const char* kPanelNames[] = {
     "红外热像",
     "数据采集",
     "流通道",
+    "光谱显示",
     "录制回放",
     "系统日志",
 };
@@ -318,6 +345,7 @@ void MainWindow::setupPanels()
     irPanel_      = new IrPanel(device_, this);
     collectPanel_ = new CollectPanel(device_, this);
     streamPanel_  = new StreamPanel(device_, this);
+    spectralPanel_ = new SpectralPanel(this);
     recordPlaybackPanel_ = new RecordPlaybackPanel(this);
 
     // Panel 0: Dashboard (no scroll wrap — its own internal scroll)
@@ -329,16 +357,17 @@ void MainWindow::setupPanels()
     panelStack_->addWidget(wrapInScroll(irPanel_));
     panelStack_->addWidget(wrapInScroll(collectPanel_));
     panelStack_->addWidget(wrapInScroll(streamPanel_));
+    panelStack_->addWidget(wrapInScroll(spectralPanel_));
     panelStack_->addWidget(wrapInScroll(recordPlaybackPanel_));
-    // Panel 8: Logs — jumps to bottom log panel
+    // Panel 9: Logs — jumps to bottom log panel
 }
 
 void MainWindow::onPanelSelected(int index)
 {
-    if (index < 0 || index > 8) return;
+    if (index < 0 || index > 9) return;
 
-    // Panel 8 (logs) toggles bottom log panel expansion
-    if (index == 8) {
+    // Panel 9 (logs) toggles bottom log panel expansion
+    if (index == 9) {
         logPanel_->toggleExpanded();
         return;
     }
@@ -396,31 +425,31 @@ void MainWindow::setupConnections()
 
     // Frame ready → image viewer + stats
     connect(device_, &DeviceClient::frameReady, this,
-            [this](int channel, int width, int height, int pixfmt, QByteArray data) {
+            [this](const StreamFrame& frame) {
         using namespace cli::proto;
 
         if (recordPlaybackPanel_ && recordPlaybackPanel_->recorder()) {
-            recordPlaybackPanel_->recorder()->recordFrame(channel, width, height, pixfmt, data);
+            recordPlaybackPanel_->recorder()->recordFrame(frame.channel, frame.width, frame.height,
+                                                          frame.pixfmt, frame.frameType,
+                                                          frame.streamFrameId, frame.data);
         }
+
+        handleLiveFrame(frame);
 
         ImageView* target = nullptr;
-        switch (channel) {
+        switch (frame.channel) {
         case Raw16:          target = imageViewRaw_; break;
         case SliceStitch16:  target = imageViewSlice_; break;
-        default: return;
+        default: break;
+        }
+        if (target) {
+            renderFrameToView(target, frame.width, frame.height, frame.pixfmt, frame.data);
         }
 
-        renderFrameToView(target, width, height, pixfmt, data);
-
-        topBar_->setFps(device_->stream()->fps());
-        topBar_->setFrames(device_->stream()->framesReceived());
-        topBar_->setDropped(device_->stream()->framesDropped());
-
-        dashPanel_->setStreamStats(
-            device_->stream()->fps(), 0,  // FPS: combined; Slice not tracked separately
-            device_->stream()->framesReceived(),
-            device_->stream()->framesDropped());
+        refreshStreamStats();
     }, Qt::QueuedConnection);
+
+    connect(device_->stream(), &StreamClient::statsUpdated, this, &MainWindow::refreshStreamStats);
 
     // Raw log → bottom log panel
     connect(device_->control(), &ControlClient::rawLog, this,
@@ -437,16 +466,39 @@ void MainWindow::setupConnections()
 
     // Record/Playback panel -> switch viewer to Playback
     connect(recordPlaybackPanel_, &RecordPlaybackPanel::requestSwitchToPlaybackView, this, [this]() {
-        currentChannel_ = 2;
-        viewerStack_->setCurrentIndex(2);
-        updateChannelTabStyle(2);
+        currentChannel_ = 3;
+        viewerStack_->setCurrentIndex(3);
+        updateChannelTabStyle(3);
     });
 
     // Playback frames -> Playback ImageView
     connect(recordPlaybackPanel_, &RecordPlaybackPanel::playbackFrameReady, this,
             [this](const RecordedFrame& f) {
+        handlePlaybackFrame(f);
         renderFrameToView(imageViewPlayback_, f.width, f.height, f.pixfmt, f.data);
     }, Qt::QueuedConnection);
+
+    if (recordPlaybackPanel_ && recordPlaybackPanel_->playback()) {
+        connect(recordPlaybackPanel_->playback(), &FramePlaybackController::playbackStarted, this, [this]() {
+            playbackActive_ = true;
+            playbackRawSpectral_.reset();
+            playbackSliceSpectral_.reset();
+            refreshSpectralSource();
+        });
+        connect(recordPlaybackPanel_->playback(), &FramePlaybackController::playbackStopped, this, [this]() {
+            playbackActive_ = false;
+            refreshSpectralSource();
+            spectralDirty_ = true;
+            refreshSpectralStats();
+        });
+    }
+
+    connect(spectralPanel_, &SpectralPanel::settingsChanged, this, [this]() {
+        refreshSpectralSource();
+        spectralDirty_ = true;
+        updateSpectralView();
+        refreshStreamStats();
+    });
 }
 
 // ── Settings ──
@@ -457,8 +509,16 @@ void MainWindow::loadSettings()
     restoreGeometry(s.value("window/geometry").toByteArray());
     if (mainSplitter_)
         mainSplitter_->restoreState(s.value("window/splitter").toByteArray());
+
     int panel = s.value("window/panel", 0).toInt();
-    if (panel >= 0 && panel < panelStack_->count()) {
+    const int panelVersion = s.value("window/panelVersion", 1).toInt();
+    if (panelVersion < 2) {
+        // Migration: old index 7 = record/playback, old index 8 = logs.
+        if (panel == 7) panel = 8;
+        else if (panel == 8) panel = 9;
+    }
+
+    if (panel >= 0 && panel <= 9) {
         sidebar_->setActivePanel(panel);
         onPanelSelected(panel);
     }
@@ -473,6 +533,145 @@ void MainWindow::saveSettings()
     s.setValue("window/geometry", saveGeometry());
     if (mainSplitter_)
         s.setValue("window/splitter", mainSplitter_->saveState());
-    s.setValue("window/panel", panelStack_->currentIndex());
+    s.setValue("window/panel", sidebar_ ? sidebar_->activePanel() : panelStack_->currentIndex());
+    s.setValue("window/panelVersion", 2);
     s.setValue("window/sidebarCollapsed", sidebar_->isCollapsed());
+}
+
+SpectralSource MainWindow::effectiveSpectralSource() const
+{
+    if (!spectralPanel_) return SpectralSource::Live;
+
+    switch (spectralPanel_->sourceMode()) {
+    case SpectralSourceMode::Live:
+        return SpectralSource::Live;
+    case SpectralSourceMode::Playback:
+        return SpectralSource::Playback;
+    case SpectralSourceMode::Auto:
+    default:
+        return playbackActive_ ? SpectralSource::Playback : SpectralSource::Live;
+    }
+}
+
+void MainWindow::refreshSpectralSource()
+{
+    spectralSource_ = effectiveSpectralSource();
+    spectralDirty_ = true;
+    refreshSpectralStats();
+}
+
+SpectralScanBuilder* MainWindow::builderFor(SpectralSource source, int channel)
+{
+    using namespace cli::proto;
+    if (source == SpectralSource::Live) {
+        if (channel == Raw16) return &liveRawSpectral_;
+        if (channel == SliceStitch16) return &liveSliceSpectral_;
+        return nullptr;
+    }
+
+    if (channel == Raw16) return &playbackRawSpectral_;
+    if (channel == SliceStitch16) return &playbackSliceSpectral_;
+    return nullptr;
+}
+
+const SpectralScanBuilder* MainWindow::builderFor(SpectralSource source, int channel) const
+{
+    return const_cast<MainWindow*>(this)->builderFor(source, channel);
+}
+
+void MainWindow::refreshSpectralStats()
+{
+    if (!spectralPanel_) return;
+    const int channel = spectralPanel_->sourceChannel();
+    const SpectralScanBuilder* b = builderFor(spectralSource_, channel);
+    const QString activeSource = spectralSource_ == SpectralSource::Live ? "Live" : "Playback";
+    if (!b) {
+        spectralPanel_->setBandCount(0);
+        spectralPanel_->setStats(activeSource, 0, 0, 0, false, false, 0);
+        return;
+    }
+
+    spectralPanel_->setBandCount(b->bands());
+    spectralPanel_->setStats(activeSource, b->scanWidth(), b->height(), b->bands(),
+                             b->tailSeen(), b->hasActiveScan(), b->gapFillColumns());
+}
+
+void MainWindow::handleLiveFrame(const StreamFrame& frame)
+{
+    using namespace cli::proto;
+    if (frame.frameType != HeaderFrame && frame.frameType != DataFrame && frame.frameType != TailFrame) {
+        return;
+    }
+
+    SpectralScanBuilder* b = builderFor(SpectralSource::Live, frame.channel);
+    if (!b) return;
+    b->feedFrame(frame.frameType, frame.streamFrameId, frame.width, frame.height, frame.pixfmt, frame.data);
+    refreshSpectralStats();
+    if (spectralSource_ == SpectralSource::Live) {
+        spectralDirty_ = true;
+    }
+}
+
+void MainWindow::handlePlaybackFrame(const RecordedFrame& frame)
+{
+    using namespace cli::proto;
+    if (frame.frameType != HeaderFrame && frame.frameType != DataFrame && frame.frameType != TailFrame) {
+        return;
+    }
+
+    SpectralScanBuilder* b = builderFor(SpectralSource::Playback, frame.channel);
+    if (!b) return;
+    b->feedFrame(frame.frameType, frame.streamFrameId, frame.width, frame.height, frame.pixfmt, frame.data);
+    refreshSpectralStats();
+    if (spectralSource_ == SpectralSource::Playback) {
+        spectralDirty_ = true;
+    }
+}
+
+void MainWindow::refreshStreamStats()
+{
+    if (!device_ || !device_->stream() || !topBar_ || !dashPanel_) return;
+
+    using namespace cli::proto;
+    int fpsChannel = 0;
+    if (currentChannel_ == 0) {
+        fpsChannel = Raw16;
+    } else if (currentChannel_ == 1) {
+        fpsChannel = SliceStitch16;
+    } else if (currentChannel_ == 2 && spectralPanel_) {
+        fpsChannel = spectralPanel_->sourceChannel();
+    }
+
+    const double selectedFps = fpsChannel > 0 ? device_->stream()->fps(fpsChannel) : device_->stream()->fps();
+    topBar_->setFps(selectedFps);
+    topBar_->setFrames(device_->stream()->framesReceived());
+    topBar_->setDropped(device_->stream()->framesDropped());
+
+    dashPanel_->setStreamStats(
+        device_->stream()->fps(Raw16),
+        device_->stream()->fps(SliceStitch16),
+        device_->stream()->framesReceived(),
+        device_->stream()->framesDropped());
+}
+
+void MainWindow::updateSpectralView()
+{
+    if (!imageViewSpectral_ || !spectralPanel_) return;
+
+    const int channel = spectralPanel_->sourceChannel();
+    const SpectralScanBuilder* b = builderFor(spectralSource_, channel);
+    refreshSpectralStats();
+    if (!b || !b->hasData()) {
+        imageViewSpectral_->setNoSignal();
+        return;
+    }
+
+    const SpectralRenderOptions opts = spectralPanel_->renderOptions();
+    const QImage img = b->render(opts);
+    if (img.isNull()) {
+        imageViewSpectral_->setNoSignal();
+        return;
+    }
+
+    imageViewSpectral_->setImage(img);
 }
