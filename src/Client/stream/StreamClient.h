@@ -28,6 +28,8 @@ private slots:
     void updateFps();
 
 private:
+    void logDropRateLimited(const char* reason, const cli::proto::StreamHeader* hdr, int datagramBytes);
+
     QUdpSocket sock_;
     FrameAssembler assembler_;
     bool bound_ = false;
@@ -36,4 +38,6 @@ private:
     quint64 lastFrameCount_ = 0;
     double  fps_ = 0.0;
     QTimer  fpsTimer_;
+    qint64 dropLogLastMs_ = 0;
+    quint64 dropLogSuppressed_ = 0;
 };

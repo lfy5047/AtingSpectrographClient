@@ -112,7 +112,7 @@ void ControlClient::tryConsume()
         CtrlHeader hdr;
         std::memcpy(&hdr, rx_.constData(), sizeof(hdr));
 
-        if (hdr.magic != kCtrlMagic || hdr.version != kProtoVersion) {
+        if (hdr.magic != kCtrlMagic || hdr.version != kCtrlProtoVersion) {
             emit rawLog("[TCP] bad header, dropping connection");
             sock_->abort();
             return;
@@ -221,7 +221,7 @@ bool ControlClient::sendFrame(MsgType type, uint32_t seq, const nlohmann::json& 
 
     CtrlHeader hdr;
     hdr.magic       = kCtrlMagic;
-    hdr.version     = kProtoVersion;
+    hdr.version     = kCtrlProtoVersion;
     hdr.type        = static_cast<uint16_t>(type);
     hdr.seq         = seq;
     hdr.payload_len = static_cast<uint32_t>(body.size());
