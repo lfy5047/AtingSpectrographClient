@@ -29,6 +29,37 @@
 #include <QStatusBar>
 #include <QMessageBox>
 
+namespace {
+struct Mono16Stats {
+    quint16 min = 0;
+    quint16 max = 0;
+    quint64 sum = 0;
+};
+
+bool computeMono16Stats(const QByteArray& data, int width, int height, Mono16Stats* out)
+{
+    if (!out) return false;
+    const int pixels = width * height;
+    if (width <= 0 || height <= 0 || data.size() < pixels * 2) return false;
+
+    const auto* src = reinterpret_cast<const uint16_t*>(data.constData());
+    quint16 mn = 0xFFFF;
+    quint16 mx = 0;
+    quint64 sum = 0;
+    for (int i = 0; i < pixels; ++i) {
+        const quint16 v = src[i];
+        if (v < mn) mn = v;
+        if (v > mx) mx = v;
+        sum += v;
+    }
+
+    out->min = mn;
+    out->max = mx;
+    out->sum = sum;
+    return true;
+}
+} // namespace
+
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
 {
@@ -66,6 +97,7 @@ MainWindow::MainWindow(QWidget* parent)
     spectralRenderTimer_->start();
 
     refreshSpectralStats();
+    refreshImageStatsOverlay();
 }
 
 MainWindow::~MainWindow() = default;
@@ -196,11 +228,13 @@ void MainWindow::setupUi()
         currentChannel_ = 0;
         viewerStack_->setCurrentIndex(0);
         updateChannelTabStyle(0);
+        refreshImageStatsOverlay();
     });
     connect(chTabSlice_, &QPushButton::clicked, this, [this]() {
         currentChannel_ = 1;
         viewerStack_->setCurrentIndex(1);
         updateChannelTabStyle(1);
+        refreshImageStatsOverlay();
     });
     connect(chTabSpectral_, &QPushButton::clicked, this, [this]() {
         currentChannel_ = 2;
@@ -208,27 +242,40 @@ void MainWindow::setupUi()
         updateChannelTabStyle(2);
         refreshSpectralSource();
         refreshSpectralStats();
+        refreshImageStatsOverlay();
     });
     connect(chTabPlayback_, &QPushButton::clicked, this, [this]() {
         currentChannel_ = 3;
         viewerStack_->setCurrentIndex(3);
         updateChannelTabStyle(3);
+        refreshImageStatsOverlay();
     });
 
-    // Zoom toolbar (overlay at bottom-center)
+    // Zoom toolbar (kept hidden for now)
     zoomBar_ = new QWidget(viewerContainer_);
     zoomBar_->setObjectName("zoomBar");
     zoomBar_->setFixedHeight(38);
+    zoomBar_->setAttribute(Qt::WA_TransparentForMouseEvents);
+    zoomBar_->hide();
     auto* zoomLayout = new QHBoxLayout(zoomBar_);
     zoomLayout->setContentsMargins(8, 0, 8, 0);
     zoomLayout->setSpacing(3);
     zoomLayout->addStretch();
 
-    // imgInfoLabel_ = new QLabel("--", zoomBar_);
-    // imgInfoLabel_->setObjectName("imgInfoLabel");
-
-    // zoomLayout->addWidget(imgInfoLabel_);
-    // zoomLayout->addStretch();
+    // Right-bottom stats overlay
+    imageStatsOverlay_ = new QWidget(viewerContainer_);
+    imageStatsOverlay_->setObjectName("imageStatsOverlay");
+    imageStatsOverlay_->setAttribute(Qt::WA_TransparentForMouseEvents);
+    auto* statsLayout = new QVBoxLayout(imageStatsOverlay_);
+    statsLayout->setContentsMargins(10, 8, 10, 8);
+    statsLayout->setSpacing(0);
+    imageStatsLabel_ = new QLabel(imageStatsOverlay_);
+    imageStatsLabel_->setObjectName("imgInfoLabel");
+    imageStatsLabel_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
+    imageStatsLabel_->setText(QString::fromUtf8("x: --  y: --\nmin: --  max: --  avg: --"));
+    statsLayout->addWidget(imageStatsLabel_);
+    imageStatsOverlay_->adjustSize();
+    imageStatsOverlay_->raise();
 
     mainSplitter_->addWidget(viewerContainer_);
 
@@ -271,9 +318,7 @@ void MainWindow::setupUi()
 bool MainWindow::eventFilter(QObject* obj, QEvent* event)
 {
     if (obj == viewerContainer_ && event->type() == QEvent::Resize) {
-        int w = viewerContainer_->width();
-        zoomBar_->setFixedWidth(w);
-        zoomBar_->move(0, viewerContainer_->height() - 48);
+        positionImageStatsOverlay();
     }
     return QMainWindow::eventFilter(obj, event);
 }
@@ -321,6 +366,95 @@ void MainWindow::renderFrameToView(ImageView* target, int width, int height, int
     }
 
     target->setImage(img);
+}
+
+void MainWindow::updateImageStatsForChannel(int channel, int width, int height, int pixfmt, const QByteArray& data)
+{
+    using namespace cli::proto;
+
+    ChannelImageStats* stats = nullptr;
+    if (channel == Raw16) {
+        stats = &rawImageStats_;
+    } else if (channel == SliceStitch16) {
+        stats = &sliceImageStats_;
+    }
+    if (!stats) return;
+
+    stats->valid = false;
+    stats->min = 0;
+    stats->max = 0;
+    stats->avg = 0.0;
+
+    if (pixfmt != Mono16) {
+        refreshImageStatsOverlay();
+        return;
+    }
+
+    Mono16Stats monoStats;
+    if (!computeMono16Stats(data, width, height, &monoStats)) {
+        refreshImageStatsOverlay();
+        return;
+    }
+
+    const int pixels = width * height;
+    stats->valid = true;
+    stats->min = monoStats.min;
+    stats->max = monoStats.max;
+    stats->avg = pixels > 0 ? static_cast<double>(monoStats.sum) / pixels : 0.0;
+    refreshImageStatsOverlay();
+}
+
+QString MainWindow::formatImageStatsText(const QPoint& cursorPos, const ChannelImageStats* stats) const
+{
+    const QString xText = cursorPos.x() >= 0 ? QString::number(cursorPos.x()) : QString::fromUtf8("--");
+    const QString yText = cursorPos.y() >= 0 ? QString::number(cursorPos.y()) : QString::fromUtf8("--");
+
+    QString minText = QString::fromUtf8("--");
+    QString maxText = QString::fromUtf8("--");
+    QString avgText = QString::fromUtf8("--");
+    if (stats && stats->valid) {
+        minText = QString::number(stats->min);
+        maxText = QString::number(stats->max);
+        avgText = QString::number(stats->avg, 'f', 1);
+    }
+
+    return QString::fromUtf8("x: %1  y: %2\nmin: %3  max: %4  avg: %5")
+        .arg(xText, yText, minText, maxText, avgText);
+}
+
+void MainWindow::positionImageStatsOverlay()
+{
+    if (!imageStatsOverlay_ || !viewerContainer_) return;
+    imageStatsOverlay_->adjustSize();
+    const int margin = 12;
+    const int x = qMax(margin, viewerContainer_->width() - imageStatsOverlay_->width() - margin);
+    const int y = qMax(margin, viewerContainer_->height() - imageStatsOverlay_->height() - margin);
+    imageStatsOverlay_->move(x, y);
+    imageStatsOverlay_->raise();
+}
+
+void MainWindow::refreshImageStatsOverlay()
+{
+    if (!imageStatsOverlay_ || !imageStatsLabel_) return;
+
+    const bool showOverlay = currentChannel_ == 0 || currentChannel_ == 1;
+    if (!showOverlay) {
+        imageStatsOverlay_->hide();
+        return;
+    }
+
+    const QPoint cursorPos = cursorImagePos_[static_cast<std::size_t>(currentChannel_)];
+    const ChannelImageStats* stats = nullptr;
+    if (currentChannel_ == 0) {
+        stats = &rawImageStats_;
+    } else if (currentChannel_ == 1) {
+        stats = &sliceImageStats_;
+    }
+
+    imageStatsLabel_->setText(formatImageStatsText(cursorPos, stats));
+    imageStatsOverlay_->adjustSize();
+    positionImageStatsOverlay();
+    imageStatsOverlay_->show();
 }
 
 // ── Panels ──
@@ -437,6 +571,9 @@ void MainWindow::setupConnections()
         }
 
         handleLiveFrame(frame);
+        if (frame.channel == Raw16 || frame.channel == SliceStitch16) {
+            updateImageStatsForChannel(frame.channel, frame.width, frame.height, frame.pixfmt, frame.data);
+        }
 
         ImageView* target = nullptr;
         switch (frame.channel) {
@@ -471,6 +608,7 @@ void MainWindow::setupConnections()
         currentChannel_ = 3;
         viewerStack_->setCurrentIndex(3);
         updateChannelTabStyle(3);
+        refreshImageStatsOverlay();
     });
 
     // Playback frames -> Playback ImageView
@@ -486,17 +624,35 @@ void MainWindow::setupConnections()
             playbackRawSpectral_.reset();
             playbackSliceSpectral_.reset();
             refreshSpectralSource();
+            refreshImageStatsOverlay();
         });
         connect(recordPlaybackPanel_->playback(), &FramePlaybackController::playbackStopped, this, [this]() {
             playbackActive_ = false;
             refreshSpectralSource();
             refreshSpectralStats();
+            refreshImageStatsOverlay();
         });
     }
 
     connect(spectralPanel_, &SpectralPanel::settingsChanged, this, [this]() {
         refreshSpectralSource();
         refreshSpectralStats();
+        refreshImageStatsOverlay();
+    });
+
+    connect(imageViewRaw_, &ImageView::cursorImagePosChanged, this, [this](const QPoint& pos) {
+        cursorImagePos_[0] = pos;
+        refreshImageStatsOverlay();
+    });
+    connect(imageViewSlice_, &ImageView::cursorImagePosChanged, this, [this](const QPoint& pos) {
+        cursorImagePos_[1] = pos;
+        refreshImageStatsOverlay();
+    });
+    connect(imageViewSpectral_, &ImageView::cursorImagePosChanged, this, [this](const QPoint& pos) {
+        cursorImagePos_[2] = pos;
+    });
+    connect(imageViewPlayback_, &ImageView::cursorImagePosChanged, this, [this](const QPoint& pos) {
+        cursorImagePos_[3] = pos;
     });
 }
 

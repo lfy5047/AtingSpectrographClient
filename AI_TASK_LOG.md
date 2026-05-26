@@ -2,6 +2,23 @@
 
 > 最新记录放在最上方。后续 AI 变更项目时，请补充本文件。
 
+## 2026-05-26 Raw/Slice 图像右下角坐标与统计显示
+
+- 目标：为 Raw16 / SliceStitch16 图像页增加右下角浮层，显示鼠标悬停坐标 `x/y` 和当前通道最新完整帧的 `min/max/avg`，同时保留左下角 `WxH | zoom%` 现有信息。
+- 文件变更：
+  - `src/Ui/widgets/ImageView.h`
+  - `src/Ui/widgets/ImageView.cpp`
+  - `src/Ui/MainWindow.h`
+  - `src/Ui/MainWindow.cpp`
+  - `resources/style/industrial.qss`
+- 实现要点：
+  - 为 `ImageView` 增加鼠标坐标信号、`leaveEvent`、`showEvent` 与缩放/拖拽后的坐标同步，负责把 widget 坐标换算成图像像素坐标。
+  - 将统计浮层从原先的底部工具条语义中拆出，独立挂在 `viewerContainer_` 上并定位到右下角。
+  - 在 `frameReady` 路径中仅对 Raw16 / SliceStitch16 的 Mono16 帧计算原始像素统计，播放帧不参与这份缓存。
+  - `avg` 使用 64 位累加后转为浮点显示，保留 1 位小数。
+- 验证：
+  - 已执行 `.\make.bat`，Release 构建通过。
+
 ## 2026-05-26 光谱图像改为 Tail 后统一渲染
 
 - 目标：取消 Spectral 页的逐帧/逐列实时渲染，只在一帧完整光谱扫描由 `TailFrame` 收齐后再更新图像；同时保留参数切换时对最近完整图像的即时重画。

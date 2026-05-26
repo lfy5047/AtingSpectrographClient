@@ -641,6 +641,12 @@ QWidget#viewerOverlay {
     background-color: rgba(18, 23, 29, 0);
 }
 
+QWidget#imageStatsOverlay {
+    background-color: rgba(10, 14, 20, 180);
+    border: 1px solid rgba(76, 142, 247, 120);
+    border-radius: 8px;
+}
+
 QPushButton#channelTab {
     background-color: transparent;
     border: none;
@@ -682,8 +688,10 @@ QLabel#zoomLabel {
 }
 
 QLabel#imgInfoLabel {
+    font-family: Consolas, "Courier New", monospace;
     font-size: 9pt;
-    color: #545D68;
+    color: #D7E3F4;
+    font-weight: 600;
 }
 
 /* ===== ToolTip ===== */

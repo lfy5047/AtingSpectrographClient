@@ -7,6 +7,7 @@
 #include <QPushButton>
 #include <QElapsedTimer>
 #include <QTimer>
+#include <array>
 
 #include "Client/stream/StreamFrame.h"
 #include "SpectralScanBuilder.h"
@@ -43,6 +44,13 @@ protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
 
 private:
+    struct ChannelImageStats {
+        bool valid = false;
+        quint16 min = 0;
+        quint16 max = 0;
+        double avg = 0.0;
+    };
+
     void setupUi();
     void setupPanels();
     void setupConnections();
@@ -51,6 +59,10 @@ private:
     void onPanelSelected(int index);
     void updateChannelTabStyle(int tab);
     void renderFrameToView(ImageView* target, int width, int height, int pixfmt, const QByteArray& data);
+    void updateImageStatsForChannel(int channel, int width, int height, int pixfmt, const QByteArray& data);
+    void refreshImageStatsOverlay();
+    void positionImageStatsOverlay();
+    QString formatImageStatsText(const QPoint& cursorPos, const ChannelImageStats* stats) const;
     void refreshSpectralSource();
     SpectralSource effectiveSpectralSource() const;
     void handleLiveFrame(const StreamFrame& frame);
@@ -81,10 +93,19 @@ private:
     ImageView*      imageViewSpectral_ = nullptr;
     ImageView*      imageViewPlayback_ = nullptr;
 
-    // Zoom overlay
+    // Viewer overlays
     QWidget*        zoomBar_       = nullptr;
-    QLabel*         imgInfoLabel_  = nullptr;
+    QWidget*        imageStatsOverlay_ = nullptr;
+    QLabel*         imageStatsLabel_ = nullptr;
     int             currentChannel_ = 0;
+    std::array<QPoint, 4> cursorImagePos_ = {
+        QPoint(-1, -1),
+        QPoint(-1, -1),
+        QPoint(-1, -1),
+        QPoint(-1, -1),
+    };
+    ChannelImageStats rawImageStats_;
+    ChannelImageStats sliceImageStats_;
 
     // Right panel
     QWidget*        rightPanel_    = nullptr;

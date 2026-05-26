@@ -1,8 +1,15 @@
 #pragma once
 
-#include <QWidget>
 #include <QImage>
+#include <QEvent>
+#include <QMouseEvent>
 #include <QPoint>
+#include <QPointF>
+#include <QRectF>
+#include <QResizeEvent>
+#include <QShowEvent>
+#include <QWheelEvent>
+#include <QWidget>
 
 class ImageView : public QWidget {
     Q_OBJECT
@@ -13,6 +20,9 @@ public:
     void setNoSignal();
     QImage currentImage() const { return image_; }
 
+signals:
+    void cursorImagePosChanged(const QPoint& pos);
+
 protected:
     void paintEvent(QPaintEvent*) override;
     void wheelEvent(QWheelEvent*) override;
@@ -20,8 +30,16 @@ protected:
     void mouseMoveEvent(QMouseEvent*) override;
     void mouseReleaseEvent(QMouseEvent*) override;
     void mouseDoubleClickEvent(QMouseEvent*) override;
+    void leaveEvent(QEvent*) override;
+    void resizeEvent(QResizeEvent*) override;
+    void showEvent(QShowEvent*) override;
 
 private:
+    QRectF imageRect() const;
+    QPoint imagePosFromWidgetPos(const QPoint& widgetPos) const;
+    void syncCursorFromWidgetPos(const QPoint& widgetPos);
+    void syncCursorFromGlobalPos();
+
     QImage  image_;
     double  scale_   = 1.0;
     QPointF offset_;
