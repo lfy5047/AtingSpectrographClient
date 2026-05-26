@@ -14,11 +14,17 @@ StreamPanel::StreamPanel(DeviceClient* dev, QWidget* parent)
     auto* grp = new QGroupBox(QString::fromUtf8("通道订阅"), this); // 通道订阅
     auto* vb = new QVBoxLayout(grp);
 
-    chkRaw16_         = new QCheckBox("Raw16", this);
-    chkSliceStitch16_ = new QCheckBox("SliceStitch16", this);
+    chkRaw16_          = new QCheckBox("Raw16", this);
+    chkPreview8_       = new QCheckBox("Preview8", this);
+    chkSliceStitch16_  = new QCheckBox("SliceStitch16", this);
+    chkRegionStitch16_ = new QCheckBox("RegionStitch16", this);
+    chkPreview8_->setVisible(false);
+    chkRegionStitch16_->setVisible(false);
 
     vb->addWidget(chkRaw16_);
+    vb->addWidget(chkPreview8_);
     vb->addWidget(chkSliceStitch16_);
+    vb->addWidget(chkRegionStitch16_);
 
     auto* btnRow = new QHBoxLayout();
     applyBtn_ = new QPushButton(QString::fromUtf8("应用订阅"), this); // 应用订阅
@@ -57,7 +63,9 @@ QStringList StreamPanel::selectedChannels() const
 {
     QStringList chs;
     if (chkRaw16_->isChecked())          chs << "raw16";
+    if (chkPreview8_->isChecked())       chs << "preview8";
     if (chkSliceStitch16_->isChecked())  chs << "slice_stitch16";
+    if (chkRegionStitch16_->isChecked()) chs << "region_stitch16";
     return chs;
 }
 

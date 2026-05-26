@@ -2,6 +2,30 @@
 
 > 最新记录放在最上方。后续 AI 变更项目时，请补充本文件。
 
+## 2026-05-26 红外机芯控制面板补齐全部命令
+
+- 目标：将 IrPanel 从约 10 条命令扩展到全部 ~41 条 IrService 命令，实现完整红外机芯控制界面。
+- 文件变更：
+  - `src/Ui/panels/IrPanel.h` — 新增 30+ 控件成员变量和 10 个 setup 方法声明
+  - `src/Ui/panels/IrPanel.cpp` — 重构为 setup 方法模式，新增 7 个分组
+- 分组设计：
+  - 亮度/对比度/DDE/AB模式（保留+扩展）、积分时间（保留+扩展）、图像显示（新增）
+  - 滤波（新增）、翻转与同步（新增）、模式控制（新增）
+  - 查询与操作（保留+扩展）、维护与校正（新增，附风险提示）、坏元管理（新增）
+  - 原始命令（保留不变）
+- 验证：`cmake --build` Release 编译通过。
+
+## 2026-05-26 升级至控制协议 v2 与新增 IR 命令
+
+- 目标：根据最新 `doc/客户端命令接口.md` 将客户端代码同步到控制协议 v2，补齐新增通道和 IR 命令。
+- 文件变更：
+  - `src/Client/rpc/Protocol.h`：`kCtrlProtoVersion` 1→2；`StreamChannel` 枚举新增 `Preview8=2`、`RegionStitch16=4`
+  - `src/Client/rpc/RpcCommands.h`：`Ir` 命名空间新增 30 条 v2 命令（版本、图像选择/显示、DDE/滤波、翻转/同步、积分档位、模式控制、维护校正、坏元管理）
+  - `src/Client/services/IrService.h`：声明全部新增 IR 命令方法
+  - `src/Client/services/IrService.cpp`：实现全部新增 IR 命令方法
+  - `src/Ui/panels/StreamPanel.h` / `.cpp`：新增 Preview8 和 RegionStitch16 通道复选框及 `selectedChannels()` 逻辑
+- 验证：`cmake --build` Release 编译通过。
+
 ## 2026-05-22 新增 Spectral 波段显示与来源选择
 
 - 目标：新增 Spectral 主图像 Tab 与“光谱显示”面板，支持单波段、范围平均、RGB 合成，并可选择 Auto/Live/Playback 数据来源；打通 `frameType + streamFrameId` 在实时流、录制、回放链路中的透传，支持从回放帧重建 Spectral 扫描。
