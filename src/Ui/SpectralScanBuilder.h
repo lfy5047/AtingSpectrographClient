@@ -24,15 +24,16 @@ struct SpectralRenderOptions {
 class SpectralScanBuilder {
 public:
     void reset();
-    void feedFrame(quint8 frameType, quint64 streamFrameId, int bands, int height, int pixfmt, const QByteArray& data);
+    bool feedFrame(quint8 frameType, quint64 streamFrameId, int bands, int height, int pixfmt, const QByteArray& data);
 
-    bool hasData() const { return !columns_.isEmpty(); }
+    bool hasData() const { return hasRenderableData(); }
+    bool hasRenderableData() const { return !completedColumns_.isEmpty(); }
     bool hasActiveScan() const { return active_; }
-    bool tailSeen() const { return tailSeen_; }
-    int bands() const { return bands_; }
-    int height() const { return height_; }
-    int scanWidth() const { return columns_.size(); }
-    quint64 gapFillColumns() const { return gapFillColumns_; }
+    bool tailSeen() const { return active_ ? tailSeen_ : completedTailSeen_; }
+    int bands() const { return completedBands_ > 0 ? completedBands_ : bands_; }
+    int height() const { return completedHeight_ > 0 ? completedHeight_ : height_; }
+    int scanWidth() const { return active_ ? columns_.size() : completedColumns_.size(); }
+    quint64 gapFillColumns() const { return active_ ? gapFillColumns_ : completedGapFillColumns_; }
 
     QImage render(const SpectralRenderOptions& opts) const;
 
@@ -44,24 +45,33 @@ private:
         int bands = 0;
         int height = 0;
         int pixfmt = 0;
-        quint64 columnVersion = 0;
+        quint64 generation = 0;
         int cachedColumns = 0;
         QVector<int> columnValues;
     };
 
+    void resetActiveScan();
+    void commitActiveScan();
     bool hasCompatibleGeometry(int bands, int height, int pixfmt) const;
     bool appendColumn(const QByteArray& data);
-    bool readSample(const QByteArray& col, int pixelIndex, int& sample) const;
+    bool readSample(const QByteArray& col, int pixelIndex, int pixfmt, int& sample) const;
 
     QVector<QByteArray> columns_;
+    QVector<QByteArray> completedColumns_;
     quint64 columnVersion_ = 0;
+    quint64 completedGeneration_ = 0;
     quint64 lastStreamFrameId_ = 0;
     quint64 streamFrameIdStep_ = 0;
     int bands_ = 0;
     int height_ = 0;
     int pixfmt_ = 0;
+    int completedBands_ = 0;
+    int completedHeight_ = 0;
+    int completedPixfmt_ = 0;
     bool active_ = false;
     bool tailSeen_ = false;
     quint64 gapFillColumns_ = 0;
+    bool completedTailSeen_ = false;
+    quint64 completedGapFillColumns_ = 0;
     mutable RangeAverageCache rangeAverageCache_;
 };

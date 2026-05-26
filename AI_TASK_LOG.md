@@ -2,6 +2,21 @@
 
 > 最新记录放在最上方。后续 AI 变更项目时，请补充本文件。
 
+## 2026-05-26 光谱图像改为 Tail 后统一渲染
+
+- 目标：取消 Spectral 页的逐帧/逐列实时渲染，只在一帧完整光谱扫描由 `TailFrame` 收齐后再更新图像；同时保留参数切换时对最近完整图像的即时重画。
+- 文件变更：
+  - `src/Ui/SpectralScanBuilder.h`
+  - `src/Ui/SpectralScanBuilder.cpp`
+  - `src/Ui/MainWindow.cpp`
+- 实现要点：
+  - 将 `SpectralScanBuilder` 拆成“当前接收中的扫描”和“最近完整扫描”两套状态，`HeaderFrame` 只重置当前扫描，不清空已完成图像。
+  - `TailFrame` 成功追加最后一列后，把当前扫描提交为可渲染图像，并让 `feedFrame(...)` 返回 `true`；`MainWindow` 仅在该时机标记 Spectral 视图为 dirty。
+  - `render()`、范围平均缓存和 SpinBox 范围都改为以最近完整扫描为准；如果还没有完整图像，则临时回退到当前接收中的 band count 供预配范围使用。
+  - `reset()` 仍保留为“完全清空”，用于回放启动等必须丢弃旧完成图的场景。
+- 验证：
+  - 运行 `.\make.bat`，构建通过并成功链接 `Release\AtingSpectrographClient.exe`。
+
 ## 2026-05-26 红外机芯控制面板补齐全部命令
 
 - 目标：将 IrPanel 从约 10 条命令扩展到全部 ~41 条 IrService 命令，实现完整红外机芯控制界面。

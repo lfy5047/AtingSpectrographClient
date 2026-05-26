@@ -14,10 +14,10 @@ int clampBand(int v, int bands)
 }
 }
 
-void SpectralScanBuilder::reset()
+void SpectralScanBuilder::resetActiveScan()
 {
     columns_.clear();
-    ++columnVersion_;
+    columnVersion_ = 0;
     lastStreamFrameId_ = 0;
     streamFrameIdStep_ = 0;
     bands_ = 0;
@@ -26,6 +26,31 @@ void SpectralScanBuilder::reset()
     active_ = false;
     tailSeen_ = false;
     gapFillColumns_ = 0;
+}
+
+void SpectralScanBuilder::commitActiveScan()
+{
+    completedColumns_.swap(columns_);
+    columns_.clear();
+    completedBands_ = bands_;
+    completedHeight_ = height_;
+    completedPixfmt_ = pixfmt_;
+    completedTailSeen_ = true;
+    completedGapFillColumns_ = gapFillColumns_;
+    ++completedGeneration_;
+    resetActiveScan();
+}
+
+void SpectralScanBuilder::reset()
+{
+    resetActiveScan();
+    completedColumns_.clear();
+    completedBands_ = 0;
+    completedHeight_ = 0;
+    completedPixfmt_ = 0;
+    completedTailSeen_ = false;
+    completedGapFillColumns_ = 0;
+    ++completedGeneration_;
     rangeAverageCache_ = RangeAverageCache();
 }
 
@@ -50,13 +75,13 @@ bool SpectralScanBuilder::appendColumn(const QByteArray& data)
     return true;
 }
 
-void SpectralScanBuilder::feedFrame(quint8 frameType, quint64 streamFrameId, int bands, int height, int pixfmt, const QByteArray& data)
+bool SpectralScanBuilder::feedFrame(quint8 frameType, quint64 streamFrameId, int bands, int height, int pixfmt, const QByteArray& data)
 {
-    if (bands <= 0 || height <= 0) return;
-    if (pixfmt != cli::proto::Mono8 && pixfmt != cli::proto::Mono16) return;
+    if (bands <= 0 || height <= 0) return false;
+    if (pixfmt != cli::proto::Mono8 && pixfmt != cli::proto::Mono16) return false;
 
     if (frameType == cli::proto::HeaderFrame) {
-        reset();
+        resetActiveScan();
         bands_ = bands;
         height_ = height;
         pixfmt_ = pixfmt;
@@ -65,24 +90,24 @@ void SpectralScanBuilder::feedFrame(quint8 frameType, quint64 streamFrameId, int
         if (appendColumn(data)) {
             lastStreamFrameId_ = streamFrameId;
         } else {
-            reset();
+            resetActiveScan();
         }
-        return;
+        return false;
     }
 
     if (frameType != cli::proto::DataFrame && frameType != cli::proto::TailFrame) {
-        return;
+        return false;
     }
 
     if (!active_) {
-        return;
+        return false;
     }
     if (!hasCompatibleGeometry(bands, height, pixfmt)) {
-        reset();
-        return;
+        resetActiveScan();
+        return false;
     }
     if (streamFrameId <= lastStreamFrameId_) {
-        return;
+        return false;
     }
 
     const quint64 delta = streamFrameId - lastStreamFrameId_;
@@ -103,20 +128,21 @@ void SpectralScanBuilder::feedFrame(quint8 frameType, quint64 streamFrameId, int
     }
 
     if (!appendColumn(data)) {
-        reset();
-        return;
+        resetActiveScan();
+        return false;
     }
 
     lastStreamFrameId_ = streamFrameId;
     if (frameType == cli::proto::TailFrame) {
-        active_ = false;
-        tailSeen_ = true;
+        commitActiveScan();
+        return true;
     }
+    return false;
 }
 
-bool SpectralScanBuilder::readSample(const QByteArray& col, int pixelIndex, int& sample) const
+bool SpectralScanBuilder::readSample(const QByteArray& col, int pixelIndex, int pixfmt, int& sample) const
 {
-    if (pixfmt_ == cli::proto::Mono8) {
+    if (pixfmt == cli::proto::Mono8) {
         if (pixelIndex < 0 || pixelIndex >= col.size()) return false;
         sample = static_cast<unsigned char>(col[pixelIndex]);
         return true;
@@ -132,11 +158,12 @@ bool SpectralScanBuilder::readSample(const QByteArray& col, int pixelIndex, int&
 
 QImage SpectralScanBuilder::render(const SpectralRenderOptions& opts) const
 {
-    if (columns_.isEmpty() || bands_ <= 0 || height_ <= 0) return QImage();
+    if (completedColumns_.isEmpty() || completedBands_ <= 0 || completedHeight_ <= 0) return QImage();
 
-    const int w = columns_.size();
-    const int h = height_;
-    const int bands = bands_;
+    const int w = completedColumns_.size();
+    const int h = completedHeight_;
+    const int bands = completedBands_;
+    const int pixfmt = completedPixfmt_;
     const int pixels = w * h;
 
     if (opts.mode == SpectralRenderOptions::RgbComposite) {
@@ -150,13 +177,13 @@ QImage SpectralScanBuilder::render(const SpectralRenderOptions& opts) const
         int bMin = 0x7FFFFFFF, bMax = 0;
 
         for (int x = 0; x < w; ++x) {
-            const QByteArray& col = columns_[x];
+            const QByteArray& col = completedColumns_[x];
             for (int y = 0; y < h; ++y) {
                 const int base = y * bands;
                 int rv = 0, gv = 0, bv = 0;
-                if (!readSample(col, base + rb, rv)) continue;
-                if (!readSample(col, base + gb, gv)) continue;
-                if (!readSample(col, base + bb, bv)) continue;
+                if (!readSample(col, base + rb, pixfmt, rv)) continue;
+                if (!readSample(col, base + gb, pixfmt, gv)) continue;
+                if (!readSample(col, base + bb, pixfmt, bv)) continue;
 
                 rMin = std::min(rMin, rv);
                 rMax = std::max(rMax, rv);
@@ -203,9 +230,9 @@ QImage SpectralScanBuilder::render(const SpectralRenderOptions& opts) const
         rangeAverageCache_.bandEnd == bandEnd &&
         rangeAverageCache_.bands == bands &&
         rangeAverageCache_.height == h &&
-        rangeAverageCache_.pixfmt == pixfmt_;
+        rangeAverageCache_.pixfmt == pixfmt;
 
-    const bool versionMismatch = rangeAverageCache_.valid && (rangeAverageCache_.columnVersion != columnVersion_);
+    const bool versionMismatch = rangeAverageCache_.valid && (rangeAverageCache_.generation != completedGeneration_);
     if (!cacheCompatible || versionMismatch) {
         rangeAverageCache_ = RangeAverageCache();
         rangeAverageCache_.valid = true;
@@ -213,7 +240,7 @@ QImage SpectralScanBuilder::render(const SpectralRenderOptions& opts) const
         rangeAverageCache_.bandEnd = bandEnd;
         rangeAverageCache_.bands = bands;
         rangeAverageCache_.height = h;
-        rangeAverageCache_.pixfmt = pixfmt_;
+        rangeAverageCache_.pixfmt = pixfmt;
     }
 
     if (rangeAverageCache_.cachedColumns > w) {
@@ -224,9 +251,9 @@ QImage SpectralScanBuilder::render(const SpectralRenderOptions& opts) const
     const int oldColumns = rangeAverageCache_.cachedColumns;
     if (oldColumns < w) {
         rangeAverageCache_.columnValues.resize(w * h);
-        if (pixfmt_ == cli::proto::Mono8) {
+        if (pixfmt == cli::proto::Mono8) {
             for (int x = oldColumns; x < w; ++x) {
-                const QByteArray& col = columns_[x];
+                const QByteArray& col = completedColumns_[x];
                 const uchar* src = reinterpret_cast<const uchar*>(col.constData());
                 for (int y = 0; y < h; ++y) {
                     const int base = y * bands + bandStart;
@@ -239,7 +266,7 @@ QImage SpectralScanBuilder::render(const SpectralRenderOptions& opts) const
             }
         } else {
             for (int x = oldColumns; x < w; ++x) {
-                const QByteArray& col = columns_[x];
+                const QByteArray& col = completedColumns_[x];
                 // Windows x86/x64 target accepts unaligned reads for uint16 payload.
                 const uint16_t* src = reinterpret_cast<const uint16_t*>(col.constData());
                 for (int y = 0; y < h; ++y) {
@@ -254,7 +281,7 @@ QImage SpectralScanBuilder::render(const SpectralRenderOptions& opts) const
         }
         rangeAverageCache_.cachedColumns = w;
     }
-    rangeAverageCache_.columnVersion = columnVersion_;
+    rangeAverageCache_.generation = completedGeneration_;
 
     int minV = 0x7FFFFFFF;
     int maxV = 0;

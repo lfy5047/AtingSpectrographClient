@@ -603,14 +603,14 @@ void MainWindow::handleLiveFrame(const StreamFrame& frame)
 
     SpectralScanBuilder* b = builderFor(SpectralSource::Live, frame.channel);
     if (!b) return;
-    b->feedFrame(frame.frameType, frame.streamFrameId, frame.width, frame.height, frame.pixfmt, frame.data);
+    const bool committed = b->feedFrame(frame.frameType, frame.streamFrameId, frame.width, frame.height, frame.pixfmt, frame.data);
     const bool spectralVisible = currentChannel_ == 2;
     const bool sourceMatches = (spectralSource_ == SpectralSource::Live);
     const bool channelMatches = sourceMatches && spectralPanel_ && spectralPanel_->sourceChannel() == frame.channel;
     if (spectralVisible && channelMatches) {
         refreshSpectralStats();
     }
-    if (sourceMatches) {
+    if (sourceMatches && committed) {
         spectralDirty_ = true;
     }
 }
@@ -624,14 +624,14 @@ void MainWindow::handlePlaybackFrame(const RecordedFrame& frame)
 
     SpectralScanBuilder* b = builderFor(SpectralSource::Playback, frame.channel);
     if (!b) return;
-    b->feedFrame(frame.frameType, frame.streamFrameId, frame.width, frame.height, frame.pixfmt, frame.data);
+    const bool committed = b->feedFrame(frame.frameType, frame.streamFrameId, frame.width, frame.height, frame.pixfmt, frame.data);
     const bool spectralVisible = currentChannel_ == 2;
     const bool sourceMatches = (spectralSource_ == SpectralSource::Playback);
     const bool channelMatches = sourceMatches && spectralPanel_ && spectralPanel_->sourceChannel() == frame.channel;
     if (spectralVisible && channelMatches) {
         refreshSpectralStats();
     }
-    if (sourceMatches) {
+    if (sourceMatches && committed) {
         spectralDirty_ = true;
     }
 }
@@ -669,7 +669,7 @@ void MainWindow::updateSpectralView()
     const int channel = spectralPanel_->sourceChannel();
     const SpectralScanBuilder* b = builderFor(spectralSource_, channel);
     refreshSpectralStats();
-    if (!b || !b->hasData()) {
+    if (!b || !b->hasRenderableData()) {
         imageViewSpectral_->setNoSignal();
         return;
     }
