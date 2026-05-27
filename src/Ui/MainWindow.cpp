@@ -23,11 +23,13 @@
 #include <QCloseEvent>
 #include <QScrollArea>
 #include <QStyle>
+#include <QProgressBar>
 #include <QTimer>
 #include <QEvent>
 #include <QApplication>
 #include <QStatusBar>
 #include <QMessageBox>
+#include "plog/Log.h"
 
 namespace {
 struct Mono16Stats {
@@ -57,6 +59,17 @@ bool computeMono16Stats(const QByteArray& data, int width, int height, Mono16Sta
     out->max = mx;
     out->sum = sum;
     return true;
+}
+
+int spectralProgressIndex(SpectralSource source, int channel)
+{
+    using namespace cli::proto;
+    const int sourceIndex = source == SpectralSource::Live ? 0 : 1;
+    int channelIndex = -1;
+    if (channel == Raw16) channelIndex = 0;
+    else if (channel == SliceStitch16) channelIndex = 1;
+    if (channelIndex < 0) return -1;
+    return sourceIndex * 2 + channelIndex;
 }
 } // namespace
 
@@ -96,8 +109,16 @@ MainWindow::MainWindow(QWidget* parent)
     });
     spectralRenderTimer_->start();
 
+    spectralProgressTimer_ = new QTimer(this);
+    spectralProgressTimer_->setInterval(100);
+    connect(spectralProgressTimer_, &QTimer::timeout, this, [this]() {
+        refreshSpectralProgressOverlay();
+    });
+    spectralProgressTimer_->start();
+
     refreshSpectralStats();
     refreshImageStatsOverlay();
+    refreshSpectralProgressOverlay();
 }
 
 MainWindow::~MainWindow() = default;
@@ -229,12 +250,14 @@ void MainWindow::setupUi()
         viewerStack_->setCurrentIndex(0);
         updateChannelTabStyle(0);
         refreshImageStatsOverlay();
+        refreshSpectralProgressOverlay();
     });
     connect(chTabSlice_, &QPushButton::clicked, this, [this]() {
         currentChannel_ = 1;
         viewerStack_->setCurrentIndex(1);
         updateChannelTabStyle(1);
         refreshImageStatsOverlay();
+        refreshSpectralProgressOverlay();
     });
     connect(chTabSpectral_, &QPushButton::clicked, this, [this]() {
         currentChannel_ = 2;
@@ -243,12 +266,14 @@ void MainWindow::setupUi()
         refreshSpectralSource();
         refreshSpectralStats();
         refreshImageStatsOverlay();
+        refreshSpectralProgressOverlay();
     });
     connect(chTabPlayback_, &QPushButton::clicked, this, [this]() {
         currentChannel_ = 3;
         viewerStack_->setCurrentIndex(3);
         updateChannelTabStyle(3);
         refreshImageStatsOverlay();
+        refreshSpectralProgressOverlay();
     });
 
     // Zoom toolbar (kept hidden for now)
@@ -276,6 +301,29 @@ void MainWindow::setupUi()
     statsLayout->addWidget(imageStatsLabel_);
     imageStatsOverlay_->adjustSize();
     imageStatsOverlay_->raise();
+
+    spectralProgressOverlay_ = new QWidget(viewerContainer_);
+    spectralProgressOverlay_->setObjectName("spectralProgressOverlay");
+    spectralProgressOverlay_->setAttribute(Qt::WA_TransparentForMouseEvents);
+    spectralProgressOverlay_->setMinimumWidth(300);
+    auto* progressLayout = new QVBoxLayout(spectralProgressOverlay_);
+    progressLayout->setContentsMargins(12, 8, 12, 8);
+    progressLayout->setSpacing(6);
+    spectralProgressLabel_ = new QLabel(spectralProgressOverlay_);
+    spectralProgressLabel_->setObjectName("spectralProgressLabel");
+    spectralProgressLabel_->setAlignment(Qt::AlignHCenter | Qt::AlignVCenter);
+    spectralProgressLabel_->setText(QString::fromUtf8("等待整帧完整数据"));
+    spectralProgressBar_ = new QProgressBar(spectralProgressOverlay_);
+    spectralProgressBar_->setObjectName("spectralProgressBar");
+    spectralProgressBar_->setMinimumWidth(276);
+    spectralProgressBar_->setRange(0, 100);
+    spectralProgressBar_->setValue(0);
+    spectralProgressBar_->setTextVisible(false);
+    progressLayout->addWidget(spectralProgressLabel_);
+    progressLayout->addWidget(spectralProgressBar_);
+    spectralProgressOverlay_->adjustSize();
+    spectralProgressOverlay_->hide();
+    spectralProgressOverlay_->raise();
 
     mainSplitter_->addWidget(viewerContainer_);
 
@@ -319,6 +367,7 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
 {
     if (obj == viewerContainer_ && event->type() == QEvent::Resize) {
         positionImageStatsOverlay();
+        positionSpectralProgressOverlay();
     }
     return QMainWindow::eventFilter(obj, event);
 }
@@ -609,6 +658,7 @@ void MainWindow::setupConnections()
         viewerStack_->setCurrentIndex(3);
         updateChannelTabStyle(3);
         refreshImageStatsOverlay();
+        refreshSpectralProgressOverlay();
     });
 
     // Playback frames -> Playback ImageView
@@ -621,6 +671,7 @@ void MainWindow::setupConnections()
     if (recordPlaybackPanel_ && recordPlaybackPanel_->playback()) {
         connect(recordPlaybackPanel_->playback(), &FramePlaybackController::playbackStarted, this, [this]() {
             playbackActive_ = true;
+            clearSpectralProgress(SpectralSource::Playback);
             playbackRawSpectral_.reset();
             playbackSliceSpectral_.reset();
             refreshSpectralSource();
@@ -638,6 +689,7 @@ void MainWindow::setupConnections()
         refreshSpectralSource();
         refreshSpectralStats();
         refreshImageStatsOverlay();
+        refreshSpectralProgressOverlay();
     });
 
     connect(imageViewRaw_, &ImageView::cursorImagePosChanged, this, [this](const QPoint& pos) {
@@ -712,6 +764,7 @@ void MainWindow::refreshSpectralSource()
 {
     spectralSource_ = effectiveSpectralSource();
     spectralDirty_ = true;
+    refreshSpectralProgressOverlay();
 }
 
 SpectralScanBuilder* MainWindow::builderFor(SpectralSource source, int channel)
@@ -750,6 +803,84 @@ void MainWindow::refreshSpectralStats()
                              b->tailSeen(), b->hasActiveScan(), b->gapFillColumns());
 }
 
+void MainWindow::startSpectralProgress(SpectralSource source, int channel)
+{
+    const int idx = spectralProgressIndex(source, channel);
+    if (idx < 0) return;
+
+    auto& state = spectralProgressStates_[static_cast<std::size_t>(idx)];
+    state.active = true;
+    state.startedMs = uptime_.elapsed();
+    refreshSpectralProgressOverlay();
+}
+
+void MainWindow::stopSpectralProgress(SpectralSource source, int channel)
+{
+    const int idx = spectralProgressIndex(source, channel);
+    if (idx < 0) return;
+
+    auto& state = spectralProgressStates_[static_cast<std::size_t>(idx)];
+    state.active = false;
+    state.startedMs = -1;
+    refreshSpectralProgressOverlay();
+}
+
+void MainWindow::clearSpectralProgress(SpectralSource source)
+{
+    const int sourceIndex = source == SpectralSource::Live ? 0 : 1;
+    for (int i = 0; i < 2; ++i) {
+        auto& state = spectralProgressStates_[static_cast<std::size_t>(sourceIndex * 2 + i)];
+        state.active = false;
+        state.startedMs = -1;
+    }
+    refreshSpectralProgressOverlay();
+}
+
+void MainWindow::positionSpectralProgressOverlay()
+{
+    if (!spectralProgressOverlay_ || !viewerContainer_) return;
+    spectralProgressOverlay_->adjustSize();
+    const int margin = 12;
+    int x = (viewerContainer_->width() - spectralProgressOverlay_->width()) / 2;
+    if (x < margin) x = margin;
+    if (x + spectralProgressOverlay_->width() + margin > viewerContainer_->width()) {
+        x = qMax(margin, viewerContainer_->width() - spectralProgressOverlay_->width() - margin);
+    }
+    int y = viewerContainer_->height() - spectralProgressOverlay_->height() - margin;
+    if (y < margin) y = margin;
+    spectralProgressOverlay_->move(x, y);
+    spectralProgressOverlay_->raise();
+}
+
+void MainWindow::refreshSpectralProgressOverlay()
+{
+    if (!spectralProgressOverlay_ || !spectralProgressLabel_ || !spectralProgressBar_ || !spectralPanel_) return;
+
+    if (currentChannel_ != 2) {
+        spectralProgressOverlay_->hide();
+        return;
+    }
+
+    const int channel = spectralPanel_->sourceChannel();
+    const SpectralProgressState* state = nullptr;
+    const int idx = spectralProgressIndex(spectralSource_, channel);
+    if (idx >= 0) {
+        state = &spectralProgressStates_[static_cast<std::size_t>(idx)];
+    }
+    if (!state || !state->active || state->startedMs < 0) {
+        spectralProgressOverlay_->hide();
+        return;
+    }
+
+    const qint64 elapsedMs = qMax<qint64>(0, uptime_.elapsed() - state->startedMs);
+    const int progress = elapsedMs >= 10000 ? 100 : static_cast<int>((elapsedMs * 100) / 10000);
+    LOGD << "Spectral progress: " << progress << "% (elapsed " << elapsedMs << " ms)";
+    spectralProgressLabel_->setText(QString::fromUtf8("等待整帧完整数据"));
+    spectralProgressBar_->setValue(qBound(0, progress, 100));
+    positionSpectralProgressOverlay();
+    spectralProgressOverlay_->show();
+}
+
 void MainWindow::handleLiveFrame(const StreamFrame& frame)
 {
     using namespace cli::proto;
@@ -759,10 +890,27 @@ void MainWindow::handleLiveFrame(const StreamFrame& frame)
 
     SpectralScanBuilder* b = builderFor(SpectralSource::Live, frame.channel);
     if (!b) return;
+    const bool wasActive = b->hasActiveScan();
     const bool committed = b->feedFrame(frame.frameType, frame.streamFrameId, frame.width, frame.height, frame.pixfmt, frame.data);
+    const bool hasActive = b->hasActiveScan();
     const bool spectralVisible = currentChannel_ == 2;
     const bool sourceMatches = (spectralSource_ == SpectralSource::Live);
     const bool channelMatches = sourceMatches && spectralPanel_ && spectralPanel_->sourceChannel() == frame.channel;
+    if (frame.frameType == HeaderFrame) {
+        if (hasActive) {
+            startSpectralProgress(SpectralSource::Live, frame.channel);
+        } else if (wasActive && !committed) {
+            stopSpectralProgress(SpectralSource::Live, frame.channel);
+        }
+    } else if (frame.frameType == TailFrame) {
+        if (committed) {
+            stopSpectralProgress(SpectralSource::Live, frame.channel);
+        } else if (wasActive && !hasActive) {
+            stopSpectralProgress(SpectralSource::Live, frame.channel);
+        }
+    } else if (wasActive && !hasActive && !committed) {
+        stopSpectralProgress(SpectralSource::Live, frame.channel);
+    }
     if (spectralVisible && channelMatches) {
         refreshSpectralStats();
     }
@@ -780,10 +928,27 @@ void MainWindow::handlePlaybackFrame(const RecordedFrame& frame)
 
     SpectralScanBuilder* b = builderFor(SpectralSource::Playback, frame.channel);
     if (!b) return;
+    const bool wasActive = b->hasActiveScan();
     const bool committed = b->feedFrame(frame.frameType, frame.streamFrameId, frame.width, frame.height, frame.pixfmt, frame.data);
+    const bool hasActive = b->hasActiveScan();
     const bool spectralVisible = currentChannel_ == 2;
     const bool sourceMatches = (spectralSource_ == SpectralSource::Playback);
     const bool channelMatches = sourceMatches && spectralPanel_ && spectralPanel_->sourceChannel() == frame.channel;
+    if (frame.frameType == HeaderFrame) {
+        if (hasActive) {
+            startSpectralProgress(SpectralSource::Playback, frame.channel);
+        } else if (wasActive && !committed) {
+            stopSpectralProgress(SpectralSource::Playback, frame.channel);
+        }
+    } else if (frame.frameType == TailFrame) {
+        if (committed) {
+            stopSpectralProgress(SpectralSource::Playback, frame.channel);
+        } else if (wasActive && !hasActive) {
+            stopSpectralProgress(SpectralSource::Playback, frame.channel);
+        }
+    } else if (wasActive && !hasActive && !committed) {
+        stopSpectralProgress(SpectralSource::Playback, frame.channel);
+    }
     if (spectralVisible && channelMatches) {
         refreshSpectralStats();
     }

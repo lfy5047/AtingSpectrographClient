@@ -5,6 +5,7 @@
 #include <QStackedWidget>
 #include <QLabel>
 #include <QPushButton>
+#include <QProgressBar>
 #include <QElapsedTimer>
 #include <QTimer>
 #include <array>
@@ -72,6 +73,11 @@ private:
     SpectralScanBuilder* builderFor(SpectralSource source, int channel);
     const SpectralScanBuilder* builderFor(SpectralSource source, int channel) const;
     void refreshSpectralStats();
+    void startSpectralProgress(SpectralSource source, int channel);
+    void stopSpectralProgress(SpectralSource source, int channel);
+    void clearSpectralProgress(SpectralSource source);
+    void refreshSpectralProgressOverlay();
+    void positionSpectralProgressOverlay();
 
     DeviceClient* device_ = nullptr;
 
@@ -97,6 +103,9 @@ private:
     QWidget*        zoomBar_       = nullptr;
     QWidget*        imageStatsOverlay_ = nullptr;
     QLabel*         imageStatsLabel_ = nullptr;
+    QWidget*        spectralProgressOverlay_ = nullptr;
+    QLabel*         spectralProgressLabel_ = nullptr;
+    QProgressBar*   spectralProgressBar_ = nullptr;
     int             currentChannel_ = 0;
     std::array<QPoint, 4> cursorImagePos_ = {
         QPoint(-1, -1),
@@ -140,5 +149,12 @@ private:
     SpectralSource spectralSource_ = SpectralSource::Live;
     bool playbackActive_ = false;
     QTimer* spectralRenderTimer_ = nullptr;
+    QTimer* spectralProgressTimer_ = nullptr;
     bool spectralDirty_ = false;
+
+    struct SpectralProgressState {
+        bool active = false;
+        qint64 startedMs = -1;
+    };
+    std::array<SpectralProgressState, 4> spectralProgressStates_ = {};
 };

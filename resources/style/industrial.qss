@@ -647,6 +647,12 @@ QWidget#imageStatsOverlay {
     border-radius: 8px;
 }
 
+QWidget#spectralProgressOverlay {
+    background-color: rgba(10, 14, 20, 220);
+    border: 1px solid rgba(76, 142, 247, 140);
+    border-radius: 8px;
+}
+
 QPushButton#channelTab {
     background-color: transparent;
     border: none;
@@ -692,6 +698,26 @@ QLabel#imgInfoLabel {
     font-size: 9pt;
     color: #D7E3F4;
     font-weight: 600;
+}
+
+QLabel#spectralProgressLabel {
+    font-size: 10pt;
+    color: #E6EDF3;
+    font-weight: bold;
+}
+
+QProgressBar#spectralProgressBar {
+    background-color: #1A1F28;
+    border: 1px solid #21262E;
+    border-radius: 4px;
+    text-align: center;
+    min-height: 10px;
+    max-height: 10px;
+}
+
+QProgressBar#spectralProgressBar::chunk {
+    background-color: #4C8EF7;
+    border-radius: 3px;
 }
 
 /* ===== ToolTip ===== */
