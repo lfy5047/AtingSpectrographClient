@@ -6,6 +6,8 @@
 #include <QResizeEvent>
 #include <QShowEvent>
 #include <QWheelEvent>
+#include <algorithm>
+#include <cmath>
 
 ImageView::ImageView(QWidget* parent) : QWidget(parent)
 {
@@ -28,6 +30,22 @@ void ImageView::setNoSignal()
     noSignal_ = true;
     update();
     emit cursorImagePosChanged(QPoint(-1, -1));
+}
+
+void ImageView::setAnalysisOverlayEnabled(bool enabled)
+{
+    if (analysisOverlayEnabled_ == enabled) return;
+    analysisOverlayEnabled_ = enabled;
+    interactionMode_ = InteractionMode::Normal;
+    dragging_ = false;
+    activeLineIndex_ = -1;
+    update();
+}
+
+void ImageView::setAnalysisLines(const QVector<SpectrumSampleLine>& lines)
+{
+    analysisLines_ = lines;
+    update();
 }
 
 QRectF ImageView::imageRect() const
@@ -70,6 +88,120 @@ QPoint ImageView::imagePosFromWidgetPos(const QPoint& widgetPos) const
     const int ix = qBound(0, static_cast<int>(rx * image_.width()), image_.width() - 1);
     const int iy = qBound(0, static_cast<int>(ry * image_.height()), image_.height() - 1);
     return QPoint(ix, iy);
+}
+
+double ImageView::widgetYForImageY(int y) const
+{
+    const QRectF r = imageRect();
+    if (r.isNull() || image_.height() <= 0) return -1.0;
+    return r.top() + (static_cast<double>(y) + 0.5) * r.height() / image_.height();
+}
+
+int ImageView::hitAnalysisLine(const QPoint& widgetPos) const
+{
+    if (!analysisOverlayEnabled_ || noSignal_ || image_.isNull()) return -1;
+    const QRectF r = imageRect();
+    if (r.isNull()) return -1;
+    const QPointF p(widgetPos);
+    if (p.x() < r.left() || p.x() >= r.right() || p.y() < r.top() || p.y() >= r.bottom()) {
+        return -1;
+    }
+
+    int bestIndex = -1;
+    double bestDistance = 6.0;
+    for (int i = 0; i < analysisLines_.size(); ++i) {
+        const double lineY = widgetYForImageY(analysisLines_[i].y);
+        const double distance = std::abs(lineY - p.y());
+        if (distance <= 5.0 && distance < bestDistance) {
+            bestDistance = distance;
+            bestIndex = i;
+        }
+    }
+    return bestIndex;
+}
+
+void ImageView::beginPan(const QPoint& pos)
+{
+    dragging_ = true;
+    dragStart_ = pos;
+    dragOffset_ = offset_;
+}
+
+static int niceTickStep(int size)
+{
+    if (size <= 0) return 1;
+    const int target = qMax(1, size / 8);
+    const int steps[] = {1, 2, 5, 10, 20, 50, 100, 200, 500, 1000, 2000, 5000};
+    for (int step : steps) {
+        if (step >= target) return step;
+    }
+    return 10000;
+}
+
+void ImageView::drawAnalysisOverlay(QPainter& p, const QRectF& r)
+{
+    if (!analysisOverlayEnabled_ || noSignal_ || image_.isNull() || r.isNull()) return;
+
+    p.save();
+    p.setRenderHint(QPainter::Antialiasing, true);
+    p.setClipRect(rect());
+
+    const QColor axisColor(0xD0, 0xD7, 0xDE, 210);
+    const QColor tickTextColor(0xF0, 0xF6, 0xFC, 235);
+    const QColor tickShadowColor(0x0A, 0x0E, 0x14, 220);
+    QFont tickFont("Consolas", 8);
+    p.setFont(tickFont);
+
+    p.setPen(QPen(axisColor, 1));
+    p.drawRect(r);
+
+    const int xStep = niceTickStep(image_.width());
+    for (int x = 0; x < image_.width(); x += xStep) {
+        const double wx = r.left() + (static_cast<double>(x) + 0.5) * r.width() / image_.width();
+        p.setPen(axisColor);
+        p.drawLine(QPointF(wx, r.bottom()), QPointF(wx, r.bottom() + 5));
+        const QPointF labelPos(wx + 3, qMin<double>(height() - 4, r.bottom() + 15));
+        p.setPen(tickShadowColor);
+        p.drawText(labelPos + QPointF(1, 1), QString::number(x));
+        p.setPen(tickTextColor);
+        p.drawText(labelPos, QString::number(x));
+    }
+
+    const int yStep = niceTickStep(image_.height());
+    for (int y = 0; y < image_.height(); y += yStep) {
+        const double wy = widgetYForImageY(y);
+        p.setPen(axisColor);
+        p.drawLine(QPointF(r.left() - 5, wy), QPointF(r.left(), wy));
+        QRectF labelRect(r.left() - 52, wy - 8, 46, 16);
+        if (labelRect.left() < 2) {
+            labelRect.moveLeft(2);
+        }
+        p.setPen(tickShadowColor);
+        p.drawText(labelRect.translated(1, 1), Qt::AlignRight | Qt::AlignVCenter, QString::number(y));
+        p.setPen(tickTextColor);
+        p.drawText(labelRect, Qt::AlignRight | Qt::AlignVCenter, QString::number(y));
+    }
+
+    for (int i = 0; i < analysisLines_.size(); ++i) {
+        const SpectrumSampleLine& line = analysisLines_[i];
+        if (line.y < 0 || line.y >= image_.height()) continue;
+
+        const double wy = widgetYForImageY(line.y);
+        QColor color = line.color.isValid() ? line.color : QColor(0x4C, 0x8E, 0xF7);
+        p.setPen(QPen(color, i == activeLineIndex_ ? 3 : 2));
+        p.drawLine(QPointF(r.left(), wy), QPointF(r.right(), wy));
+
+        QRectF labelRect(r.left() + 8, wy - 18, 72, 16);
+        if (labelRect.top() < r.top()) labelRect.moveTop(r.top() + 2);
+        if (labelRect.bottom() > r.bottom()) labelRect.moveBottom(r.bottom() - 2);
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(0x0A, 0x0E, 0x14, 210));
+        p.drawRoundedRect(labelRect, 4, 4);
+        p.setPen(color);
+        p.drawText(labelRect, Qt::AlignCenter, line.name());
+    }
+
+    p.restore();
 }
 
 void ImageView::syncCursorFromWidgetPos(const QPoint& widgetPos)
@@ -118,6 +250,7 @@ void ImageView::paintEvent(QPaintEvent*)
 
     const QRectF imageRectF = imageRect();
     p.drawImage(imageRectF, image_);
+    drawAnalysisOverlay(p, imageRectF);
 
     p.setPen(QColor(0x7D, 0x85, 0x90));
     QFont f("Consolas", 9);
@@ -139,17 +272,54 @@ void ImageView::wheelEvent(QWheelEvent* e)
 
 void ImageView::mousePressEvent(QMouseEvent* e)
 {
-    if (e->button() == Qt::MiddleButton || e->button() == Qt::LeftButton) {
-        dragging_ = true;
-        dragStart_ = e->pos();
-        dragOffset_ = offset_;
+    if (analysisOverlayEnabled_ && e->button() == Qt::RightButton) {
+        const int hit = hitAnalysisLine(e->pos());
+        if (hit >= 0) {
+            emit analysisLineDeleteRequested(hit);
+            syncCursorFromWidgetPos(e->pos());
+            return;
+        }
+    }
+
+    if (e->button() == Qt::MiddleButton) {
+        interactionMode_ = InteractionMode::Panning;
+        beginPan(e->pos());
+    } else if (e->button() == Qt::LeftButton) {
+        if (analysisOverlayEnabled_) {
+            const int hit = hitAnalysisLine(e->pos());
+            if (hit >= 0) {
+                interactionMode_ = InteractionMode::LineDragging;
+                activeLineIndex_ = hit;
+                update();
+            } else {
+                interactionMode_ = InteractionMode::PendingClick;
+                dragStart_ = e->pos();
+                dragOffset_ = offset_;
+                dragging_ = false;
+            }
+        } else {
+            interactionMode_ = InteractionMode::Panning;
+            beginPan(e->pos());
+        }
     }
     syncCursorFromWidgetPos(e->pos());
 }
 
 void ImageView::mouseMoveEvent(QMouseEvent* e)
 {
-    if (dragging_) {
+    if (interactionMode_ == InteractionMode::LineDragging && activeLineIndex_ >= 0) {
+        const QPoint pos = imagePosFromWidgetPos(e->pos());
+        if (pos.y() >= 0) {
+            emit analysisLineMoveRequested(activeLineIndex_, pos.y());
+        }
+    } else if (interactionMode_ == InteractionMode::PendingClick) {
+        if ((e->pos() - dragStart_).manhattanLength() > 4) {
+            interactionMode_ = InteractionMode::Panning;
+            beginPan(dragStart_);
+        }
+    }
+
+    if (interactionMode_ == InteractionMode::Panning && dragging_) {
         offset_ = dragOffset_ + (e->pos() - dragStart_);
         update();
     }
@@ -158,7 +328,17 @@ void ImageView::mouseMoveEvent(QMouseEvent* e)
 
 void ImageView::mouseReleaseEvent(QMouseEvent* e)
 {
+    if (interactionMode_ == InteractionMode::PendingClick && e->button() == Qt::LeftButton) {
+        const QPoint pos = imagePosFromWidgetPos(e->pos());
+        if (pos.y() >= 0) {
+            emit analysisLineAddRequested(pos.y());
+        }
+    }
+
     dragging_ = false;
+    interactionMode_ = InteractionMode::Normal;
+    activeLineIndex_ = -1;
+    update();
     syncCursorFromWidgetPos(e->pos());
 }
 

@@ -1,52 +1,87 @@
 ﻿# AI 任务日志
-## 2026-05-26 Spectral 等待进度条
+## 2026-05-28 项目上下文与架构文档更新
 
-- 目标：在 Spectral 图像等待整帧完整数据期间显示 10s 进度条，按当前选中的 Spectral 源/通道单独跟踪 Header 到 Tail 的等待状态。
+- 目标：刷新项目级交接文档，补齐近期光谱分析、曲线处理和 Panel 索引变化。
 - 文件变更：
-  - `src/Ui/MainWindow.h`
-  - `src/Ui/MainWindow.cpp`
-  - `resources/style/industrial.qss`
+  - `PROJECT_CONTEXT.md`
+  - `ARCHITECTURE.md`
+  - `AI_TASK_LOG.md`
 - 实现要点：
-  - 为 Live/Playback × Raw16/SliceStitch16 维护独立等待状态，Header 开始计时，Tail 完整提交后停止并隐藏浮层。
-  - 在 `feedFrame()` 中通过 `wasActive` / `hasActiveScan()` / `committed` 判定扫描中断，几何不匹配或 reset 路径都会清理对应进度。
-  - 在 Spectral 主图像上方增加透明浮层进度条，样式沿用当前深色主题，100ms 定时刷新到 10s 封顶。
+  - 重写项目上下文文档，补充技术栈、首读文件、光谱分析功能、配置持久化和 AI 交接规则。
+  - 重写架构说明文档，补充 SliceStitch16 光谱分析数据流、QCustomPlot 集成、Panel index v3 和常见修改入口。
+- 验证：
+  - 文档变更，未运行构建。
+
+## 2026-05-28 光谱曲线 Y 轴锚定与最小跨度
+
+- 目标：让光谱曲线的最小值固定在 Y 轴指定百分比位置，并避免小幅噪声被过度放大。
+- 文件变更：
+  - `src/Ui/panels/SpectrumAnalysisPanel.*`
+  - `src/Ui/MainWindow.cpp`
+  - `src/Ui/SpectrumCurveDialog.*`
+- 实现要点：
+  - 光谱分析 Panel 新增最小值位置百分比和最小数据跨度参数，并持久化到 `spectrumAnalysis/`。
+  - 曲线窗口按所有实际绘制点计算全局 `minY/maxY`，小于最小跨度时使用固定跨度，大于等于阈值时再应用 `yRangeMultiplier`。
+  - Y 轴下限按最小值位置百分比锚定，空数据仍使用 `0-65535` 安全范围。
 - 验证：
   - 已运行 `.\make.bat`，Release 构建通过。
 
-> 最新记录放在最上方。后续 AI 变更项目时，请补充本文件。
+## 2026-05-27 光谱曲线滤波抽点与 Y 轴倍率
 
-## 2026-05-26 Raw/Slice 图像右下角坐标与统计显示
-
-- 目标：为 Raw16 / SliceStitch16 图像页增加右下角浮层，显示鼠标悬停坐标 `x/y` 和当前通道最新完整帧的 `min/max/avg`，同时保留左下角 `WxH | zoom%` 现有信息。
+- 目标：降低光谱曲线噪声观感并改善高刷新率下的绘图性能。
 - 文件变更：
-  - `src/Ui/widgets/ImageView.h`
+  - `src/Ui/panels/SpectrumAnalysisPanel.*`
+  - `src/Ui/MainWindow.cpp`
+  - `src/Ui/SpectrumCurveDialog.*`
+- 实现要点：
+  - 光谱分析 Panel 新增移动平均窗口、每条曲线最大绘制点数、Y 轴范围倍率，并持久化到 `spectrumAnalysis/`。
+  - 曲线数据按最大点数做等间距抽点，首尾点保留；每个绘制点使用原始 Mono16 行数据做居中移动平均。
+  - 曲线窗口按实际绘制数据计算全局 Y 范围，并使用用户设置倍率放大，空数据时保持安全默认范围。
+- 验证：
+  - 已运行 `.\make.bat`，Release 构建通过。
+
+## 2026-05-27 SliceStitch16 光谱刻度显示优化
+
+- 目标：SliceStitch16 光谱分析图像页不再绘制网格线，只保留坐标刻度，并增强刻度数字可读性。
+- 文件变更：
   - `src/Ui/widgets/ImageView.cpp`
+- 实现要点：
+  - 移除分析 overlay 的贯穿式横/竖网格线。
+  - Y 轴刻度数字改为绘制在图像左侧，刻度文字使用亮色并增加深色阴影。
+- 验证：
+  - 已运行 `.\make.bat`，Release 构建通过。
+
+## 2026-05-27 光谱曲线 Y 轴范围修正
+
+- 目标：光谱强度曲线窗口的 Y 轴按所有曲线数据的全局 `Y(max)-Y(min)` 计算，并留 10% 范围余量。
+- 文件变更：
+  - `src/Ui/SpectrumCurveDialog.cpp`
+- 实现要点：
+  - 曲线刷新时扫描全部采样线的 DN 数据，使用全局最小/最大值计算 Y 轴范围。
+  - X 轴继续自动缩放，Y 轴不再强制下限包含 0。
+- 验证：
+  - 已运行 `.\make.bat`，Release 构建通过。
+
+## 2026-05-27 光谱强度曲线分析
+
+- 目标：新增只针对 SliceStitch16 的光谱分析 Panel、图像水平采样线和独立光谱强度曲线窗口。
+- 文件变更：
   - `src/Ui/MainWindow.h`
   - `src/Ui/MainWindow.cpp`
-  - `resources/style/industrial.qss`
+  - `src/Ui/widgets/ImageView.h`
+  - `src/Ui/widgets/ImageView.cpp`
+  - `src/Ui/widgets/SidebarWidget.cpp`
+  - `src/Ui/panels/SpectrumAnalysisPanel.*`
+  - `src/Ui/SpectrumCurveDialog.*`
+  - `src/Ui/SpectrumAnalysisTypes.h`
+  - `src/Ui/widgets/qcustomplot.*`
 - 实现要点：
-  - 为 `ImageView` 增加鼠标坐标信号、`leaveEvent`、`showEvent` 与缩放/拖拽后的坐标同步，负责把 widget 坐标换算成图像像素坐标。
-  - 将统计浮层从原先的底部工具条语义中拆出，独立挂在 `viewerContainer_` 上并定位到右下角。
-  - 在 `frameReady` 路径中仅对 Raw16 / SliceStitch16 的 Mono16 帧计算原始像素统计，播放帧不参与这份缓存。
-  - `avg` 使用 64 位累加后转为浮点显示，保留 1 位小数。
+  - 新增光谱分析导航项和 Panel index v3 迁移，系统日志后移为特殊 index 10。
+  - 在 SliceStitch16 图像页启用坐标刻度、点击添加线、拖动改 y、右键删除线，并把采样线状态持久化。
+  - 缓存最新 SliceStitch16 Mono16 原始帧，按线性波长映射和刷新率绘制多条 DN 强度曲线。
+  - 复制 QCustomPlot 到 `src/Ui/widgets`，避免链接 `LineProfileReusable` 和 C++ 标准冲突。
 - 验证：
-  - 已执行 `.\make.bat`，Release 构建通过。
-
-## 2026-05-26 光谱图像改为 Tail 后统一渲染
-
-- 目标：取消 Spectral 页的逐帧/逐列实时渲染，只在一帧完整光谱扫描由 `TailFrame` 收齐后再更新图像；同时保留参数切换时对最近完整图像的即时重画。
-- 文件变更：
-  - `src/Ui/SpectralScanBuilder.h`
-  - `src/Ui/SpectralScanBuilder.cpp`
-  - `src/Ui/MainWindow.cpp`
-- 实现要点：
-  - 将 `SpectralScanBuilder` 拆成“当前接收中的扫描”和“最近完整扫描”两套状态，`HeaderFrame` 只重置当前扫描，不清空已完成图像。
-  - `TailFrame` 成功追加最后一列后，把当前扫描提交为可渲染图像，并让 `feedFrame(...)` 返回 `true`；`MainWindow` 仅在该时机标记 Spectral 视图为 dirty。
-  - `render()`、范围平均缓存和 SpinBox 范围都改为以最近完整扫描为准；如果还没有完整图像，则临时回退到当前接收中的 band count 供预配范围使用。
-  - `reset()` 仍保留为“完全清空”，用于回放启动等必须丢弃旧完成图的场景。
-- 验证：
-  - 运行 `.\make.bat`，构建通过并成功链接 `Release\AtingSpectrographClient.exe`。
-
+  - 已运行 `.\make.bat`，Release 构建通过。
 
 ## 任务记录模板
 

@@ -12,6 +12,7 @@
 
 #include "Client/stream/StreamFrame.h"
 #include "SpectralScanBuilder.h"
+#include "SpectrumAnalysisTypes.h"
 
 class DeviceClient;
 class SidebarWidget;
@@ -27,6 +28,8 @@ class LogPanel;
 class ImageView;
 class RecordPlaybackPanel;
 class SpectralPanel;
+class SpectrumAnalysisPanel;
+class SpectrumCurveDialog;
 struct RecordedFrame;
 
 enum class SpectralSource {
@@ -78,6 +81,11 @@ private:
     void clearSpectralProgress(SpectralSource source);
     void refreshSpectralProgressOverlay();
     void positionSpectralProgressOverlay();
+    void openSpectrumAnalysisDialog();
+    void refreshSpectrumAnalysisOverlay();
+    void forceRefreshSpectrumCurves();
+    void updateSpectrumCurveData(bool force);
+    bool isSpectrumAnalysisActive() const;
 
     DeviceClient* device_ = nullptr;
 
@@ -131,6 +139,8 @@ private:
     StreamPanel*     streamPanel_   = nullptr;
     SpectralPanel*   spectralPanel_ = nullptr;
     RecordPlaybackPanel* recordPlaybackPanel_ = nullptr;
+    SpectrumAnalysisPanel* spectrumAnalysisPanel_ = nullptr;
+    SpectrumCurveDialog* spectrumCurveDialog_ = nullptr;
 
     // Bottom log
     LogPanel*       logPanel_      = nullptr;
@@ -141,6 +151,11 @@ private:
     quint16 udpPort_ = 1400;
     QString deviceVersion_;
     QElapsedTimer uptime_;
+    QByteArray latestSliceData_;
+    int latestSliceWidth_ = 0;
+    int latestSliceHeight_ = 0;
+    quint64 latestSliceFrameId_ = 0;
+    quint64 lastCurveFrameId_ = 0;
 
     SpectralScanBuilder liveRawSpectral_;
     SpectralScanBuilder liveSliceSpectral_;

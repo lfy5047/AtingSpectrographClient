@@ -12,6 +12,8 @@
 #include "panels/StreamPanel.h"
 #include "panels/SpectralPanel.h"
 #include "panels/RecordPlaybackPanel.h"
+#include "panels/SpectrumAnalysisPanel.h"
+#include "SpectrumCurveDialog.h"
 #include "Client/recording/FrameRecorder.h"
 #include "Client/recording/FramePlaybackController.h"
 #include "Client/recording/RecordedFrame.h"
@@ -29,9 +31,14 @@
 #include <QApplication>
 #include <QStatusBar>
 #include <QMessageBox>
+#include <QMouseEvent>
+#include <cmath>
 #include "plog/Log.h"
 
 namespace {
+const int kSpectrumAnalysisPanelIndex = 9;
+const int kLogPanelIndex = 10;
+
 struct Mono16Stats {
     quint16 min = 0;
     quint16 max = 0;
@@ -59,6 +66,45 @@ bool computeMono16Stats(const QByteArray& data, int width, int height, Mono16Sta
     out->max = mx;
     out->sum = sum;
     return true;
+}
+
+QVector<int> spectrumSampledXs(int startX, int endX, int maxPlotPoints)
+{
+    QVector<int> xs;
+    const int total = endX - startX + 1;
+    if (total <= 0) return xs;
+
+    maxPlotPoints = qBound(2, maxPlotPoints, total);
+    xs.reserve(maxPlotPoints);
+    if (total <= maxPlotPoints) {
+        for (int x = startX; x <= endX; ++x) {
+            xs.append(x);
+        }
+        return xs;
+    }
+
+    const double step = static_cast<double>(endX - startX) / static_cast<double>(maxPlotPoints - 1);
+    for (int i = 0; i < maxPlotPoints; ++i) {
+        int x = static_cast<int>(std::round(startX + i * step));
+        if (i == 0) x = startX;
+        if (i == maxPlotPoints - 1) x = endX;
+        xs.append(qBound(startX, x, endX));
+    }
+    return xs;
+}
+
+double spectrumMovingAverage(const quint16* pixels, int rowOffset, int width, int x, int windowPixels)
+{
+    windowPixels = qMax(1, windowPixels);
+    const int halfWindow = windowPixels / 2;
+    const int left = qMax(0, x - halfWindow);
+    const int right = qMin(width - 1, x + halfWindow);
+
+    quint64 sum = 0;
+    for (int sx = left; sx <= right; ++sx) {
+        sum += pixels[rowOffset + sx];
+    }
+    return static_cast<double>(sum) / static_cast<double>(right - left + 1);
 }
 
 int spectralProgressIndex(SpectralSource source, int channel)
@@ -339,6 +385,7 @@ void MainWindow::setupUi()
     panelTitle_ = new QLabel(QString::fromUtf8("仪表盘"), rightPanel_);
     panelTitle_->setObjectName("panelTitle");
     panelTitle_->setFixedHeight(46);
+    panelTitle_->installEventFilter(this);
     panelLayout->addWidget(panelTitle_);
 
     panelStack_ = new QStackedWidget(rightPanel_);
@@ -368,6 +415,11 @@ bool MainWindow::eventFilter(QObject* obj, QEvent* event)
     if (obj == viewerContainer_ && event->type() == QEvent::Resize) {
         positionImageStatsOverlay();
         positionSpectralProgressOverlay();
+    } else if (obj == panelTitle_ && event->type() == QEvent::MouseButtonRelease) {
+        if (sidebar_ && sidebar_->activePanel() == kSpectrumAnalysisPanelIndex) {
+            openSpectrumAnalysisDialog();
+            return true;
+        }
     }
     return QMainWindow::eventFilter(obj, event);
 }
@@ -382,6 +434,7 @@ void MainWindow::updateChannelTabStyle(int tab)
     chTabSpectral_->style()->polish(chTabSpectral_);
     chTabPlayback_->setProperty("active", tab == 3);
     chTabPlayback_->style()->polish(chTabPlayback_);
+    refreshSpectrumAnalysisOverlay();
 }
 
 void MainWindow::renderFrameToView(ImageView* target, int width, int height, int pixfmt, const QByteArray& data)
@@ -532,6 +585,7 @@ void MainWindow::setupPanels()
     streamPanel_  = new StreamPanel(device_, this);
     spectralPanel_ = new SpectralPanel(this);
     recordPlaybackPanel_ = new RecordPlaybackPanel(this);
+    spectrumAnalysisPanel_ = new SpectrumAnalysisPanel(this);
 
     // Panel 0: Dashboard (no scroll wrap — its own internal scroll)
     panelStack_->addWidget(wrapInScroll(dashPanel_));
@@ -544,21 +598,34 @@ void MainWindow::setupPanels()
     panelStack_->addWidget(wrapInScroll(streamPanel_));
     panelStack_->addWidget(wrapInScroll(spectralPanel_));
     panelStack_->addWidget(wrapInScroll(recordPlaybackPanel_));
-    // Panel 9: Logs — jumps to bottom log panel
+    panelStack_->addWidget(wrapInScroll(spectrumAnalysisPanel_));
+    // Panel 10: Logs jump to bottom log panel.
 }
 
 void MainWindow::onPanelSelected(int index)
 {
-    if (index < 0 || index > 9) return;
+    if (index < 0 || index > kLogPanelIndex) return;
 
-    // Panel 9 (logs) toggles bottom log panel expansion
-    if (index == 9) {
+    // Logs toggle bottom log panel expansion.
+    if (index == kLogPanelIndex) {
         logPanel_->toggleExpanded();
         return;
     }
 
     panelStack_->setCurrentIndex(index);
-    panelTitle_->setText(QString::fromUtf8(kPanelNames[index]));
+    panelTitle_->setText(index == kSpectrumAnalysisPanelIndex
+                             ? QString::fromUtf8("光谱分析")
+                             : QString::fromUtf8(kPanelNames[index]));
+    panelTitle_->setCursor(index == kSpectrumAnalysisPanelIndex ? Qt::PointingHandCursor : Qt::ArrowCursor);
+
+    if (index == kSpectrumAnalysisPanelIndex) {
+        currentChannel_ = 1;
+        viewerStack_->setCurrentIndex(1);
+        updateChannelTabStyle(1);
+        openSpectrumAnalysisDialog();
+    } else {
+        refreshSpectrumAnalysisOverlay();
+    }
 
     if (index == 0) {
         // Update dashboard info
@@ -620,6 +687,16 @@ void MainWindow::setupConnections()
         }
 
         handleLiveFrame(frame);
+        if (frame.channel == SliceStitch16 && frame.pixfmt == Mono16) {
+            latestSliceData_ = frame.data;
+            latestSliceWidth_ = frame.width;
+            latestSliceHeight_ = frame.height;
+            latestSliceFrameId_ = frame.streamFrameId;
+            if (spectrumAnalysisPanel_) {
+                spectrumAnalysisPanel_->setSliceGeometry(frame.width, frame.height, true);
+            }
+            refreshSpectrumAnalysisOverlay();
+        }
         if (frame.channel == Raw16 || frame.channel == SliceStitch16) {
             updateImageStatsForChannel(frame.channel, frame.width, frame.height, frame.pixfmt, frame.data);
         }
@@ -692,6 +769,19 @@ void MainWindow::setupConnections()
         refreshSpectralProgressOverlay();
     });
 
+    connect(spectrumAnalysisPanel_, &SpectrumAnalysisPanel::settingsChanged, this, [this]() {
+        if (spectrumCurveDialog_) {
+            spectrumCurveDialog_->setRefreshRateHz(spectrumAnalysisPanel_->refreshRateHz());
+        }
+        forceRefreshSpectrumCurves();
+    });
+    connect(spectrumAnalysisPanel_, &SpectrumAnalysisPanel::linesChanged, this, [this]() {
+        refreshSpectrumAnalysisOverlay();
+        forceRefreshSpectrumCurves();
+    });
+    connect(spectrumAnalysisPanel_, &SpectrumAnalysisPanel::showDialogRequested,
+            this, &MainWindow::openSpectrumAnalysisDialog);
+
     connect(imageViewRaw_, &ImageView::cursorImagePosChanged, this, [this](const QPoint& pos) {
         cursorImagePos_[0] = pos;
         refreshImageStatsOverlay();
@@ -705,6 +795,15 @@ void MainWindow::setupConnections()
     });
     connect(imageViewPlayback_, &ImageView::cursorImagePosChanged, this, [this](const QPoint& pos) {
         cursorImagePos_[3] = pos;
+    });
+    connect(imageViewSlice_, &ImageView::analysisLineAddRequested, this, [this](int y) {
+        if (spectrumAnalysisPanel_) spectrumAnalysisPanel_->addLineAt(y);
+    });
+    connect(imageViewSlice_, &ImageView::analysisLineMoveRequested, this, [this](int index, int y) {
+        if (spectrumAnalysisPanel_) spectrumAnalysisPanel_->moveLine(index, y);
+    });
+    connect(imageViewSlice_, &ImageView::analysisLineDeleteRequested, this, [this](int index) {
+        if (spectrumAnalysisPanel_) spectrumAnalysisPanel_->deleteLine(index);
     });
 }
 
@@ -724,8 +823,12 @@ void MainWindow::loadSettings()
         if (panel == 7) panel = 8;
         else if (panel == 8) panel = 9;
     }
+    if (panelVersion < 3) {
+        // Migration: v2 index 9 was logs; v3 inserts spectrum analysis at 9.
+        if (panel == 9) panel = kLogPanelIndex;
+    }
 
-    if (panel >= 0 && panel <= 9) {
+    if (panel >= 0 && panel <= kLogPanelIndex) {
         sidebar_->setActivePanel(panel);
         onPanelSelected(panel);
     }
@@ -741,7 +844,7 @@ void MainWindow::saveSettings()
     if (mainSplitter_)
         s.setValue("window/splitter", mainSplitter_->saveState());
     s.setValue("window/panel", sidebar_ ? sidebar_->activePanel() : panelStack_->currentIndex());
-    s.setValue("window/panelVersion", 2);
+    s.setValue("window/panelVersion", 3);
     s.setValue("window/sidebarCollapsed", sidebar_->isCollapsed());
 }
 
@@ -879,6 +982,131 @@ void MainWindow::refreshSpectralProgressOverlay()
     spectralProgressBar_->setValue(qBound(0, progress, 100));
     positionSpectralProgressOverlay();
     spectralProgressOverlay_->show();
+}
+
+bool MainWindow::isSpectrumAnalysisActive() const
+{
+    return sidebar_ && sidebar_->activePanel() == kSpectrumAnalysisPanelIndex;
+}
+
+void MainWindow::openSpectrumAnalysisDialog()
+{
+    if (!spectrumCurveDialog_) {
+        spectrumCurveDialog_ = new SpectrumCurveDialog(this);
+        if (spectrumAnalysisPanel_) {
+            spectrumCurveDialog_->setRefreshRateHz(spectrumAnalysisPanel_->refreshRateHz());
+        }
+        connect(spectrumCurveDialog_, &SpectrumCurveDialog::sampleRefreshRequested,
+                this, &MainWindow::updateSpectrumCurveData);
+    }
+
+    spectrumCurveDialog_->show();
+    spectrumCurveDialog_->raise();
+    spectrumCurveDialog_->activateWindow();
+    refreshSpectrumAnalysisOverlay();
+    forceRefreshSpectrumCurves();
+}
+
+void MainWindow::refreshSpectrumAnalysisOverlay()
+{
+    if (!imageViewSlice_) return;
+    const bool enabled = isSpectrumAnalysisActive() && currentChannel_ == 1;
+    imageViewSlice_->setAnalysisOverlayEnabled(enabled);
+    imageViewSlice_->setAnalysisLines(spectrumAnalysisPanel_ ? spectrumAnalysisPanel_->lines()
+                                                             : QVector<SpectrumSampleLine>());
+}
+
+void MainWindow::forceRefreshSpectrumCurves()
+{
+    updateSpectrumCurveData(true);
+}
+
+void MainWindow::updateSpectrumCurveData(bool force)
+{
+    if (!spectrumAnalysisPanel_ || !spectrumCurveDialog_) return;
+    const double yRangeMultiplier = spectrumAnalysisPanel_->yRangeMultiplier();
+    const double yMinPositionPercent = spectrumAnalysisPanel_->yMinPositionPercent();
+    const double yMinDataSpan = spectrumAnalysisPanel_->yMinDataSpan();
+
+    if (latestSliceData_.isEmpty() || latestSliceWidth_ <= 0 || latestSliceHeight_ <= 0) {
+        spectrumAnalysisPanel_->setStatusText(QString::fromUtf8("等待 SliceStitch16 Mono16 数据"));
+        spectrumCurveDialog_->setStatusText(QString::fromUtf8("等待 SliceStitch16 Mono16 数据"));
+        spectrumCurveDialog_->setCurveData(QVector<QVector<double>>(),
+                                           QVector<QVector<double>>(),
+                                           QVector<QString>(),
+                                           QVector<QColor>(),
+                                           QString::fromUtf8("波长"),
+                                           yRangeMultiplier,
+                                           yMinPositionPercent,
+                                           yMinDataSpan);
+        return;
+    }
+    if (!force && lastCurveFrameId_ == latestSliceFrameId_) {
+        return;
+    }
+
+    const QVector<SpectrumSampleLine> lines = spectrumAnalysisPanel_->lines();
+    if (lines.isEmpty()) {
+        spectrumCurveDialog_->setCurveData(QVector<QVector<double>>(),
+                                           QVector<QVector<double>>(),
+                                           QVector<QString>(),
+                                           QVector<QColor>(),
+                                           QString::fromUtf8("波长"),
+                                           yRangeMultiplier,
+                                           yMinPositionPercent,
+                                           yMinDataSpan);
+        spectrumAnalysisPanel_->setStatusText(QString::fromUtf8("点击 SliceStitch16 图像添加采样线"));
+        lastCurveFrameId_ = latestSliceFrameId_;
+        return;
+    }
+
+    const int x0 = qBound(0, spectrumAnalysisPanel_->xStart(), latestSliceWidth_ - 1);
+    const int x1 = qBound(0, spectrumAnalysisPanel_->xEnd(), latestSliceWidth_ - 1);
+    const int startX = qMin(x0, x1);
+    const int endX = qMax(x0, x1);
+    if (startX == endX || latestSliceData_.size() < latestSliceWidth_ * latestSliceHeight_ * 2) {
+        spectrumCurveDialog_->setStatusText(QString::fromUtf8("映射范围或图像数据无效"));
+        return;
+    }
+
+    const double waveStart = spectrumAnalysisPanel_->wavelengthStart();
+    const double waveEnd = spectrumAnalysisPanel_->wavelengthEnd();
+    const double denom = static_cast<double>(endX - startX);
+    const int filterWindow = spectrumAnalysisPanel_->filterWindowPixels();
+    const int maxPlotPoints = spectrumAnalysisPanel_->maxPlotPoints();
+    const QVector<int> sampledXs = spectrumSampledXs(startX, endX, maxPlotPoints);
+    const auto* pixels = reinterpret_cast<const quint16*>(latestSliceData_.constData());
+
+    QVector<QVector<double>> xList;
+    QVector<QVector<double>> yList;
+    QVector<QString> names;
+    QVector<QColor> colors;
+    for (const SpectrumSampleLine& line : lines) {
+        const int y = qBound(0, line.y, latestSliceHeight_ - 1);
+        QVector<double> xs;
+        QVector<double> ys;
+        xs.reserve(sampledXs.size());
+        ys.reserve(sampledXs.size());
+        const int rowOffset = y * latestSliceWidth_;
+        for (int x : sampledXs) {
+            const double t = static_cast<double>(x - startX) / denom;
+            xs.append(waveStart + t * (waveEnd - waveStart));
+            ys.append(spectrumMovingAverage(pixels, rowOffset, latestSliceWidth_, x, filterWindow));
+        }
+        xList.append(xs);
+        yList.append(ys);
+        names.append(line.name());
+        colors.append(line.color);
+    }
+
+    spectrumCurveDialog_->setCurveData(xList, yList, names, colors, QString::fromUtf8("波长"),
+                                       yRangeMultiplier,
+                                       yMinPositionPercent,
+                                       yMinDataSpan);
+    spectrumAnalysisPanel_->setStatusText(QString::fromUtf8("已更新 %1 条曲线，帧 %2")
+                                              .arg(lines.size())
+                                              .arg(latestSliceFrameId_));
+    lastCurveFrameId_ = latestSliceFrameId_;
 }
 
 void MainWindow::handleLiveFrame(const StreamFrame& frame)

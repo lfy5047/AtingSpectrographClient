@@ -1,16 +1,17 @@
 #include "SidebarWidget.h"
-#include <QVBoxLayout>
+
+#include <QBrush>
 #include <QHBoxLayout>
+#include <QIcon>
+#include <QLinearGradient>
 #include <QPainter>
 #include <QPainterPath>
-#include <QPolygonF>
 #include <QPen>
-#include <QBrush>
-#include <QLinearGradient>
+#include <QPolygonF>
 #include <QPropertyAnimation>
 #include <QStyle>
+#include <QVBoxLayout>
 
-// nav item data: label, icon type, panel index
 static const struct { const char* label; int iconType; int panelIndex; } kNavItems[] = {
     {"仪表盘", 0, 0},
     {"设备连接", 1, 1},
@@ -21,7 +22,8 @@ static const struct { const char* label; int iconType; int panelIndex; } kNavIte
     {"流通道", 6, 6},
     {"光谱显示", 9, 7},
     {"录制回放", 8, 8},
-    {"系统日志", 7, 9},
+    {"光谱分析", 10, 9},
+    {"系统日志", 7, 10},
 };
 
 SidebarWidget::SidebarWidget(QWidget* parent)
@@ -38,7 +40,6 @@ void SidebarWidget::setupUi()
     root->setContentsMargins(0, 0, 0, 0);
     root->setSpacing(0);
 
-    // ── Logo area ──
     logoArea_ = new QWidget(this);
     logoArea_->setObjectName("sidebarLogo");
     logoArea_->setFixedHeight(58);
@@ -65,25 +66,21 @@ void SidebarWidget::setupUi()
         QFont f("Microsoft YaHei UI", 14, QFont::Bold);
         p.setFont(f);
         p.drawText(QRect(0, 0, 32, 32), Qt::AlignCenter, "A");
-        p.end();
         logoIcon_->setPixmap(pm);
     }
 
     logoText_ = new QLabel("AtingSpectrograph", logoArea_);
     logoText_->setObjectName("sidebarLogoText");
-
     logoLayout->addWidget(logoIcon_);
     logoLayout->addWidget(logoText_, 1);
     root->addWidget(logoArea_);
 
-    // ── Nav area ──
     navArea_ = new QWidget(this);
     auto* navLayout = new QVBoxLayout(navArea_);
     navLayout->setContentsMargins(4, 4, 4, 4);
     navLayout->setSpacing(0);
 
     QColor iconColor(0x7D, 0x85, 0x90);
-
     for (int i = 0; i < static_cast<int>(sizeof(kNavItems) / sizeof(kNavItems[0])); ++i) {
         auto* btn = new QPushButton(navArea_);
         btn->setObjectName("navItem");
@@ -104,14 +101,12 @@ void SidebarWidget::setupUi()
     navLayout->addStretch();
     root->addWidget(navArea_, 1);
 
-    // ── Footer area ──
     footerArea_ = new QWidget(this);
     footerArea_->setObjectName("sidebarFooter");
     auto* footerLayout = new QVBoxLayout(footerArea_);
     footerLayout->setContentsMargins(4, 6, 4, 6);
     footerLayout->setSpacing(2);
 
-    // connection indicator
     auto* connRow = new QHBoxLayout();
     connRow->setContentsMargins(8, 4, 8, 4);
     connDot_ = new QLabel(footerArea_);
@@ -123,7 +118,6 @@ void SidebarWidget::setupUi()
     connRow->addWidget(connText_, 1);
     footerLayout->addLayout(connRow);
 
-    // collapse button
     collapseBtn_ = new QPushButton(QString::fromUtf8("折叠菜单"), footerArea_);
     collapseBtn_->setObjectName("sidebarCollapseBtn");
     collapseBtn_->setCursor(Qt::PointingHandCursor);
@@ -134,7 +128,6 @@ void SidebarWidget::setupUi()
     footerLayout->addWidget(collapseBtn_);
 
     root->addWidget(footerArea_);
-
     setConnected(false);
     setActivePanel(0);
 }
@@ -147,46 +140,39 @@ static void drawIcon(QPainter& p, int type, const QColor& c, int sz)
     pen.setJoinStyle(Qt::RoundJoin);
     p.setPen(pen);
     p.setBrush(Qt::NoBrush);
-
-    float s = sz / 24.0f;
-    p.scale(s, s);
+    p.scale(sz / 24.0f, sz / 24.0f);
 
     switch (type) {
-    case 0: // Dashboard — 2x2 grid of rounded rects
+    case 0:
         for (int r = 0; r < 2; ++r)
             for (int c2 = 0; c2 < 2; ++c2)
                 p.drawRoundedRect(3 + c2 * 9, 3 + r * 9, 7, 7, 1.5, 1.5);
         break;
-    case 1: // Connection — link chain
+    case 1:
         p.drawEllipse(QPointF(8, 12), 3.5, 3.5);
         p.drawLine(10, 10, 14, 14);
         p.drawEllipse(QPointF(16, 12), 3.5, 3.5);
         break;
-    case 2: // Camera
+    case 2:
         p.drawRoundedRect(3, 7, 18, 12, 2, 2);
         p.drawEllipse(QPointF(12, 13), 4, 4);
         p.drawRect(9, 4, 6, 4);
         break;
-    case 3: // Mirror — circle with line to center
+    case 3:
         p.drawEllipse(QPointF(12, 12), 9, 9);
         p.drawLine(12, 12, 12, 5);
         p.drawLine(12, 12, 16, 13);
         break;
-    case 4: // IR — thermometer
+    case 4:
         p.drawEllipse(QPointF(12, 19.5f), 3.5f, 3.5f);
-    {
-        QPainterPath path;
-        path.addRoundedRect(10, 4, 4, 12, 2, 2);
-        p.drawPath(path);
-    }
+        p.drawRoundedRect(10, 4, 4, 12, 2, 2);
         break;
-    case 5: // Collect — 3 vertical bars
+    case 5:
         p.drawLine(7, 20, 7, 6);
         p.drawLine(12, 20, 12, 4);
         p.drawLine(17, 20, 17, 10);
         break;
-    case 6: // Stream — polyline wave
-    {
+    case 6: {
         QPainterPath path;
         path.moveTo(2, 16);
         path.lineTo(6, 16);
@@ -195,33 +181,37 @@ static void drawIcon(QPainter& p, int type, const QColor& c, int sz)
         path.lineTo(18, 12);
         path.lineTo(22, 12);
         p.drawPath(path);
-    }
         break;
-    case 7: // Logs — document with lines
+    }
+    case 7:
         p.drawRoundedRect(3, 3, 14, 18, 2, 2);
         p.drawLine(6, 9, 14, 9);
         p.drawLine(6, 13, 14, 13);
         p.drawLine(6, 17, 10, 17);
-        {
-            QPainterPath corner;
-            corner.moveTo(17, 3);
-            corner.lineTo(17, 8);
-            corner.lineTo(12, 8);
-            p.drawPath(corner);
-        }
         break;
-    case 8: // Record/Playback
-        p.drawEllipse(QPointF(8.0f, 12.0f), 2.5f, 2.5f); // record dot
-        p.drawRoundedRect(12, 6, 9, 12, 2, 2); // screen
-        p.drawPolygon(QPolygonF() << QPointF(15, 9) << QPointF(15, 15) << QPointF(19, 12)); // play
+    case 8:
+        p.drawEllipse(QPointF(8.0f, 12.0f), 2.5f, 2.5f);
+        p.drawRoundedRect(12, 6, 9, 12, 2, 2);
+        p.drawPolygon(QPolygonF() << QPointF(15, 9) << QPointF(15, 15) << QPointF(19, 12));
         break;
-    case 9: // Spectral
+    case 9:
         p.drawRoundedRect(3, 4, 18, 16, 2, 2);
         p.drawLine(6, 16, 6, 8);
         p.drawLine(10, 16, 10, 6);
         p.drawLine(14, 16, 14, 10);
         p.drawLine(18, 16, 18, 12);
         break;
+    case 10: {
+        p.drawLine(3, 18, 21, 18);
+        p.drawLine(4, 20, 4, 4);
+        QPainterPath curve;
+        curve.moveTo(5, 15);
+        curve.cubicTo(8, 7, 11, 8, 13, 12);
+        curve.cubicTo(15, 16, 18, 11, 21, 6);
+        p.drawPath(curve);
+        p.drawLine(5, 10, 21, 10);
+        break;
+    }
     }
 }
 
@@ -231,7 +221,6 @@ QPixmap SidebarWidget::makeIcon(int type, const QColor& color, int size)
     pm.fill(Qt::transparent);
     QPainter p(&pm);
     drawIcon(p, type, color, size);
-    p.end();
     return pm;
 }
 
@@ -241,9 +230,7 @@ void SidebarWidget::setConnected(bool connected)
     connDot_->setStyleSheet(connected
         ? "background-color: #26A641; border-radius: 5px; min-width: 10px; max-width: 10px; min-height: 10px; max-height: 10px;"
         : "background-color: #545D68; border-radius: 5px; min-width: 10px; max-width: 10px; min-height: 10px; max-height: 10px;");
-    connText_->setText(connected
-        ? QString::fromUtf8("已连接")
-        : QString::fromUtf8("未连接"));
+    connText_->setText(connected ? QString::fromUtf8("已连接") : QString::fromUtf8("未连接"));
 }
 
 void SidebarWidget::setActivePanel(int index)
@@ -263,7 +250,7 @@ void SidebarWidget::setActivePanel(int index)
 void SidebarWidget::setCollapsed(bool collapsed)
 {
     collapsed_ = collapsed;
-    int target = collapsed ? kCollapsedW : kExpandedW;
+    const int target = collapsed ? kCollapsedW : kExpandedW;
 
     if (!anim_) {
         anim_ = new QPropertyAnimation(this, "sidebarWidth", this);
