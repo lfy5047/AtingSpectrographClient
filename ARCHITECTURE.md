@@ -4,14 +4,23 @@
 
 1. `src/main.cpp` 初始化 plog、Qt 应用、全局字体和 `:/style/industrial.qss`。
 2. 创建 `MainWindow` 并进入 `QApplication::exec()`。
-3. `MainWindow` 构造 `DeviceClient`，再调用 `setupUi()`、`setupPanels()`、`setupConnections()`、`loadSettings()`。
-4. 用户在连接面板发起连接后，TCP 控制层和 UDP 流接收层开始与设备交互。
+3. `MainWindow` 构造 `DeviceClient`、`MainWindowChrome`、`MainWindowPanelRegistry`、`SpectrumAnalysisCoordinator` 和 `DeviceUiCoordinator`。
+4. `WindowSettingsStore` 恢复窗口 geometry、splitter、当前 Panel 和侧边栏折叠状态，`DeviceUiCoordinator` 启动 uptime、Spectral 渲染和进度刷新定时器。
+5. 用户在连接面板发起连接后，TCP 控制层和 UDP 流接收层开始与设备交互。
 
 ## 主要子系统
 
 ### UI 层
 
-- `MainWindow` 是应用组合根，负责布局、Panel 切换、设备信号汇总、图像显示、录制回放、Spectral 重建和光谱分析调度。
+- `MainWindow` 是轻量组合根，只负责顶层对象创建顺序、窗口设置恢复/保存和关闭生命周期。
+- `MainWindowChrome` 创建主窗口静态 UI 骨架：侧边栏、顶部栏、主 splitter、`ViewerAreaWidget`、右侧 Panel stack 和底部日志。
+- `MainWindowPanelRegistry` 创建并注册右侧业务 Panel，集中维护 Panel index、标题、系统日志 toggle 和光谱分析 Panel 激活。
+- `DeviceUiCoordinator` 连接设备层与 UI 层，负责连接状态、UDP bind、帧分发、录制回放、Spectral 刷新、stream stats、raw log 和 uptime。
+- `ViewerAreaWidget` 管理 Raw16、SliceStitch16、Spectral、Playback 四个图像页，以及图像统计 overlay 和 Spectral progress overlay。
+- `ImageFrameUtils` 提供 Mono8/Mono16 显示图转换与 Mono16 统计计算。
+- `SpectralScanController` 管理 Live/Playback 的 Raw16/SliceStitch16 光谱扫描缓存、进度状态和渲染入口。
+- `SpectrumAnalysisCoordinator` 管理 SliceStitch16 光谱分析的最新帧缓存、采样线 overlay、曲线窗口和曲线刷新。
+- `WindowSettingsStore` 集中处理窗口级 QSettings 和 Panel index 迁移。
 - `src/Ui/panels/` 每个面板处理一个业务域：
   - `ConnectionPanel`：设备 IP、TCP 端口、本地 UDP 端口、连接/断开/Ping。
   - `CameraPanel`：相机采集设备选择、分辨率、采集启动/停止。
@@ -25,7 +34,7 @@
   - `DashboardPanel`：连接、转镜、流统计、运行时间等摘要信息。
   - `LogPanel`：显示 TCP raw log。
 - `src/Ui/widgets/` 提供侧栏、顶部栏、图像视图、QCustomPlot 等复用部件。
-- 主图像区包含 Raw16、SliceStitch16、Spectral、Playback 四个 `ImageView` 页面。
+- 主图像区由 `ViewerAreaWidget` 承载，包含 Raw16、SliceStitch16、Spectral、Playback 四个 `ImageView` 页面。
 
 ### 设备聚合层
 
@@ -92,18 +101,18 @@ Service 类继承或使用 `RpcServiceBase`，把业务 API 封装为命令名�
 
 1. 用户在 `StreamPanel` 勾选通道并应用订阅。
 2. `StreamControlService::subscribe()` 通知设备把指定通道推送到本地 UDP 端口。
-3. `MainWindow` 确保 `StreamClient` 已绑定该端口。
+3. `DeviceUiCoordinator` 确保 `StreamClient` 已绑定该端口。
 4. `StreamClient` 持续读取 UDP 包并交给 `FrameAssembler`。
 5. 完整帧产生后发出 `StreamFrame`。
-6. `MainWindow` 按通道选择 Raw/Slice `ImageView`；Mono8 直接显示，Mono16 做当前帧 min/max 拉伸到 8-bit 灰度。
-7. 对 `HeaderFrame/DataFrame/TailFrame`，`MainWindow` 同时将帧送入 Live `SpectralScanBuilder`。
+6. `DeviceUiCoordinator` 按通道选择 `ViewerAreaWidget` 中的 Raw/Slice 页面；Mono8 直接显示，Mono16 通过 `ImageFrameUtils` 做当前帧 min/max 拉伸到 8-bit 灰度。
+7. 对 `HeaderFrame/DataFrame/TailFrame`，`DeviceUiCoordinator` 同时将帧送入 `SpectralScanController` 的 Live 扫描缓存。
 8. 顶栏与仪表盘更新按通道 FPS、接收帧数、丢帧数。
 
 ### Spectral 光谱显示
 
 1. 服务端把高光谱数据拆成单列 UDP 帧，payload 排布为 `height x bands`，`StreamHeader.width` 表示 bands/通道数。
 2. `FrameAssembler` 透传 `frame_type` 和服务端 `frame_id`，UI 侧用 `streamFrameId` 识别列顺序和缺口。
-3. `SpectralScanBuilder` 遇到 `HeaderFrame` 开始或重置扫描，`DataFrame` 追加列，`TailFrame` 结束当前扫描。
+3. `SpectralScanController` 持有 Live/Playback 两组 `SpectralScanBuilder`；构建器遇到 `HeaderFrame` 开始或重置扫描，`DataFrame` 追加列，`TailFrame` 结束当前扫描。
 4. 同一源通道出现缺列时，构建器用上一列补齐；双通道订阅造成的正常 `streamFrameId` 步长会被学习。
 5. `SpectralPanel` 控制源通道、显示模式和来源模式：Auto、Live、Playback。
 6. Auto 模式在回放活跃时显示 Playback Spectral，停止后显示 Live；强制 Live 或 Playback 时按用户选择显示。
@@ -111,12 +120,12 @@ Service 类继承或使用 `RpcServiceBase`，把业务 API 封装为命令名�
 
 ### SliceStitch16 光谱分析
 
-1. 激活侧边栏“光谱分析”时，`MainWindow` 自动切换到 SliceStitch16 图像页，打开或置顶 `SpectrumCurveDialog`。
-2. `MainWindow` 在 `frameReady` 中缓存最新 SliceStitch16 Mono16 原始 payload、宽高和 `streamFrameId`。
-3. `ImageView` 在分析模式下绘制坐标刻度和水平采样线；点击空白位置添加线，拖动已有线修改 y，右键删除线。
+1. 激活侧边栏“光谱分析”时，`MainWindowPanelRegistry` 自动切换到 SliceStitch16 图像页，打开或置顶 `SpectrumCurveDialog`。
+2. `DeviceUiCoordinator` 在 `frameReady` 中把最新 SliceStitch16 Mono16 原始 payload、宽高和 `streamFrameId` 交给 `SpectrumAnalysisCoordinator` 缓存。
+3. `ViewerAreaWidget` 启用 SliceStitch16 分析 overlay；底层 `ImageView` 绘制坐标刻度和水平采样线，支持点击添加线、拖动修改 y、右键删除线。
 4. `SpectrumAnalysisPanel` 保存采样线、波长映射范围、刷新率和曲线处理参数。
 5. `SpectrumCurveDialog` 内部定时器按刷新率发出 `sampleRefreshRequested`。
-6. `MainWindow::updateSpectrumCurveData()` 从最新原始 Mono16 帧中按采样线取单行数据。
+6. `SpectrumAnalysisCoordinator` 从最新原始 Mono16 帧中按采样线取单行数据。
 7. 曲线数据按最大绘制点数做等间距抽点，并对每个绘制点做居中移动平均滤波。
 8. X 轴使用原始 x 在 `xStart..xEnd` 内的线性位置映射为波长，Y 轴使用滤波后的 DN 值。
 9. `SpectrumCurveDialog` 用所有实际绘制点计算全局 Y 范围；小于最小跨度时固定跨度，超过阈值时应用 `yRangeMultiplier`，并把最小值锚定到指定百分比位置。
@@ -125,7 +134,7 @@ Service 类继承或使用 `RpcServiceBase`，把业务 API 封装为命令名�
 
 1. 用户在 `RecordPlaybackPanel` 选择或生成 `.asrec` 路径并开始录制。
 2. `FrameRecorder` 启动 `FrameRecorderWriterWorker`，先写入占位文件头。
-3. `MainWindow` 每次收到 `DeviceClient::frameReady` 时，把原始帧数据、`frameType` 和 `streamFrameId` 交给 recorder。
+3. `DeviceUiCoordinator` 每次收到 `DeviceClient::frameReady` 时，把原始帧数据、`frameType` 和 `streamFrameId` 交给 recorder。
 4. worker 为每帧生成帧头、CRC 和相对时间戳，进入队列后由写入线程落盘。
 5. 停止录制时 worker drain 队列，重写文件头并发出停止信号。
 
@@ -135,7 +144,7 @@ Service 类继承或使用 `RpcServiceBase`，把业务 API 封装为命令名�
 2. `FramePlaybackController` 的扫描线程读取文件头和所有帧头，建立随机访问索引。
 3. 用户设置 FPS、播放帧数限制和循环开关后开始回放。
 4. controller 按定时器读取当前索引对应的 payload，校验 CRC，发出 `RecordedFrame`。
-5. `RecordPlaybackPanel` 转发帧，`MainWindow` 渲染到 Playback `ImageView`，并把光谱帧送入 Playback `SpectralScanBuilder`。
+5. `RecordPlaybackPanel` 转发帧，`DeviceUiCoordinator` 渲染到 Playback `ImageView`，并把光谱帧送入 `SpectralScanController` 的 Playback 扫描缓存。
 6. 进度条释放时调用 `seekTo()`；播放结束按循环设置回到窗口起点或停止。
 
 ## 存储与持久化
@@ -153,12 +162,12 @@ Service 类继承或使用 `RpcServiceBase`，把业务 API 封装为命令名�
 
 - 新增 RPC 命令：先改 `src/Client/rpc/RpcCommands.h`，再在 `src/Client/services/` 添加 service 方法，最后接入对应 panel。
 - 新增设备事件：在 `DeviceClient.cpp` 的 `eventReceived` lambda 中识别 `evt`，新增 signal 并在 UI 层连接。
-- 新增图像通道：更新 `Protocol.h` 的 `StreamChannel`、`StreamPanel` 的通道选择、`MainWindow::frameReady` 的通道分发和图像视图。
-- 调整 Spectral 重建：优先看 `src/Ui/SpectralScanBuilder.*`、`src/Ui/panels/SpectralPanel.*`、`MainWindow::handleLiveFrame()` 和 `MainWindow::handlePlaybackFrame()`。
-- 调整光谱分析：优先看 `src/Ui/panels/SpectrumAnalysisPanel.*`、`src/Ui/SpectrumCurveDialog.*`、`src/Ui/widgets/ImageView.*`、`MainWindow::updateSpectrumCurveData()`。
+- 新增图像通道：更新 `Protocol.h` 的 `StreamChannel`、`StreamPanel` 的通道选择、`DeviceUiCoordinator` 的通道分发和 `ViewerAreaWidget` 的图像视图。
+- 调整 Spectral 重建：优先看 `src/Ui/SpectralScanController.*`、`src/Ui/SpectralScanBuilder.*`、`src/Ui/panels/SpectralPanel.*` 和 `DeviceUiCoordinator` 的 Spectral 刷新逻辑。
+- 调整光谱分析：优先看 `src/Ui/SpectrumAnalysisCoordinator.*`、`src/Ui/panels/SpectrumAnalysisPanel.*`、`src/Ui/SpectrumCurveDialog.*`、`src/Ui/widgets/ImageView.*`。
 - 调整录制文件格式：优先改 `RecordingFileFormat.*`，再同步 `FrameRecorderWriterWorker` 和 `FramePlaybackController`。
-- 调整录制/回放 UI：改 `RecordPlaybackPanel.*`，必要时同步 `MainWindow` 的 Playback 视图切换和帧渲染连接。
-- 调整 UI 视觉：优先改 `resources/style/industrial.qss`；结构性布局改 `MainWindow` 或具体 panel/widget。
+- 调整录制/回放 UI：改 `RecordPlaybackPanel.*`，必要时同步 `DeviceUiCoordinator` 的 Playback 视图切换和帧渲染连接。
+- 调整 UI 视觉：优先改 `resources/style/industrial.qss`；结构性布局改 `MainWindowChrome`、`ViewerAreaWidget` 或具体 panel/widget。
 - 修改构建环境：优先改 `config.bat`；依赖目录和 include/link 规则在 `libs/libsdefine.cmake` 与顶层 `CMakeLists.txt`。
 
 ## 当前状态观察

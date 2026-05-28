@@ -1,4 +1,54 @@
 ﻿# AI 任务日志
+## 2026-05-28 MainWindow 拆分文档同步
+
+- 目标：同步项目上下文和架构文档，反映 `MainWindow` 拆分后的模块边界和数据流。
+- 文件变更：
+  - `PROJECT_CONTEXT.md`
+  - `ARCHITECTURE.md`
+  - `AI_TASK_LOG.md`
+- 实现要点：
+  - 更新关键目录、首读文件和主运行流程，加入 `MainWindowChrome`、`MainWindowPanelRegistry`、`DeviceUiCoordinator`、`WindowSettingsStore` 等新入口。
+  - 更新图像流、Spectral、光谱分析、录制回放的数据流责任方。
+  - 更新常见修改入口，避免继续指向已拆走职责的 `MainWindow` 方法。
+- 验证：
+  - 文档变更，未运行构建。
+
+## 2026-05-28 MainWindow 第二轮组合根拆分
+
+- 目标：继续拆分 `MainWindow`，把 UI 骨架、Panel 注册、设备信号协调和窗口设置迁移到独立模块。
+- 文件变更：
+  - `src/Ui/MainWindow.*`
+  - `src/Ui/MainWindowChrome.*`
+  - `src/Ui/MainWindowPanelRegistry.*`
+  - `src/Ui/DeviceUiCoordinator.*`
+  - `src/Ui/WindowSettingsStore.*`
+- 实现要点：
+  - `MainWindowChrome` 接管主窗口静态布局和顶层控件访问。
+  - `MainWindowPanelRegistry` 接管业务 Panel 创建、切换、日志 toggle 和光谱分析标题点击。
+  - `DeviceUiCoordinator` 接管设备连接、录制回放、Spectral 刷新、stream stats、raw log 和 uptime。
+  - `WindowSettingsStore` 集中窗口设置恢复、保存和 Panel index 迁移。
+  - `MainWindow.cpp` 从 552 行进一步缩减到 59 行，仅保留初始化顺序和关闭流程。
+- 验证：
+  - 已运行 `.\make.bat`，Release 构建通过。
+
+## 2026-05-28 MainWindow 渐进瘦身重构
+
+- 目标：拆分 `MainWindow` 中的图像显示、Spectral 扫描状态和光谱分析协调逻辑，保留主窗口作为组合根。
+- 文件变更：
+  - `src/Ui/MainWindow.*`
+  - `src/Ui/ImageFrameUtils.*`
+  - `src/Ui/SpectralScanController.*`
+  - `src/Ui/SpectrumAnalysisCoordinator.*`
+  - `src/Ui/widgets/ViewerAreaWidget.*`
+- 实现要点：
+  - 新增图像转换/统计工具，集中 Mono8/Mono16 显示图和 Mono16 统计计算。
+  - 新增 `ViewerAreaWidget` 管理通道 tab、四个 `ImageView`、图像统计 overlay 和 Spectral progress overlay。
+  - 新增 `SpectralScanController` 管理 Live/Playback 光谱扫描缓存、进度状态和渲染入口。
+  - 新增 `SpectrumAnalysisCoordinator` 管理 SliceStitch16 最新帧缓存、采样线 overlay、曲线窗口和曲线刷新。
+  - `MainWindow.cpp` 从 1234 行缩减到 552 行，主要保留窗口装配、信号分发和状态同步。
+- 验证：
+  - 已运行 `.\make.bat`，Release 构建通过。
+
 ## 2026-05-28 项目上下文与架构文档更新
 
 - 目标：刷新项目级交接文档，补齐近期光谱分析、曲线处理和 Panel 索引变化。

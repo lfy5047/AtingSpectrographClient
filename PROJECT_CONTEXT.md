@@ -45,9 +45,16 @@ AtingSpectrographClient 是一个 Windows 桌面端光谱仪/成像设备控制�
 ## 关键目录
 
 - `src/main.cpp`：应用入口，初始化 plog、`QApplication`、全局字体和 `industrial.qss`。
-- `src/Ui/MainWindow.*`：主窗口组合根，负责布局、Panel 装配、全局信号连接、图像显示转换、Spectral/光谱分析调度。
+- `src/Ui/MainWindow.*`：主窗口组合根，只负责创建顶层协作者、恢复窗口状态和关闭生命周期。
+- `src/Ui/MainWindowChrome.*`：主窗口静态骨架，创建侧边栏、顶部栏、图像区、右侧 Panel 容器和底部日志。
+- `src/Ui/MainWindowPanelRegistry.*`：右侧业务 Panel 的创建、注册、切换、标题点击和 Panel index 管理。
+- `src/Ui/DeviceUiCoordinator.*`：设备信号与 UI 的绑定层，负责连接状态、帧分发、录制回放、Spectral 刷新、stream stats、raw log 和 uptime。
+- `src/Ui/WindowSettingsStore.*`：窗口 geometry、splitter、当前 Panel、侧边栏折叠状态和 Panel index 迁移。
+- `src/Ui/ImageFrameUtils.*`：Mono8/Mono16 图像显示转换和 Mono16 图像统计。
+- `src/Ui/SpectralScanController.*`：Live/Playback Spectral 扫描缓存、进度状态和渲染入口。
+- `src/Ui/SpectrumAnalysisCoordinator.*`：SliceStitch16 光谱分析协调，管理最新帧缓存、采样线 overlay、曲线窗口和曲线刷新。
 - `src/Ui/panels/`：右侧业务面板，包括连接、相机、转镜、红外、采集、流、Spectral、录制回放、光谱分析等。
-- `src/Ui/widgets/`：通用 UI 部件，包括侧边栏、顶部栏、图像视图、QCustomPlot 副本等。
+- `src/Ui/widgets/`：通用 UI 部件，包括侧边栏、顶部栏、图像视图、ViewerArea、QCustomPlot 副本等。
 - `src/Client/core/`：`DeviceClient` 聚合控制连接、流连接和各业务 service。
 - `src/Client/rpc/`：TCP 控制协议、JSON-RPC 请求/响应封装、命令名定义。
 - `src/Client/services/`：面向 UI 的业务 API 封装，把按钮行为转换为 RPC 命令。
@@ -67,39 +74,44 @@ AtingSpectrographClient 是一个 Windows 桌面端光谱仪/成像设备控制�
 4. `src/main.cpp`
 5. `src/Ui/MainWindow.cpp`
 6. `src/Ui/MainWindow.h`
-7. `src/Client/core/DeviceClient.cpp`
-8. `src/Client/rpc/Protocol.h`
-9. `src/Client/rpc/ControlClient.cpp`
-10. `src/Client/stream/StreamClient.cpp`
-11. `src/Client/stream/FrameAssembler.cpp`
-12. `src/Client/recording/RecordingFileFormat.h`
-13. `src/Ui/SpectralScanBuilder.cpp`
-14. `src/Ui/panels/SpectralPanel.cpp`
-15. `src/Ui/panels/RecordPlaybackPanel.cpp`
-16. `src/Ui/panels/SpectrumAnalysisPanel.cpp`
-17. `src/Ui/SpectrumCurveDialog.cpp`
+7. `src/Ui/MainWindowChrome.cpp`
+8. `src/Ui/MainWindowPanelRegistry.cpp`
+9. `src/Ui/DeviceUiCoordinator.cpp`
+10. `src/Client/core/DeviceClient.cpp`
+11. `src/Client/rpc/Protocol.h`
+12. `src/Client/rpc/ControlClient.cpp`
+13. `src/Client/stream/StreamClient.cpp`
+14. `src/Client/stream/FrameAssembler.cpp`
+15. `src/Client/recording/RecordingFileFormat.h`
+16. `src/Ui/SpectralScanController.cpp`
+17. `src/Ui/SpectralScanBuilder.cpp`
+18. `src/Ui/SpectrumAnalysisCoordinator.cpp`
+19. `src/Ui/panels/SpectralPanel.cpp`
+20. `src/Ui/panels/RecordPlaybackPanel.cpp`
+21. `src/Ui/panels/SpectrumAnalysisPanel.cpp`
+22. `src/Ui/SpectrumCurveDialog.cpp`
 
 ## 主运行流程
 
 1. `main()` 初始化日志、Qt 应用信息、全局字体和 `:/style/industrial.qss`。
-2. `MainWindow` 创建 `DeviceClient`，搭建侧边栏、顶部栏、图像区、右侧 Panel 和底部日志。
+2. `MainWindow` 创建 `DeviceClient`、`MainWindowChrome`、`MainWindowPanelRegistry`、`SpectrumAnalysisCoordinator` 和 `DeviceUiCoordinator`，再由 `WindowSettingsStore` 恢复窗口状态。
 3. `ConnectionPanel` 调用 `DeviceClient::connectTo()`，由 `ControlClient` 建立 TCP 连接。
-4. TCP 连接成功后，`MainWindow` 使用连接面板中的 UDP 端口绑定 `StreamClient`，并查询系统版本。
+4. TCP 连接成功后，`DeviceUiCoordinator` 使用连接面板中的 UDP 端口绑定 `StreamClient`，并查询系统版本。
 5. 各控制 Panel 通过 `DeviceClient` 下的 service 调用 RPC 命令。
 6. `ControlClient` 发送 `CtrlHeader + JSON`，按 seq 管理 pending 回调、超时和断线清理。
 7. UDP 包进入 `StreamClient`，`FrameAssembler` 按通道和 frame id 重组完整帧并发出 `StreamFrame`。
-8. `MainWindow` 收到完整帧后，若录制开启，先把原始帧数据和光谱帧元数据交给 `FrameRecorder` 写入 `.asrec`。
-9. Raw16/SliceStitch16 的 Mono8/Mono16 数据被转换为 8-bit `QImage` 显示，同时更新 FPS、帧数、丢帧和图像统计。
-10. `HeaderFrame/DataFrame/TailFrame` 同时进入 `SpectralScanBuilder`，Spectral 页按单波段、范围平均或 RGB 合成渲染。
+8. `DeviceUiCoordinator` 收到完整帧后，若录制开启，先把原始帧数据和光谱帧元数据交给 `FrameRecorder` 写入 `.asrec`。
+9. Raw16/SliceStitch16 的 Mono8/Mono16 数据经 `ImageFrameUtils` 转换为 8-bit `QImage`，由 `ViewerAreaWidget` 显示并更新图像统计 overlay。
+10. `HeaderFrame/DataFrame/TailFrame` 同时进入 `SpectralScanController` 管理的 `SpectralScanBuilder`，Spectral 页按单波段、范围平均或 RGB 合成渲染。
 11. `RecordPlaybackPanel` 选择 `.asrec` 后由 `FramePlaybackController` 异步扫描索引并按 FPS 回放到 Playback 视图。
-12. 光谱分析 Panel 激活时自动切到 SliceStitch16 页，打开独立曲线窗口，并从最新 SliceStitch16 Mono16 原始帧中采样曲线。
+12. 光谱分析 Panel 激活时由 `MainWindowPanelRegistry` 自动切到 SliceStitch16 页；`SpectrumAnalysisCoordinator` 打开独立曲线窗口，并从最新 SliceStitch16 Mono16 原始帧中采样曲线。
 
 ## 光谱分析功能
 
 当前光谱分析只针对 SliceStitch16：
 - 侧边栏 Panel index：光谱分析为 `9`，系统日志为特殊 index `10`；窗口状态版本为 `panelVersion = 3`。
-- `MainWindow` 缓存最新一帧 SliceStitch16 Mono16 原始数据：`latestSliceData_`、宽高和 `latestSliceFrameId_`。
-- `ImageView` 在 SliceStitch16 页支持亮色坐标刻度、水平采样线显示、点击添加线、拖动改 y、右键删除线。
+- `SpectrumAnalysisCoordinator` 缓存最新一帧 SliceStitch16 Mono16 原始数据、宽高和 `streamFrameId`。
+- `ViewerAreaWidget` 承载 SliceStitch16 图像页；底层 `ImageView` 支持亮色坐标刻度、水平采样线显示、点击添加线、拖动改 y、右键删除线。
 - `SpectrumAnalysisPanel` 管理波长映射、采样线列表、刷新率、滤波窗口、最大绘制点数、Y 轴倍率、Y 轴最小值位置和最小数据跨度。
 - `SpectrumCurveDialog` 是独立 QDialog，使用 QCustomPlot 绘制曲线，并保存窗口 geometry。
 - 曲线 X 轴是按 `xStart..xEnd` 线性映射后的波长，Y 轴是对应行的原始 16-bit DN 值。
@@ -130,7 +142,7 @@ RPC 命令名集中在 `src/Client/rpc/RpcCommands.h`，当前分组包括：
 
 ## 配置与持久化
 
-- UI 状态通过 `QSettings` 保存：窗口 geometry、splitter、当前 Panel、侧边栏折叠状态等。
+- UI 状态通过 `WindowSettingsStore` 和 `QSettings` 保存：窗口 geometry、splitter、当前 Panel、侧边栏折叠状态等。
 - 光谱分析使用 `spectrumAnalysis/` 前缀保存参数、采样线、曲线窗口 geometry。
 - 录制/回放状态通过 `QSettings` 保存：最近录制路径、最近回放路径、回放 FPS、播放帧数限制、循环开关。
 - 应用组织与名称：`AtingSpectrograph` / `AtingSpectrographClient`。
