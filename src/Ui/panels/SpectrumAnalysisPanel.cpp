@@ -83,6 +83,37 @@ SpectrumAnalysisPanel::SpectrumAnalysisPanel(QWidget* parent)
     mappingForm->addRow(QString::fromUtf8("刷新率"), refreshRateSpin_);
     root->addWidget(mappingGroup);
 
+    auto* lineGroup = new QGroupBox(QString::fromUtf8("水平采样线"), this);
+    auto* lineLayout = new QVBoxLayout(lineGroup);
+
+    auto* addRow = new QHBoxLayout();
+    addYSpin_ = new QSpinBox(this);
+    addYSpin_->setRange(0, 1000000);
+    addButton_ = new QPushButton(QString::fromUtf8("添加"), this);
+    addButton_->setProperty("primary", true);
+    addRow->addWidget(new QLabel("Y", this));
+    addRow->addWidget(addYSpin_, 1);
+    addRow->addWidget(addButton_);
+    lineLayout->addLayout(addRow);
+
+    lineList_ = new QListWidget(this);
+    lineList_->setSelectionMode(QAbstractItemView::SingleSelection);
+    lineLayout->addWidget(lineList_, 1);
+
+    auto* buttonRow = new QHBoxLayout();
+    deleteButton_ = new QPushButton(QString::fromUtf8("删除选中"), this);
+    deleteButton_->setProperty("danger", true);
+    clearButton_ = new QPushButton(QString::fromUtf8("清空"), this);
+    clearButton_->setProperty("danger", true);
+    buttonRow->addWidget(deleteButton_);
+    buttonRow->addWidget(clearButton_);
+    lineLayout->addLayout(buttonRow);
+    root->addWidget(lineGroup, 1);
+
+    showDialogButton_ = new QPushButton(QString::fromUtf8("打开曲线窗口"), this);
+    showDialogButton_->setProperty("primary", true);
+    root->addWidget(showDialogButton_);
+
     auto* processingGroup = new QGroupBox(QString::fromUtf8("曲线处理"), this);
     auto* processingForm = new QFormLayout(processingGroup);
 
@@ -119,37 +150,6 @@ SpectrumAnalysisPanel::SpectrumAnalysisPanel(QWidget* parent)
     yMinDataSpanSpin_->setSuffix(QString::fromUtf8(" DN"));
     processingForm->addRow(QString::fromUtf8("最小数据跨度"), yMinDataSpanSpin_);
     root->addWidget(processingGroup);
-
-    auto* lineGroup = new QGroupBox(QString::fromUtf8("水平采样线"), this);
-    auto* lineLayout = new QVBoxLayout(lineGroup);
-
-    auto* addRow = new QHBoxLayout();
-    addYSpin_ = new QSpinBox(this);
-    addYSpin_->setRange(0, 1000000);
-    addButton_ = new QPushButton(QString::fromUtf8("添加"), this);
-    addButton_->setProperty("primary", true);
-    addRow->addWidget(new QLabel("Y", this));
-    addRow->addWidget(addYSpin_, 1);
-    addRow->addWidget(addButton_);
-    lineLayout->addLayout(addRow);
-
-    lineList_ = new QListWidget(this);
-    lineList_->setSelectionMode(QAbstractItemView::SingleSelection);
-    lineLayout->addWidget(lineList_, 1);
-
-    auto* buttonRow = new QHBoxLayout();
-    deleteButton_ = new QPushButton(QString::fromUtf8("删除选中"), this);
-    deleteButton_->setProperty("danger", true);
-    clearButton_ = new QPushButton(QString::fromUtf8("清空"), this);
-    clearButton_->setProperty("danger", true);
-    buttonRow->addWidget(deleteButton_);
-    buttonRow->addWidget(clearButton_);
-    lineLayout->addLayout(buttonRow);
-    root->addWidget(lineGroup, 1);
-
-    showDialogButton_ = new QPushButton(QString::fromUtf8("打开曲线窗口"), this);
-    showDialogButton_->setProperty("primary", true);
-    root->addWidget(showDialogButton_);
 
     statusLabel_ = new QLabel(QString::fromUtf8("等待 SliceStitch16 Mono16 数据"), this);
     statusLabel_->setWordWrap(true);
