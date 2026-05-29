@@ -42,8 +42,7 @@ static const char* const DeviceOptions = "camera.device_options";
 }
 
 namespace Ir {
-// 基础透传与标定
-static const char* const SendRaw = "ir.send_raw";
+// 基础标定
 static const char* const TriggerCalibration = "ir.trigger_calibration";
 static const char* const ForceShutter = "ir.force_shutter";
 // 版本

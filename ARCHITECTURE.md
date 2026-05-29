@@ -25,7 +25,7 @@
   - `ConnectionPanel`：设备 IP、TCP 端口、本地 UDP 端口、连接/断开/Ping。
   - `CameraPanel`：相机采集设备选择、分辨率、采集启动/停止。
   - `MirrorPanel`：转镜角度、速度、归零、预设位等控制。
-  - `IrPanel`：红外参数、校准、状态/温度/模块查询、原始命令发送。
+  - `IrPanel`：红外参数、校准、状态/温度/模块查询。
   - `CollectPanel`：采集流程开始/停止/状态查询。
   - `StreamPanel`：Raw16/SliceStitch16 通道订阅、取消订阅、状态轮询。
   - `SpectralPanel`：光谱显示来源、源通道、单波段/范围平均/RGB 合成参数与扫描状态。
@@ -62,7 +62,7 @@ Service 类继承或使用 `RpcServiceBase`，把业务 API 封装为命令名�
 - `StreamControlService`：`stream.subscribe`、`stream.unsubscribe`、`stream.status`
 - `MirrorService`：角度查询、速度、相对/绝对目标、启动/停止、home、set home、preset
 - `CameraService`：start/stop stream、分辨率、设备选择、设备列表
-- `IrService`：原始命令、校准、亮度/对比度、积分时间、模块自检/温度查询
+- `IrService`：版本/图像/参数/滤波/翻转/积分/模式/查询/维护/坏元管理
 - `CollectService`：采集开始/停止/状态
 
 `RpcServiceBase` 使用 `QPointer<QObject>` 保护 UI context；回调返回时如果面板对象已销毁，则丢弃回调。

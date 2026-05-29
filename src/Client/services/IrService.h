@@ -1,6 +1,5 @@
 #pragma once
 
-#include <QByteArray>
 #include "RpcServiceBase.h"
 
 class IrService : public RpcServiceBase {
@@ -10,8 +9,7 @@ public:
     {
     }
 
-    // 基础透传与标定
-    void sendRaw(QObject* context, quint8 cmd, const QByteArray& data, quint8 readbackLen, JsonCallback cb) const;
+    // 基础标定
     void triggerCalibration(QObject* context, Callback cb) const;
     void forceShutter(QObject* context, Callback cb) const;
     // 版本
@@ -51,10 +49,10 @@ public:
     void readBadPixelCount(QObject* context, JsonCallback cb) const;
     // 维护与校正
     void maintenanceUnlock(QObject* context, quint8 value, Callback cb) const;
-    void maintenanceExec(QObject* context, const QString& name, quint8 value, Callback cb) const;
+    void maintenanceExec(QObject* context, const QString& name, quint8 value, JsonCallback cb) const;
     void twoPointCalibP1(QObject* context, Callback cb) const;
     void twoPointCalibP2(QObject* context, Callback cb) const;
-    void saveCalibParams(QObject* context, Callback cb) const;
+    void saveCalibParams(QObject* context, JsonCallback cb) const;
     void clearK(QObject* context, quint8 value, Callback cb) const;
     void clearB(QObject* context, quint8 value, Callback cb) const;
     // 坏元管理

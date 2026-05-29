@@ -1,20 +1,7 @@
 #include "IrService.h"
 #include <vector>
 
-// ---- 基础透传与标定 ----
-
-void IrService::sendRaw(QObject* context, quint8 cmd, const QByteArray& data, quint8 readbackLen, JsonCallback cb) const
-{
-    std::vector<uint8_t> payloadData(data.begin(), data.end());
-    nlohmann::json params = {
-        {"cmd", cmd},
-        {"data", payloadData},
-        {"readback_len", readbackLen},
-    };
-    request(RpcCommand::Ir::SendRaw, params, context, [cb](const RpcResult& r) {
-        if (cb) cb(r.ok, r.data, r.msg);
-    }, RpcTimeout::Slow);
-}
+// ---- 基础标定 ----
 
 void IrService::triggerCalibration(QObject* context, Callback cb) const
 {
@@ -81,7 +68,6 @@ void IrService::setDde(QObject* context, quint8 value, Callback cb) const
 
 void IrService::setTemporalFilter(QObject* context, bool enable, quint8 coeff, Callback cb) const
 {
-    quint8 v = static_cast<quint8>((coeff << 4) | (enable ? 1 : 0));
     simpleCmd(RpcCommand::Ir::SetTemporalFilter, {{"enable", enable}, {"coeff", coeff}}, context, cb);
 }
 
@@ -206,9 +192,11 @@ void IrService::maintenanceUnlock(QObject* context, quint8 value, Callback cb) c
     simpleCmd(RpcCommand::Ir::MaintenanceUnlock, {{"value", value}}, context, cb, RpcTimeout::Slow);
 }
 
-void IrService::maintenanceExec(QObject* context, const QString& name, quint8 value, Callback cb) const
+void IrService::maintenanceExec(QObject* context, const QString& name, quint8 value, JsonCallback cb) const
 {
-    simpleCmd(RpcCommand::Ir::MaintenanceExec, {{"name", name.toStdString()}, {"value", value}}, context, cb, RpcTimeout::Slow);
+    request(RpcCommand::Ir::MaintenanceExec, {{"name", name.toStdString()}, {"value", value}}, context, [cb](const RpcResult& r) {
+        if (cb) cb(r.ok, r.data, r.msg);
+    }, RpcTimeout::Slow);
 }
 
 void IrService::twoPointCalibP1(QObject* context, Callback cb) const
@@ -221,9 +209,11 @@ void IrService::twoPointCalibP2(QObject* context, Callback cb) const
     simpleCmd(RpcCommand::Ir::TwoPointCalibP2, {}, context, cb, RpcTimeout::Slow);
 }
 
-void IrService::saveCalibParams(QObject* context, Callback cb) const
+void IrService::saveCalibParams(QObject* context, JsonCallback cb) const
 {
-    simpleCmd(RpcCommand::Ir::SaveCalibParams, {}, context, cb, RpcTimeout::Slow);
+    request(RpcCommand::Ir::SaveCalibParams, {}, context, [cb](const RpcResult& r) {
+        if (cb) cb(r.ok, r.data, r.msg);
+    }, RpcTimeout::Slow);
 }
 
 void IrService::clearK(QObject* context, quint8 value, Callback cb) const

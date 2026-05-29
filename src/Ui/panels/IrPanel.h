@@ -1,11 +1,9 @@
 #pragma once
 
 #include <QWidget>
-#include <QSlider>
 #include <QSpinBox>
 #include <QPushButton>
 #include <QLabel>
-#include <QLineEdit>
 #include <QComboBox>
 #include <QCheckBox>
 #include <QGroupBox>
@@ -28,19 +26,18 @@ private:
     void setupQueries(class QVBoxLayout* root);
     void setupMaintenance(class QVBoxLayout* root);
     void setupBadPixel(class QVBoxLayout* root);
-    void setupRawCmd(class QVBoxLayout* root);
 
-    void showResult(const QString& title, bool ok, const nlohmann::json& data, const QString& err);
+    void setActionStatus(const QString& text);
+    void updateReadoutLabel(QLabel* label, const QString& title, bool ok, const nlohmann::json& data,
+                            const QString& err, const QString& unit = QString());
+    static QString jsonValueToText(const nlohmann::json& value);
     static QString bytesToHex(const nlohmann::json& arr);
 
     DeviceClient* dev_;
 
     // 亮度 / 对比度 / DDE / AB 模式
-    QSlider*   brightSlider_ = nullptr;
     QSpinBox*  brightSpin_ = nullptr;
-    QSlider*   contrastSlider_ = nullptr;
     QSpinBox*  contrastSpin_ = nullptr;
-    QSlider*   ddeSlider_ = nullptr;
     QSpinBox*  ddeSpin_ = nullptr;
     QComboBox* abModeCombo_ = nullptr;
 
@@ -82,12 +79,6 @@ private:
     QComboBox* badPixelSearchCombo_ = nullptr;
     QSpinBox*  badPixelPosSpin_[4] = {nullptr, nullptr, nullptr, nullptr};
 
-    // 原始命令
-    QLineEdit* rawCmdEdit_ = nullptr;
-    QLineEdit* rawDataEdit_ = nullptr;
-    QSpinBox*  rawLenSpin_ = nullptr;
-    QLabel*    rawResultLabel_ = nullptr;
-
-    // 共享结果标签
-    QLabel*    resultLabel_ = nullptr;
+    // 动作状态标签。读取结果使用各自就近的 QLabel。
+    QLabel*    actionStatusLabel_ = nullptr;
 };

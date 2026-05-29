@@ -5,6 +5,8 @@
 #include <QGridLayout>
 #include <QFormLayout>
 #include <QMessageBox>
+#include <QSizePolicy>
+#include <string>
 
 namespace {
 
@@ -17,6 +19,60 @@ QGridLayout* makeGrid2Col(std::initializer_list<QWidget*> widgets)
         ++idx;
     }
     return grid;
+}
+
+void configureInlineField(QWidget* field)
+{
+    field->setMinimumWidth(0);
+    field->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+}
+
+void configureInlineButton(QPushButton* button)
+{
+    button->setProperty("small", true);
+    button->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+}
+
+void configureCompactSpin(QSpinBox* spin, int width = 64)
+{
+    spin->setMinimumWidth(width);
+    spin->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
+}
+
+QWidget* makeValueButtonRow(QWidget* value, QPushButton* button, QWidget* parent)
+{
+    auto* container = new QWidget(parent);
+    auto* row = new QHBoxLayout(container);
+    row->setContentsMargins(0, 0, 0, 0);
+    row->setSpacing(6);
+    configureInlineField(value);
+    configureInlineButton(button);
+    row->addWidget(value, 1);
+    row->addWidget(button);
+    return container;
+}
+
+QLabel* makeReadoutLabel(const QString& title, QWidget* parent)
+{
+    auto* label = new QLabel(title + ": -", parent);
+    // label->setProperty("readoutSm", true);
+    label->setMinimumWidth(140);
+    label->setWordWrap(true);
+    return label;
+}
+
+QWidget* makeReadoutButtonRow(QLabel* readout, QPushButton* button, QWidget* parent)
+{
+    auto* container = new QWidget(parent);
+    auto* row = new QHBoxLayout(container);
+    row->setContentsMargins(0, 0, 0, 0);
+    row->setSpacing(6);
+    readout->setMinimumWidth(0);
+    readout->setSizePolicy(QSizePolicy::Ignored, QSizePolicy::Fixed);
+    configureInlineButton(button);
+    row->addWidget(readout, 1);
+    row->addWidget(button);
+    return container;
 }
 
 } // namespace
@@ -36,7 +92,6 @@ IrPanel::IrPanel(DeviceClient* dev, QWidget* parent)
     setupQueries(root);
     setupMaintenance(root);
     setupBadPixel(root);
-    setupRawCmd(root);
 
     root->addStretch();
 }
@@ -48,52 +103,46 @@ void IrPanel::setupImageParams(QVBoxLayout* root)
     auto* grp = new QGroupBox(QString::fromUtf8("亮度 / 对比度 / DDE"), this);
     auto* form = new QFormLayout(grp);
 
-    auto makeSliderRow = [this](QSlider*& slider, QSpinBox*& spin, int mx) {
-        auto* row = new QHBoxLayout();
-        slider = new QSlider(Qt::Horizontal, this);
-        slider->setRange(0, mx);
-        spin = new QSpinBox(this);
+    auto makeSpin = [this](int mx) {
+        auto* spin = new QSpinBox(this);
         spin->setRange(0, mx);
-        connect(slider, &QSlider::valueChanged, spin, &QSpinBox::setValue);
-        connect(spin, QOverload<int>::of(&QSpinBox::valueChanged), slider, &QSlider::setValue);
-        row->addWidget(slider, 1);
-        row->addWidget(spin);
-        return row;
+        return spin;
     };
 
-    form->addRow(QString::fromUtf8("亮度"), makeSliderRow(brightSlider_, brightSpin_, 255));
-    form->addRow(QString::fromUtf8("对比度"), makeSliderRow(contrastSlider_, contrastSpin_, 255));
-    form->addRow(QString::fromUtf8("DDE"), makeSliderRow(ddeSlider_, ddeSpin_, 15));
+    brightSpin_ = makeSpin(255);
+    contrastSpin_ = makeSpin(255);
+    ddeSpin_ = makeSpin(15);
+
+    auto* applyBright   = new QPushButton(QString::fromUtf8("设亮度"), this);
+    auto* applyContrast = new QPushButton(QString::fromUtf8("设对比度"), this);
+    auto* applyDde      = new QPushButton(QString::fromUtf8("设 DDE"), this);
+    form->addRow(QString::fromUtf8("亮度"), makeValueButtonRow(brightSpin_, applyBright, this));
+    form->addRow(QString::fromUtf8("对比度"), makeValueButtonRow(contrastSpin_, applyContrast, this));
+    form->addRow(QString::fromUtf8("DDE"), makeValueButtonRow(ddeSpin_, applyDde, this));
 
     abModeCombo_ = new QComboBox(this);
     abModeCombo_->addItem(QString::fromUtf8("手动"), 0);
     abModeCombo_->addItem(QString::fromUtf8("自动"), 1);
-    form->addRow(QString::fromUtf8("AB 模式"), abModeCombo_);
-
-    auto* applyBright   = new QPushButton(QString::fromUtf8("设亮度"), this);
-    auto* applyContrast = new QPushButton(QString::fromUtf8("设对比"), this);
-    auto* applyDde      = new QPushButton(QString::fromUtf8("设 DDE"), this);
     auto* applyAbMode   = new QPushButton(QString::fromUtf8("设 AB 模式"), this);
-    form->addRow(makeGrid2Col({applyBright, applyContrast, applyDde, applyAbMode}));
+    form->addRow(QString::fromUtf8("AB 模式"), makeValueButtonRow(abModeCombo_, applyAbMode, this));
     root->addWidget(grp);
 
-    auto warn = [this](const QString& title) {
-        return [this, title](bool ok, const QString& err) {
-            if (!ok) QMessageBox::warning(this, title, err);
-        };
+    auto writeCb = [this](bool ok, const QString& err) {
+        if (ok) QMessageBox::information(this, "IR", QString::fromUtf8("写入成功"));
+        else QMessageBox::warning(this, "IR", err);
     };
 
-    connect(applyBright, &QPushButton::clicked, this, [this, warn]() {
-        dev_->ir()->setBrightness(this, static_cast<quint8>(brightSpin_->value()), warn("IR"));
+    connect(applyBright, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->setBrightness(this, static_cast<quint8>(brightSpin_->value()), writeCb);
     });
-    connect(applyContrast, &QPushButton::clicked, this, [this, warn]() {
-        dev_->ir()->setContrast(this, static_cast<quint8>(contrastSpin_->value()), warn("IR"));
+    connect(applyContrast, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->setContrast(this, static_cast<quint8>(contrastSpin_->value()), writeCb);
     });
-    connect(applyDde, &QPushButton::clicked, this, [this, warn]() {
-        dev_->ir()->setDde(this, static_cast<quint8>(ddeSpin_->value()), warn("IR"));
+    connect(applyDde, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->setDde(this, static_cast<quint8>(ddeSpin_->value()), writeCb);
     });
-    connect(applyAbMode, &QPushButton::clicked, this, [this, warn]() {
-        dev_->ir()->setAbMode(this, static_cast<quint8>(abModeCombo_->currentData().toInt()), warn("IR"));
+    connect(applyAbMode, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->setAbMode(this, static_cast<quint8>(abModeCombo_->currentData().toInt()), writeCb);
     });
 }
 
@@ -106,59 +155,53 @@ void IrPanel::setupIntegration(QVBoxLayout* root)
 
     integSpin_ = new QSpinBox(this);
     integSpin_->setRange(0, 65535);
-    form->addRow(QString::fromUtf8("积分时间"), integSpin_);
+    auto* applyInteg = new QPushButton(QString::fromUtf8("设积分"), this);
+    form->addRow(QString::fromUtf8("积分时间"), makeValueButtonRow(integSpin_, applyInteg, this));
 
     integModeCombo_ = new QComboBox(this);
     integModeCombo_->addItem(QString::fromUtf8("自动积分"), 0);
     integModeCombo_->addItem(QString::fromUtf8("手动积分"), 1);
-    form->addRow(QString::fromUtf8("积分模式"), integModeCombo_);
+    auto* applyIntegMode = new QPushButton(QString::fromUtf8("设积分模式"), this);
+    form->addRow(QString::fromUtf8("积分模式"), makeValueButtonRow(integModeCombo_, applyIntegMode, this));
 
     gearModeCombo_ = new QComboBox(this);
     gearModeCombo_->addItem(QString::fromUtf8("手动切换"), 0);
     gearModeCombo_->addItem(QString::fromUtf8("自动切换"), 1);
-    form->addRow(QString::fromUtf8("档位模式"), gearModeCombo_);
+    auto* applyGearMode = new QPushButton(QString::fromUtf8("设档位模式"), this);
+    form->addRow(QString::fromUtf8("档位模式"), makeValueButtonRow(gearModeCombo_, applyGearMode, this));
 
     gearSelectCombo_ = new QComboBox(this);
     for (int i = 0; i < 8; ++i)
         gearSelectCombo_->addItem(QString::number(i), i);
-    form->addRow(QString::fromUtf8("档位选择"), gearSelectCombo_);
+    auto* applyGear = new QPushButton(QString::fromUtf8("选积分档"), this);
+    form->addRow(QString::fromUtf8("档位选择"), makeValueButtonRow(gearSelectCombo_, applyGear, this));
 
-    auto* applyInteg       = new QPushButton(QString::fromUtf8("设积分"), this);
-    auto* applyIntegMode   = new QPushButton(QString::fromUtf8("设积分模式"), this);
-    auto* applyGearMode    = new QPushButton(QString::fromUtf8("设档位模式"), this);
-    auto* applyGear        = new QPushButton(QString::fromUtf8("选积分档"), this);
-    auto* queryIntBtn      = new QPushButton(QString::fromUtf8("查询积分时间"), this);
-
-    form->addRow(makeGrid2Col({applyInteg, applyIntegMode, applyGearMode}));
-
-    auto* row2 = new QHBoxLayout();
-    row2->addWidget(applyGear);
-    row2->addWidget(queryIntBtn);
-    form->addRow(row2);
+    auto* queryIntBtn = new QPushButton(QString::fromUtf8("查询积分时间"), this);
+    auto* integReadout = makeReadoutLabel(QString::fromUtf8("积分时间"), this);
+    form->addRow(QString::fromUtf8("读取"), makeReadoutButtonRow(integReadout, queryIntBtn, this));
 
     root->addWidget(grp);
 
-    auto warn = [this](const QString& title) {
-        return [this, title](bool ok, const QString& err) {
-            if (!ok) QMessageBox::warning(this, title, err);
-        };
+    auto writeCb = [this](bool ok, const QString& err) {
+        if (ok) QMessageBox::information(this, "IR", QString::fromUtf8("写入成功"));
+        else QMessageBox::warning(this, "IR", err);
     };
 
-    connect(applyInteg, &QPushButton::clicked, this, [this, warn]() {
-        dev_->ir()->setIntegration(this, static_cast<quint16>(integSpin_->value()), warn("IR"));
+    connect(applyInteg, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->setIntegration(this, static_cast<quint16>(integSpin_->value()), writeCb);
     });
-    connect(applyIntegMode, &QPushButton::clicked, this, [this, warn]() {
-        dev_->ir()->setManualIntegration(this, static_cast<quint8>(integModeCombo_->currentData().toInt()), warn("IR"));
+    connect(applyIntegMode, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->setManualIntegration(this, static_cast<quint8>(integModeCombo_->currentData().toInt()), writeCb);
     });
-    connect(applyGearMode, &QPushButton::clicked, this, [this, warn]() {
-        dev_->ir()->setIntegrationGearMode(this, static_cast<quint8>(gearModeCombo_->currentData().toInt()), warn("IR"));
+    connect(applyGearMode, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->setIntegrationGearMode(this, static_cast<quint8>(gearModeCombo_->currentData().toInt()), writeCb);
     });
-    connect(applyGear, &QPushButton::clicked, this, [this, warn]() {
-        dev_->ir()->selectIntegrationGear(this, static_cast<quint8>(gearSelectCombo_->currentData().toInt()), warn("IR"));
+    connect(applyGear, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->selectIntegrationGear(this, static_cast<quint8>(gearSelectCombo_->currentData().toInt()), writeCb);
     });
-    connect(queryIntBtn, &QPushButton::clicked, this, [this]() {
-        dev_->ir()->queryIntegrationTime(this, [this](bool ok, const nlohmann::json& data, const QString& err) {
-            showResult(QString::fromUtf8("积分时间"), ok, data, err);
+    connect(queryIntBtn, &QPushButton::clicked, this, [this, integReadout]() {
+        dev_->ir()->queryIntegrationTime(this, [this, integReadout](bool ok, const nlohmann::json& data, const QString& err) {
+            updateReadoutLabel(integReadout, QString::fromUtf8("积分时间"), ok, data, err);
         });
     });
 }
@@ -175,48 +218,45 @@ void IrPanel::setupImageDisplay(QVBoxLayout* root)
     imageTypeCombo_->addItem(QString::fromUtf8("14bit 原始"), 1);
     imageTypeCombo_->addItem(QString::fromUtf8("14bit 预处理"), 2);
     imageTypeCombo_->addItem(QString::fromUtf8("测试图"), 3);
-    form->addRow(QString::fromUtf8("图像类型"), imageTypeCombo_);
+    auto* applyImageType = new QPushButton(QString::fromUtf8("设图像类型"), this);
+    form->addRow(QString::fromUtf8("图像类型"), makeValueButtonRow(imageTypeCombo_, applyImageType, this));
 
     testPatternCombo_ = new QComboBox(this);
     testPatternCombo_->addItem(QString::fromUtf8("竖灰阶"), 0);
     testPatternCombo_->addItem(QString::fromUtf8("横灰阶"), 1);
     testPatternCombo_->addItem(QString::fromUtf8("棋盘格"), 2);
-    form->addRow(QString::fromUtf8("测试图"), testPatternCombo_);
+    auto* applyTestPattern = new QPushButton(QString::fromUtf8("设测试图"), this);
+    form->addRow(QString::fromUtf8("测试图"), makeValueButtonRow(testPatternCombo_, applyTestPattern, this));
 
     colorModeCombo_ = new QComboBox(this);
     colorModeCombo_->addItem(QString::fromUtf8("白热"), 0);
     colorModeCombo_->addItem(QString::fromUtf8("黑热"), 1);
-    form->addRow(QString::fromUtf8("彩色模式"), colorModeCombo_);
+    auto* applyColorMode = new QPushButton(QString::fromUtf8("设彩色模式"), this);
+    form->addRow(QString::fromUtf8("彩色模式"), makeValueButtonRow(colorModeCombo_, applyColorMode, this));
 
     badPixelDispCombo_ = new QComboBox(this);
     badPixelDispCombo_->addItem(QString::fromUtf8("正常"), 0);
     badPixelDispCombo_->addItem(QString::fromUtf8("高亮"), 1);
-    form->addRow(QString::fromUtf8("坏元显示"), badPixelDispCombo_);
-
-    auto* applyImageType    = new QPushButton(QString::fromUtf8("设图像类型"), this);
-    auto* applyTestPattern  = new QPushButton(QString::fromUtf8("设测试图"), this);
-    auto* applyColorMode    = new QPushButton(QString::fromUtf8("设彩色模式"), this);
     auto* applyBadPixelDisp = new QPushButton(QString::fromUtf8("设坏元显示"), this);
-    form->addRow(makeGrid2Col({applyImageType, applyTestPattern, applyColorMode, applyBadPixelDisp}));
+    form->addRow(QString::fromUtf8("坏元显示"), makeValueButtonRow(badPixelDispCombo_, applyBadPixelDisp, this));
     root->addWidget(grp);
 
-    auto warn = [this](const QString& title) {
-        return [this, title](bool ok, const QString& err) {
-            if (!ok) QMessageBox::warning(this, title, err);
-        };
+    auto writeCb = [this](bool ok, const QString& err) {
+        if (ok) QMessageBox::information(this, "IR", QString::fromUtf8("写入成功"));
+        else QMessageBox::warning(this, "IR", err);
     };
 
-    connect(applyImageType, &QPushButton::clicked, this, [this, warn]() {
-        dev_->ir()->setImageType(this, static_cast<quint8>(imageTypeCombo_->currentData().toInt()), warn("IR"));
+    connect(applyImageType, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->setImageType(this, static_cast<quint8>(imageTypeCombo_->currentData().toInt()), writeCb);
     });
-    connect(applyTestPattern, &QPushButton::clicked, this, [this, warn]() {
-        dev_->ir()->setTestPattern(this, static_cast<quint8>(testPatternCombo_->currentData().toInt()), warn("IR"));
+    connect(applyTestPattern, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->setTestPattern(this, static_cast<quint8>(testPatternCombo_->currentData().toInt()), writeCb);
     });
-    connect(applyColorMode, &QPushButton::clicked, this, [this, warn]() {
-        dev_->ir()->setColorMode(this, static_cast<quint8>(colorModeCombo_->currentData().toInt()), warn("IR"));
+    connect(applyColorMode, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->setColorMode(this, static_cast<quint8>(colorModeCombo_->currentData().toInt()), writeCb);
     });
-    connect(applyBadPixelDisp, &QPushButton::clicked, this, [this, warn]() {
-        dev_->ir()->setBadPixelDisplayMode(this, static_cast<quint8>(badPixelDispCombo_->currentData().toInt()), warn("IR"));
+    connect(applyBadPixelDisp, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->setBadPixelDisplayMode(this, static_cast<quint8>(badPixelDispCombo_->currentData().toInt()), writeCb);
     });
 }
 
@@ -227,55 +267,58 @@ void IrPanel::setupFilters(QVBoxLayout* root)
     auto* grp = new QGroupBox(QString::fromUtf8("滤波"), this);
     auto* form = new QFormLayout(grp);
 
+    auto* applyTempFilter = new QPushButton(QString::fromUtf8("设时域滤波"), this);
+    configureInlineButton(applyTempFilter);
     {
         auto* row = new QHBoxLayout();
+        row->setContentsMargins(0, 0, 0, 0);
+        row->setSpacing(6);
         tempFilterChk_ = new QCheckBox(QString::fromUtf8("启用"), this);
         tempFilterCoeffSpin_ = new QSpinBox(this);
         tempFilterCoeffSpin_->setRange(1, 15);
         tempFilterCoeffSpin_->setValue(1);
+        configureCompactSpin(tempFilterCoeffSpin_);
         row->addWidget(tempFilterChk_);
         row->addWidget(new QLabel(QString::fromUtf8("系数 1-15"), this));
         row->addWidget(tempFilterCoeffSpin_);
-        row->addStretch();
+        row->addWidget(applyTempFilter);
         form->addRow(QString::fromUtf8("时域滤波"), row);
     }
 
+    auto* applyMedianFilter = new QPushButton(QString::fromUtf8("设中值滤波"), this);
+    configureInlineButton(applyMedianFilter);
     {
         auto* row = new QHBoxLayout();
+        row->setContentsMargins(0, 0, 0, 0);
+        row->setSpacing(6);
         medianFilterChk_ = new QCheckBox(QString::fromUtf8("启用"), this);
         medianFilterCoeffSpin_ = new QSpinBox(this);
         medianFilterCoeffSpin_->setRange(10, 127);
         medianFilterCoeffSpin_->setValue(10);
+        configureCompactSpin(medianFilterCoeffSpin_);
         row->addWidget(medianFilterChk_);
         row->addWidget(new QLabel(QString::fromUtf8("系数 10-127"), this));
         row->addWidget(medianFilterCoeffSpin_);
-        row->addStretch();
+        row->addWidget(applyMedianFilter);
         form->addRow(QString::fromUtf8("中值滤波"), row);
     }
 
-    auto* applyTempFilter   = new QPushButton(QString::fromUtf8("设时域滤波"), this);
-    auto* applyMedianFilter = new QPushButton(QString::fromUtf8("设中值滤波"), this);
-    auto* row = new QHBoxLayout();
-    row->addWidget(applyTempFilter);
-    row->addWidget(applyMedianFilter);
-    form->addRow(row);
     root->addWidget(grp);
 
-    auto warn = [this](const QString& title) {
-        return [this, title](bool ok, const QString& err) {
-            if (!ok) QMessageBox::warning(this, title, err);
-        };
+    auto writeCb = [this](bool ok, const QString& err) {
+        if (ok) QMessageBox::information(this, "IR", QString::fromUtf8("写入成功"));
+        else QMessageBox::warning(this, "IR", err);
     };
 
-    connect(applyTempFilter, &QPushButton::clicked, this, [this, warn]() {
+    connect(applyTempFilter, &QPushButton::clicked, this, [this, writeCb]() {
         bool en = tempFilterChk_->isChecked();
         quint8 coeff = static_cast<quint8>(tempFilterCoeffSpin_->value());
-        dev_->ir()->setTemporalFilter(this, en, coeff, warn("IR"));
+        dev_->ir()->setTemporalFilter(this, en, coeff, writeCb);
     });
-    connect(applyMedianFilter, &QPushButton::clicked, this, [this, warn]() {
+    connect(applyMedianFilter, &QPushButton::clicked, this, [this, writeCb]() {
         bool en = medianFilterChk_->isChecked();
         quint8 coeff = static_cast<quint8>(medianFilterCoeffSpin_->value());
-        dev_->ir()->setMedianFilter(this, en, coeff, warn("IR"));
+        dev_->ir()->setMedianFilter(this, en, coeff, writeCb);
     });
 }
 
@@ -294,34 +337,31 @@ void IrPanel::setupFlipSync(QVBoxLayout* root)
     };
 
     flipHCombo_ = makeOnOffCombo();
-    form->addRow(QString::fromUtf8("左右翻转"), flipHCombo_);
+    auto* applyFlipH = new QPushButton(QString::fromUtf8("设左右翻转"), this);
+    form->addRow(QString::fromUtf8("左右翻转"), makeValueButtonRow(flipHCombo_, applyFlipH, this));
 
     flipVCombo_ = makeOnOffCombo();
-    form->addRow(QString::fromUtf8("上下翻转"), flipVCombo_);
+    auto* applyFlipV = new QPushButton(QString::fromUtf8("设上下翻转"), this);
+    form->addRow(QString::fromUtf8("上下翻转"), makeValueButtonRow(flipVCombo_, applyFlipV, this));
 
     extSyncCombo_ = makeOnOffCombo();
-    form->addRow(QString::fromUtf8("外同步"), extSyncCombo_);
-
-    auto* applyFlipH   = new QPushButton(QString::fromUtf8("设左右翻转"), this);
-    auto* applyFlipV   = new QPushButton(QString::fromUtf8("设上下翻转"), this);
     auto* applyExtSync = new QPushButton(QString::fromUtf8("设外同步"), this);
-    form->addRow(makeGrid2Col({applyFlipH, applyFlipV, applyExtSync}));
+    form->addRow(QString::fromUtf8("外同步"), makeValueButtonRow(extSyncCombo_, applyExtSync, this));
     root->addWidget(grp);
 
-    auto warn = [this](const QString& title) {
-        return [this, title](bool ok, const QString& err) {
-            if (!ok) QMessageBox::warning(this, title, err);
-        };
+    auto writeCb = [this](bool ok, const QString& err) {
+        if (ok) QMessageBox::information(this, "IR", QString::fromUtf8("写入成功"));
+        else QMessageBox::warning(this, "IR", err);
     };
 
-    connect(applyFlipH, &QPushButton::clicked, this, [this, warn]() {
-        dev_->ir()->setFlipHorizontal(this, static_cast<quint8>(flipHCombo_->currentData().toInt()), warn("IR"));
+    connect(applyFlipH, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->setFlipHorizontal(this, static_cast<quint8>(flipHCombo_->currentData().toInt()), writeCb);
     });
-    connect(applyFlipV, &QPushButton::clicked, this, [this, warn]() {
-        dev_->ir()->setFlipVertical(this, static_cast<quint8>(flipVCombo_->currentData().toInt()), warn("IR"));
+    connect(applyFlipV, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->setFlipVertical(this, static_cast<quint8>(flipVCombo_->currentData().toInt()), writeCb);
     });
-    connect(applyExtSync, &QPushButton::clicked, this, [this, warn]() {
-        dev_->ir()->setExternalSync(this, static_cast<quint8>(extSyncCombo_->currentData().toInt()), warn("IR"));
+    connect(applyExtSync, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->setExternalSync(this, static_cast<quint8>(extSyncCombo_->currentData().toInt()), writeCb);
     });
 }
 
@@ -335,32 +375,27 @@ void IrPanel::setupModeControl(QVBoxLayout* root)
     standbyCombo_ = new QComboBox(this);
     standbyCombo_->addItem(QString::fromUtf8("正常"), 0);
     standbyCombo_->addItem(QString::fromUtf8("待机"), 1);
-    form->addRow(QString::fromUtf8("待机"), standbyCombo_);
+    auto* applyStandby = new QPushButton(QString::fromUtf8("设待机"), this);
+    form->addRow(QString::fromUtf8("待机"), makeValueButtonRow(standbyCombo_, applyStandby, this));
 
     autoCalibCombo_ = new QComboBox(this);
     autoCalibCombo_->addItem(QString::fromUtf8("关"), 0);
     autoCalibCombo_->addItem(QString::fromUtf8("开"), 1);
-    form->addRow(QString::fromUtf8("上电自动校正\n(协议值反转)"), autoCalibCombo_);
-
-    auto* applyStandby   = new QPushButton(QString::fromUtf8("设待机"), this);
     auto* applyAutoCalib = new QPushButton(QString::fromUtf8("设上电校正"), this);
-    auto* row = new QHBoxLayout();
-    row->addWidget(applyStandby);
-    row->addWidget(applyAutoCalib);
-    form->addRow(row);
+    form->addRow(QString::fromUtf8("上电自动校正\n(协议值反转)"),
+                 makeValueButtonRow(autoCalibCombo_, applyAutoCalib, this));
     root->addWidget(grp);
 
-    auto warn = [this](const QString& title) {
-        return [this, title](bool ok, const QString& err) {
-            if (!ok) QMessageBox::warning(this, title, err);
-        };
+    auto writeCb = [this](bool ok, const QString& err) {
+        if (ok) QMessageBox::information(this, "IR", QString::fromUtf8("写入成功"));
+        else QMessageBox::warning(this, "IR", err);
     };
 
-    connect(applyStandby, &QPushButton::clicked, this, [this, warn]() {
-        dev_->ir()->setStandby(this, static_cast<quint8>(standbyCombo_->currentData().toInt()), warn("IR"));
+    connect(applyStandby, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->setStandby(this, static_cast<quint8>(standbyCombo_->currentData().toInt()), writeCb);
     });
-    connect(applyAutoCalib, &QPushButton::clicked, this, [this, warn]() {
-        dev_->ir()->setOnboardAutoCalibration(this, static_cast<quint8>(autoCalibCombo_->currentData().toInt()), warn("IR"));
+    connect(applyAutoCalib, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->setOnboardAutoCalibration(this, static_cast<quint8>(autoCalibCombo_->currentData().toInt()), writeCb);
     });
 }
 
@@ -371,9 +406,9 @@ void IrPanel::setupQueries(QVBoxLayout* root)
     auto* grp = new QGroupBox(QString::fromUtf8("查询与操作"), this);
     auto* vb = new QVBoxLayout(grp);
 
-    resultLabel_ = new QLabel("-", this);
-    resultLabel_->setWordWrap(true);
-    resultLabel_->setProperty("secondary", true);
+    actionStatusLabel_ = new QLabel("-", this);
+    actionStatusLabel_->setWordWrap(true);
+    actionStatusLabel_->setProperty("secondary", true);
 
     auto* calibBtn     = new QPushButton(QString::fromUtf8("触发标定"), this);
     auto* forceShutterBtn = new QPushButton(QString::fromUtf8("强制制冷"), this);
@@ -386,58 +421,72 @@ void IrPanel::setupQueries(QVBoxLayout* root)
     auto* readCorrBtn  = new QPushButton(QString::fromUtf8("读校正档位"), this);
     auto* readBadBtn   = new QPushButton(QString::fromUtf8("读坏元数"), this);
 
-    vb->addWidget(calibBtn);
-    vb->addWidget(forceShutterBtn);
-    vb->addWidget(versionBtn);
-    vb->addWidget(selfChkBtn);
-    vb->addWidget(coreTempBtn);
-    vb->addWidget(focusTempBtn);
-    vb->addWidget(modIdBtn);
-    vb->addWidget(readMeanBtn);
-    vb->addWidget(readCorrBtn);
-    vb->addWidget(readBadBtn);
-    vb->addWidget(resultLabel_);
+    auto* actionRow = new QHBoxLayout();
+    actionRow->addWidget(calibBtn);
+    actionRow->addWidget(forceShutterBtn);
+    vb->addLayout(actionRow);
+
+    auto* versionReadout = makeReadoutLabel(QString::fromUtf8("版本"), this);
+    auto* selfChkReadout = makeReadoutLabel(QString::fromUtf8("自检"), this);
+    auto* coreTempReadout = makeReadoutLabel(QString::fromUtf8("机芯温度"), this);
+    auto* focusTempReadout = makeReadoutLabel(QString::fromUtf8("焦面温度"), this);
+    auto* modIdReadout = makeReadoutLabel(QString::fromUtf8("模组 ID"), this);
+    auto* meanReadout = makeReadoutLabel(QString::fromUtf8("均值"), this);
+    auto* corrReadout = makeReadoutLabel(QString::fromUtf8("校正档位"), this);
+    auto* badReadout = makeReadoutLabel(QString::fromUtf8("坏元数"), this);
+
+    vb->addWidget(makeReadoutButtonRow(versionReadout, versionBtn, this));
+    vb->addWidget(makeReadoutButtonRow(selfChkReadout, selfChkBtn, this));
+    vb->addWidget(makeReadoutButtonRow(coreTempReadout, coreTempBtn, this));
+    vb->addWidget(makeReadoutButtonRow(focusTempReadout, focusTempBtn, this));
+    vb->addWidget(makeReadoutButtonRow(modIdReadout, modIdBtn, this));
+    vb->addWidget(makeReadoutButtonRow(meanReadout, readMeanBtn, this));
+    vb->addWidget(makeReadoutButtonRow(corrReadout, readCorrBtn, this));
+    vb->addWidget(makeReadoutButtonRow(badReadout, readBadBtn, this));
+    vb->addWidget(actionStatusLabel_);
     root->addWidget(grp);
 
-    auto showCb = [this](const QString& title) {
-        return [this, title](bool ok, const nlohmann::json& data, const QString& err) {
-            showResult(title, ok, data, err);
+    auto readCb = [this](QLabel* label, const QString& title, const QString& unit = QString()) {
+        return [this, label, title, unit](bool ok, const nlohmann::json& data, const QString& err) {
+            updateReadoutLabel(label, title, ok, data, err, unit);
         };
     };
 
     connect(calibBtn, &QPushButton::clicked, this, [this]() {
         dev_->ir()->triggerCalibration(this, [this](bool ok, const QString& err) {
-            resultLabel_->setText(ok ? "OK" : err);
+            if (!ok) QMessageBox::warning(this, "IR", err);
+            setActionStatus(ok ? "OK" : err);
         });
     });
     connect(forceShutterBtn, &QPushButton::clicked, this, [this]() {
         dev_->ir()->forceShutter(this, [this](bool ok, const QString& err) {
-            resultLabel_->setText(ok ? "OK" : err);
+            if (!ok) QMessageBox::warning(this, "IR", err);
+            setActionStatus(ok ? "OK" : err);
         });
     });
-    connect(versionBtn, &QPushButton::clicked, this, [this, showCb]() {
-        dev_->ir()->getVersion(this, showCb(QString::fromUtf8("版本")));
+    connect(versionBtn, &QPushButton::clicked, this, [this, readCb, versionReadout]() {
+        dev_->ir()->getVersion(this, readCb(versionReadout, QString::fromUtf8("版本")));
     });
-    connect(selfChkBtn, &QPushButton::clicked, this, [this, showCb]() {
-        dev_->ir()->readSelfCheck(this, showCb(QString::fromUtf8("自检")));
+    connect(selfChkBtn, &QPushButton::clicked, this, [this, readCb, selfChkReadout]() {
+        dev_->ir()->readSelfCheck(this, readCb(selfChkReadout, QString::fromUtf8("自检")));
     });
-    connect(coreTempBtn, &QPushButton::clicked, this, [this, showCb]() {
-        dev_->ir()->readCoreTemp(this, showCb(QString::fromUtf8("机芯温度")));
+    connect(coreTempBtn, &QPushButton::clicked, this, [this, readCb, coreTempReadout]() {
+        dev_->ir()->readCoreTemp(this, readCb(coreTempReadout, QString::fromUtf8("机芯温度"), QString::fromUtf8("℃")));
     });
-    connect(focusTempBtn, &QPushButton::clicked, this, [this, showCb]() {
-        dev_->ir()->readFocusPlaneTemp(this, showCb(QString::fromUtf8("焦面温度")));
+    connect(focusTempBtn, &QPushButton::clicked, this, [this, readCb, focusTempReadout]() {
+        dev_->ir()->readFocusPlaneTemp(this, readCb(focusTempReadout, QString::fromUtf8("焦面温度"), QString::fromUtf8("℃")));
     });
-    connect(modIdBtn, &QPushButton::clicked, this, [this, showCb]() {
-        dev_->ir()->readModuleId(this, showCb(QString::fromUtf8("模组 ID")));
+    connect(modIdBtn, &QPushButton::clicked, this, [this, readCb, modIdReadout]() {
+        dev_->ir()->readModuleId(this, readCb(modIdReadout, QString::fromUtf8("模组 ID")));
     });
-    connect(readMeanBtn, &QPushButton::clicked, this, [this, showCb]() {
-        dev_->ir()->readMean(this, showCb(QString::fromUtf8("均值")));
+    connect(readMeanBtn, &QPushButton::clicked, this, [this, readCb, meanReadout]() {
+        dev_->ir()->readMean(this, readCb(meanReadout, QString::fromUtf8("均值")));
     });
-    connect(readCorrBtn, &QPushButton::clicked, this, [this, showCb]() {
-        dev_->ir()->readCorrectionParamGear(this, showCb(QString::fromUtf8("校正档位")));
+    connect(readCorrBtn, &QPushButton::clicked, this, [this, readCb, corrReadout]() {
+        dev_->ir()->readCorrectionParamGear(this, readCb(corrReadout, QString::fromUtf8("校正档位")));
     });
-    connect(readBadBtn, &QPushButton::clicked, this, [this, showCb]() {
-        dev_->ir()->readBadPixelCount(this, showCb(QString::fromUtf8("坏元数")));
+    connect(readBadBtn, &QPushButton::clicked, this, [this, readCb, badReadout]() {
+        dev_->ir()->readBadPixelCount(this, readCb(badReadout, QString::fromUtf8("坏元数")));
     });
 }
 
@@ -458,7 +507,8 @@ void IrPanel::setupMaintenance(QVBoxLayout* root)
     maintUnlockCombo_ = new QComboBox(this);
     maintUnlockCombo_->addItem(QString::fromUtf8("锁定"), 0);
     maintUnlockCombo_->addItem(QString::fromUtf8("解锁"), 1);
-    form->addRow(QString::fromUtf8("维护锁"), maintUnlockCombo_);
+    auto* applyUnlock = new QPushButton(QString::fromUtf8("解锁/锁定"), this);
+    form->addRow(QString::fromUtf8("维护锁"), makeValueButtonRow(maintUnlockCombo_, applyUnlock, this));
 
     maintExecNameCombo_ = new QComboBox(this);
     maintExecNameCombo_->addItem("two_point_calib_p1", QString::fromUtf8("two_point_calib_p1"));
@@ -468,20 +518,23 @@ void IrPanel::setupMaintenance(QVBoxLayout* root)
     maintExecNameCombo_->addItem("clear_k", QString::fromUtf8("clear_k"));
     maintExecNameCombo_->addItem("clear_b", QString::fromUtf8("clear_b"));
     maintExecNameCombo_->addItem("bad_pixel_search", QString::fromUtf8("bad_pixel_search"));
-    form->addRow(QString::fromUtf8("维护命令"), maintExecNameCombo_);
 
     maintExecValueSpin_ = new QSpinBox(this);
     maintExecValueSpin_->setRange(0, 255);
-    form->addRow(QString::fromUtf8("参数值"), maintExecValueSpin_);
+    auto* applyMaintExec = new QPushButton(QString::fromUtf8("执行维护"), this);
+    configureInlineField(maintExecNameCombo_);
+    configureInlineField(maintExecValueSpin_);
+    configureInlineButton(applyMaintExec);
+    auto* maintExecRow = new QHBoxLayout();
+    maintExecRow->setContentsMargins(0, 0, 0, 0);
+    maintExecRow->setSpacing(6);
+    maintExecRow->addWidget(maintExecNameCombo_, 1);
+    maintExecRow->addWidget(new QLabel(QString::fromUtf8("参数"), this));
+    maintExecRow->addWidget(maintExecValueSpin_);
+    maintExecRow->addWidget(applyMaintExec);
+    form->addRow(QString::fromUtf8("维护命令"), maintExecRow);
 
     vb->addLayout(form);
-
-    auto* applyUnlock  = new QPushButton(QString::fromUtf8("解锁/锁定"), this);
-    auto* applyMaintExec = new QPushButton(QString::fromUtf8("执行维护"), this);
-    auto* row1 = new QHBoxLayout();
-    row1->addWidget(applyUnlock);
-    row1->addWidget(applyMaintExec);
-    vb->addLayout(row1);
 
     // 分隔线
     auto* sep = new QFrame(this);
@@ -501,50 +554,79 @@ void IrPanel::setupMaintenance(QVBoxLayout* root)
     clearBCombo_->addItem(QString::fromUtf8("清除"), 1);
 
     auto* clearKLayout = new QHBoxLayout();
+    clearKLayout->setContentsMargins(0, 0, 0, 0);
+    clearKLayout->setSpacing(6);
     clearKLayout->addWidget(new QLabel(QString::fromUtf8("清除K:"), this));
+    configureInlineField(clearKCombo_);
     clearKLayout->addWidget(clearKCombo_);
     auto* applyClearK = new QPushButton(QString::fromUtf8("设清除K"), this);
+    configureInlineButton(applyClearK);
     clearKLayout->addWidget(applyClearK);
     vb->addLayout(clearKLayout);
 
     auto* clearBLayout = new QHBoxLayout();
+    clearBLayout->setContentsMargins(0, 0, 0, 0);
+    clearBLayout->setSpacing(6);
     clearBLayout->addWidget(new QLabel(QString::fromUtf8("清除B:"), this));
+    configureInlineField(clearBCombo_);
     clearBLayout->addWidget(clearBCombo_);
     auto* applyClearB = new QPushButton(QString::fromUtf8("设清除B"), this);
+    configureInlineButton(applyClearB);
     clearBLayout->addWidget(applyClearB);
     vb->addLayout(clearBLayout);
 
     root->addWidget(grp);
 
-    auto warn = [this](const QString& title) {
-        return [this, title](bool ok, const QString& err) {
-            if (!ok) QMessageBox::warning(this, title, err);
-        };
+    auto writeCb = [this](bool ok, const QString& err) {
+        if (ok) QMessageBox::information(this, "IR", QString::fromUtf8("写入成功"));
+        else QMessageBox::warning(this, "IR", err);
+    };
+    auto actionCb = [this](bool ok, const QString& err) {
+        if (!ok) QMessageBox::warning(this, "IR", err);
+        setActionStatus(ok ? "OK" : err);
+    };
+    auto showMaintenanceResult = [this](bool ok, const nlohmann::json& data, const QString& err) {
+        if (!ok) {
+            QMessageBox::warning(this, "IR", err);
+            setActionStatus(err);
+            return;
+        }
+        QString warning;
+        auto it = data.find("warning");
+        if (it != data.end() && it->is_string())
+            warning = QString::fromStdString(it->get<std::string>());
+        if (warning.isEmpty()) {
+            QMessageBox::information(this, "IR", QString::fromUtf8("写入成功"));
+            setActionStatus("OK");
+        } else {
+            QMessageBox::warning(this, "IR", warning);
+            setActionStatus(warning);
+        }
     };
 
-    connect(applyUnlock, &QPushButton::clicked, this, [this, warn]() {
-        dev_->ir()->maintenanceUnlock(this, static_cast<quint8>(maintUnlockCombo_->currentData().toInt()), warn("IR"));
+    connect(applyUnlock, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->maintenanceUnlock(this, static_cast<quint8>(maintUnlockCombo_->currentData().toInt()), writeCb);
     });
-    connect(applyMaintExec, &QPushButton::clicked, this, [this, warn]() {
+    connect(applyMaintExec, &QPushButton::clicked, this, [this, showMaintenanceResult]() {
         QString name = maintExecNameCombo_->currentData().toString();
         quint8 val = static_cast<quint8>(maintExecValueSpin_->value());
-        dev_->ir()->maintenanceExec(this, name, val, warn("IR"));
+        dev_->ir()->maintenanceExec(this, name, val, showMaintenanceResult);
     });
 
-    connect(calibP1Btn, &QPushButton::clicked, this, [this, warn]() {
-        dev_->ir()->twoPointCalibP1(this, warn("IR"));
+    connect(calibP1Btn, &QPushButton::clicked, this, [this, actionCb]() {
+        dev_->ir()->twoPointCalibP1(this, actionCb);
     });
-    connect(calibP2Btn, &QPushButton::clicked, this, [this, warn]() {
-        dev_->ir()->twoPointCalibP2(this, warn("IR"));
+    connect(calibP2Btn, &QPushButton::clicked, this, [this, actionCb]() {
+        dev_->ir()->twoPointCalibP2(this, actionCb);
     });
-    connect(saveCalibBtn, &QPushButton::clicked, this, [this, warn]() {
-        dev_->ir()->saveCalibParams(this, warn("IR"));
+    connect(saveCalibBtn, &QPushButton::clicked, this, [this, showMaintenanceResult]() {
+        dev_->ir()->saveCalibParams(this, showMaintenanceResult);
     });
-    connect(applyClearK, &QPushButton::clicked, this, [this, warn]() {
-        dev_->ir()->clearK(this, static_cast<quint8>(clearKCombo_->currentData().toInt()), warn("IR"));
+    connect(applyClearK, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->clearK(this, static_cast<quint8>(clearKCombo_->currentData().toInt()), writeCb);
     });
-    connect(applyClearB, &QPushButton::clicked, this, [this, warn]() {
-        dev_->ir()->clearB(this, static_cast<quint8>(clearBCombo_->currentData().toInt()), warn("IR"));
+    connect(applyClearB, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->clearB(this, static_cast<quint8>(clearBCombo_->currentData().toInt()), writeCb);
     });
 }
 
@@ -559,92 +641,99 @@ void IrPanel::setupBadPixel(QVBoxLayout* root)
     badPixelSearchCombo_->addItem(QString::fromUtf8("重复"), 1);
     badPixelSearchCombo_->addItem(QString::fromUtf8("新增"), 5);
     badPixelSearchCombo_->addItem(QString::fromUtf8("迭代"), 7);
-    form->addRow(QString::fromUtf8("坏元搜索"), badPixelSearchCombo_);
+    auto* applySearch = new QPushButton(QString::fromUtf8("坏元搜索"), this);
+    form->addRow(QString::fromUtf8("坏元搜索"), makeValueButtonRow(badPixelSearchCombo_, applySearch, this));
 
+    auto* applyPos = new QPushButton(QString::fromUtf8("设坏元位置"), this);
     {
         for (int i = 0; i < 4; ++i) {
             badPixelPosSpin_[i] = new QSpinBox(this);
             badPixelPosSpin_[i]->setRange(0, 255);
         }
+        auto* posRow = new QHBoxLayout();
+        posRow->setContentsMargins(0, 0, 0, 0);
+        posRow->setSpacing(6);
+        configureInlineButton(applyPos);
+        for (auto* spin : badPixelPosSpin_)
+            configureCompactSpin(spin, 54);
+        posRow->addLayout(makeGrid2Col({badPixelPosSpin_[0], badPixelPosSpin_[1],
+                                        badPixelPosSpin_[2], badPixelPosSpin_[3]}));
+        posRow->addWidget(applyPos);
         form->addRow(QString::fromUtf8("坏元位置 (4字节)"),
-                     makeGrid2Col({badPixelPosSpin_[0], badPixelPosSpin_[1],
-                                   badPixelPosSpin_[2], badPixelPosSpin_[3]}));
+                     posRow);
     }
 
-    auto* applySearch   = new QPushButton(QString::fromUtf8("坏元搜索"), this);
-    auto* applyPos      = new QPushButton(QString::fromUtf8("设坏元位置"), this);
-    auto* saveBadPixel  = new QPushButton(QString::fromUtf8("保存坏元"), this);
-    form->addRow(makeGrid2Col({applySearch, applyPos, saveBadPixel}));
+    auto* saveBadPixel = new QPushButton(QString::fromUtf8("保存坏元"), this);
+    form->addRow(saveBadPixel);
     root->addWidget(grp);
 
-    auto warn = [this](const QString& title) {
-        return [this, title](bool ok, const QString& err) {
-            if (!ok) QMessageBox::warning(this, title, err);
-        };
+    auto writeCb = [this](bool ok, const QString& err) {
+        if (ok) QMessageBox::information(this, "IR", QString::fromUtf8("写入成功"));
+        else QMessageBox::warning(this, "IR", err);
+    };
+    auto actionCb = [this](bool ok, const QString& err) {
+        if (!ok) QMessageBox::warning(this, "IR", err);
+        setActionStatus(ok ? "OK" : err);
     };
 
-    connect(applySearch, &QPushButton::clicked, this, [this, warn]() {
-        dev_->ir()->badPixelSearch(this, static_cast<quint8>(badPixelSearchCombo_->currentData().toInt()), warn("IR"));
+    connect(applySearch, &QPushButton::clicked, this, [this, actionCb]() {
+        dev_->ir()->badPixelSearch(this, static_cast<quint8>(badPixelSearchCombo_->currentData().toInt()), actionCb);
     });
-    connect(applyPos, &QPushButton::clicked, this, [this, warn]() {
+    connect(applyPos, &QPushButton::clicked, this, [this, writeCb]() {
         quint8 pos[4];
         for (int i = 0; i < 4; ++i)
             pos[i] = static_cast<quint8>(badPixelPosSpin_[i]->value());
-        dev_->ir()->setBadPixelPosition(this, pos, warn("IR"));
+        dev_->ir()->setBadPixelPosition(this, pos, writeCb);
     });
-    connect(saveBadPixel, &QPushButton::clicked, this, [this, warn]() {
-        dev_->ir()->saveBadPixel(this, warn("IR"));
-    });
-}
-
-// ---- 原始命令 ----
-
-void IrPanel::setupRawCmd(QVBoxLayout* root)
-{
-    auto* grp = new QGroupBox(QString::fromUtf8("原始命令"), this);
-    auto* form = new QFormLayout(grp);
-
-    rawCmdEdit_ = new QLineEdit("02", this);
-    rawDataEdit_ = new QLineEdit("01", this);
-    rawLenSpin_ = new QSpinBox(this);
-    rawLenSpin_->setRange(0, 255);
-    rawLenSpin_->setValue(1);
-    rawResultLabel_ = new QLabel("-", this);
-    rawResultLabel_->setWordWrap(true);
-    rawResultLabel_->setProperty("secondary", true);
-
-    form->addRow("CMD (hex)", rawCmdEdit_);
-    form->addRow("DATA (hex)", rawDataEdit_);
-    form->addRow("Readback Len", rawLenSpin_);
-
-    auto* sendBtn = new QPushButton(QString::fromUtf8("发送"), this);
-    form->addRow(sendBtn);
-    form->addRow(rawResultLabel_);
-    root->addWidget(grp);
-
-    connect(sendBtn, &QPushButton::clicked, this, [this]() {
-        bool ok;
-        quint8 cmd = static_cast<quint8>(rawCmdEdit_->text().toUInt(&ok, 16));
-        if (!ok) { QMessageBox::warning(this, "IR", "Invalid CMD hex"); return; }
-        QByteArray data = QByteArray::fromHex(rawDataEdit_->text().toLatin1());
-        quint8 len = static_cast<quint8>(rawLenSpin_->value());
-        dev_->ir()->sendRaw(this, cmd, data, len, [this](bool ok2, const nlohmann::json& d, const QString& err) {
-            if (ok2)
-                rawResultLabel_->setText("cmd=" + QString::number(d.value("cmd", 0)) + " data=" + bytesToHex(d["data"]));
-            else
-                rawResultLabel_->setText(err);
-        });
+    connect(saveBadPixel, &QPushButton::clicked, this, [this, actionCb]() {
+        dev_->ir()->saveBadPixel(this, actionCb);
     });
 }
 
 // ---- helpers ----
 
-void IrPanel::showResult(const QString& title, bool ok, const nlohmann::json& data, const QString& err)
+void IrPanel::setActionStatus(const QString& text)
 {
-    if (ok)
-        resultLabel_->setText(title + ": " + bytesToHex(data["data"]));
-    else
-        resultLabel_->setText(title + ": " + err);
+    if (actionStatusLabel_)
+        actionStatusLabel_->setText(text);
+}
+
+void IrPanel::updateReadoutLabel(QLabel* label, const QString& title, bool ok, const nlohmann::json& data,
+                                 const QString& err, const QString& unit)
+{
+    if (!label) return;
+    if (!ok) {
+        label->setText(title + ": " + err);
+        return;
+    }
+    auto it = data.find("value");
+    if (it == data.end()) {
+        label->setText(title + ": " + QString::fromUtf8("<无数据>"));
+        return;
+    }
+
+    QString text = jsonValueToText(*it);
+    if (!unit.isEmpty() && text != "-")
+        text += " " + unit;
+    label->setText(title + ": " + text);
+}
+
+QString IrPanel::jsonValueToText(const nlohmann::json& value)
+{
+    if (value.is_number_unsigned()) {
+        return QString::number(value.get<unsigned long long>());
+    } else if (value.is_number_integer()) {
+        return QString::number(value.get<long long>());
+    } else if (value.is_number_float()) {
+        return QString::number(value.get<double>());
+    } else if (value.is_string()) {
+        return QString::fromStdString(value.get<std::string>());
+    } else if (value.is_boolean()) {
+        return value.get<bool>() ? "true" : "false";
+    } else if (value.is_array()) {
+        return bytesToHex(value);
+    }
+    return QString::fromStdString(value.dump());
 }
 
 QString IrPanel::bytesToHex(const nlohmann::json& arr)

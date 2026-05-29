@@ -43,8 +43,8 @@ void MainWindowChrome::setupUi()
 
     rightPanel_ = new QWidget(window_);
     rightPanel_->setObjectName("panelContainer");
-    rightPanel_->setMinimumWidth(280);
-    rightPanel_->setMaximumWidth(420);
+    rightPanel_->setMinimumWidth(520);
+    rightPanel_->setMaximumWidth(720);
     auto* panelLayout = new QVBoxLayout(rightPanel_);
     panelLayout->setContentsMargins(0, 0, 0, 0);
     panelLayout->setSpacing(0);
