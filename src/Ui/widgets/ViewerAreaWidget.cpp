@@ -124,6 +124,7 @@ void ViewerAreaWidget::setupUi()
     });
     connect(imageViewPlayback_, &ImageView::cursorImagePosChanged, this, [this](const QPoint& pos) {
         cursorImagePos_[PlaybackView] = pos;
+        refreshImageStatsOverlay();
     });
     connect(imageViewSlice_, &ImageView::analysisLineAddRequested,
             this, &ViewerAreaWidget::sliceAnalysisLineAddRequested);
@@ -186,6 +187,8 @@ void ViewerAreaWidget::setImageStats(int channel, const ChannelImageStats& stats
         rawImageStats_ = stats;
     } else if (channel == SliceStitch16View) {
         sliceImageStats_ = stats;
+    } else if (channel == PlaybackView) {
+        playbackImageStats_ = stats;
     }
     refreshImageStatsOverlay();
 }
@@ -279,14 +282,18 @@ void ViewerAreaWidget::refreshImageStatsOverlay()
 {
     if (!imageStatsOverlay_ || !imageStatsLabel_) return;
 
-    const bool showOverlay = currentChannel_ == Raw16View || currentChannel_ == SliceStitch16View;
+    const bool showOverlay = currentChannel_ == Raw16View
+        || currentChannel_ == SliceStitch16View
+        || currentChannel_ == PlaybackView;
     if (!showOverlay) {
         imageStatsOverlay_->hide();
         return;
     }
 
     const QPoint cursorPos = cursorImagePos_[static_cast<std::size_t>(currentChannel_)];
-    const ChannelImageStats* stats = currentChannel_ == Raw16View ? &rawImageStats_ : &sliceImageStats_;
+    const ChannelImageStats* stats = &rawImageStats_;
+    if (currentChannel_ == SliceStitch16View) stats = &sliceImageStats_;
+    else if (currentChannel_ == PlaybackView) stats = &playbackImageStats_;
     imageStatsLabel_->setText(formatImageStatsText(cursorPos, stats));
     imageStatsOverlay_->adjustSize();
     positionImageStatsOverlay();

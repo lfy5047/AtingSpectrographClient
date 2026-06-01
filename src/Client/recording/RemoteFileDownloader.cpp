@@ -44,7 +44,7 @@ void RemoteFileDownloader::start(const QString& host, quint16 port, const QStrin
                                  const QString& cacheRoot)
 {
     if (running_) {
-        fail(QString::fromUtf8("已有下载任务正在进行"));
+        fail(RemoteDownloadErrorReason::Unknown, QString::fromUtf8("已有下载任务正在进行"));
         return;
     }
 
@@ -64,7 +64,7 @@ void RemoteFileDownloader::start(const QString& host, quint16 port, const QStrin
 
     QString err;
     if (!prepareExpectedFiles(files, &err) || !prepareDirectories(&err)) {
-        fail(err);
+        fail(RemoteDownloadErrorReason::FileIo, err);
         return;
     }
 
@@ -170,7 +170,7 @@ void RemoteFileDownloader::onReadyRead()
     rx_.append(sock_->readAll());
     QString err;
     if (!consumeAvailable(&err)) {
-        fail(err);
+        fail(RemoteDownloadErrorReason::Protocol, err);
     }
 }
 
@@ -182,14 +182,14 @@ void RemoteFileDownloader::onDisconnected()
         complete();
         return;
     }
-    fail(QString::fromUtf8("文件传输连接已断开"));
+    fail(RemoteDownloadErrorReason::Network, QString::fromUtf8("文件传输连接已断开"));
 }
 
 void RemoteFileDownloader::onError()
 {
     if (!running_ || canceling_) return;
     const QString err = sock_ ? sock_->errorString() : QString::fromUtf8("文件传输失败");
-    fail(err);
+    fail(RemoteDownloadErrorReason::Network, err);
 }
 
 bool RemoteFileDownloader::consumeAvailable(QString* err)
@@ -390,7 +390,7 @@ void RemoteFileDownloader::complete()
     emit finished(completedRecordIds_);
 }
 
-void RemoteFileDownloader::fail(const QString& err)
+void RemoteFileDownloader::fail(RemoteDownloadErrorReason reason, const QString& err)
 {
     const bool wasRunning = running_;
     cleanupSocket();
@@ -398,7 +398,7 @@ void RemoteFileDownloader::fail(const QString& err)
     cleanupTempFiles();
     running_ = false;
     if (wasRunning || !err.isEmpty()) {
-        emit failed(err.isEmpty() ? QString::fromUtf8("文件下载失败") : err);
+        emit failed(reason, err.isEmpty() ? QString::fromUtf8("文件下载失败") : err);
     }
 }
 

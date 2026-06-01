@@ -223,9 +223,10 @@ void DeviceUiCoordinator::setupConnections()
     });
 
     connect(registry_->recordPlayback(), &RecordPlaybackPanel::playbackImageReady, this,
-            [this](const QImage& image, const QString&) {
+            [this](const QImage& image, const QString&, const ChannelImageStats& stats) {
         chrome_->viewerArea()->setCurrentChannel(ViewerAreaWidget::PlaybackView);
         chrome_->viewerArea()->setChannelImage(ViewerAreaWidget::PlaybackView, image);
+        chrome_->viewerArea()->setImageStats(ViewerAreaWidget::PlaybackView, stats);
     }, Qt::QueuedConnection);
 
     connect(registry_->spectral(), &SpectralPanel::settingsChanged, this, [this]() {

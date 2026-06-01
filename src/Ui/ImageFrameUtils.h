@@ -2,6 +2,7 @@
 
 #include <QByteArray>
 #include <QImage>
+#include <QMetaType>
 #include <QtGlobal>
 
 struct Mono16Stats {
@@ -16,6 +17,7 @@ struct ChannelImageStats {
     quint16 max = 0;
     double avg = 0.0;
 };
+Q_DECLARE_METATYPE(ChannelImageStats)
 
 struct ComputeImageResult {
     QImage display;

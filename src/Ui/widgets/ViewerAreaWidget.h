@@ -80,4 +80,5 @@ private:
     };
     ChannelImageStats rawImageStats_;
     ChannelImageStats sliceImageStats_;
+    ChannelImageStats playbackImageStats_;
 };

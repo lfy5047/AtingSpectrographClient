@@ -6,12 +6,18 @@
 
 #include <QAbstractItemView>
 #include <QCheckBox>
+#include <QColor>
 #include <QComboBox>
+#include <QCoreApplication>
 #include <QDateTime>
+#include <QDialog>
 #include <QDir>
+#include <QElapsedTimer>
+#include <QEventLoop>
 #include <QFile>
 #include <QFileInfo>
 #include <QFormLayout>
+#include <QGuiApplication>
 #include <QGroupBox>
 #include <QHeaderView>
 #include <QHBoxLayout>
@@ -29,10 +35,30 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <atomic>
 #include <cstring>
+#include <functional>
 #include <limits>
 
 #include "tiffio.h"
+
+#include <QAbstractSpinBox>
+#include <QDesktopServices>
+#include <QFileDialog>
+#include <QKeyEvent>
+#include <QLineEdit>
+#include <QMenu>
+#include <QMessageBox>
+#include <QMouseEvent>
+#include <QPainter>
+#include <QClipboard>
+#include <QPen>
+#include <QPixmap>
+#include <QRectF>
+#include <QShortcut>
+#include <QStyle>
+#include <QTableWidgetItem>
+#include <QUrl>
 
 namespace {
 QString jsonString(const nlohmann::json& j, const char* key)
@@ -88,7 +114,296 @@ quint8 frameTypeFromJson(const nlohmann::json& j)
     if (s == "tailframe" || s == "tail") return TailFrame;
     return UnknownFrame;
 }
+
+QIcon coloredDotIcon(const QColor& color)
+{
+    QPixmap pix(14, 14);
+    pix.fill(Qt::transparent);
+    QPainter p(&pix);
+    p.setRenderHint(QPainter::Antialiasing);
+    p.setPen(QPen(color.darker(125), 1));
+    p.setBrush(color);
+    p.drawEllipse(QRectF(2.0, 2.0, 10.0, 10.0));
+    return QIcon(pix);
 }
+
+QString cacheKey(const QString& type, const QString& recordId)
+{
+    return type + "/" + recordId;
+}
+}
+
+struct TifRenderRequest {
+    quint64 requestId = 0;
+    quint64 globalIndex = 0;
+    QString recordId;
+    QString path;
+    int pageCount = 0;
+    int width = 0;
+    int height = 0;
+    int mode = 0;
+    int a = 0;
+    int b = 0;
+    int c = 0;
+    int d = 0;
+    int e = 0;
+    int f = 0;
+};
+Q_DECLARE_METATYPE(TifRenderRequest)
+
+class TifRenderWorker : public QObject {
+    Q_OBJECT
+public:
+    explicit TifRenderWorker(QObject* parent = nullptr)
+        : QObject(parent)
+    {
+    }
+
+    void requestCancel(quint64 newestRequestId)
+    {
+        newestRequestId_.store(newestRequestId);
+        cancelRequested_.store(true);
+    }
+
+public slots:
+    void render(TifRenderRequest request)
+    {
+        if (request.requestId != newestRequestId_.load()) {
+            emit canceled(request.requestId);
+            return;
+        }
+        cancelRequested_.store(false);
+
+        QImage image;
+        QString err;
+        QString info;
+        const bool ok = renderRequest(request, &image, &info, &err);
+        if (request.requestId != newestRequestId_.load() || cancelRequested_.load()) {
+            emit canceled(request.requestId);
+            return;
+        }
+        if (!ok) {
+            emit failed(request.requestId, request.globalIndex, err);
+            return;
+        }
+        emit ready(request.requestId, request.globalIndex, image, info, imageStatsFromImage(image));
+    }
+
+signals:
+    void ready(quint64 requestId, quint64 globalIndex, QImage image, QString info, ChannelImageStats stats);
+    void failed(quint64 requestId, quint64 globalIndex, QString error);
+    void canceled(quint64 requestId);
+    void progress(quint64 requestId, QString text);
+
+private:
+    bool shouldCancel(const TifRenderRequest& request) const
+    {
+        return cancelRequested_.load() || request.requestId != newestRequestId_.load();
+    }
+
+    bool normalizeRange(int pageCount, int begin, int end, int* outBegin, int* outEnd, QString* err) const
+    {
+        if (begin < 0 || begin >= pageCount || end <= begin || end > pageCount) {
+            if (err) *err = QString::fromUtf8("波段范围非法，要求 0 <= begin < end <= page_count");
+            return false;
+        }
+        if (outBegin) *outBegin = begin;
+        if (outEnd) *outEnd = end;
+        return true;
+    }
+
+    bool readPage(TIFF* tif, const TifRenderRequest& request, int pageIndex,
+                  QVector<quint16>* out, QString* err) const
+    {
+        if (shouldCancel(request)) return false;
+        if (!TIFFSetDirectory(tif, static_cast<tdir_t>(pageIndex))) {
+            if (err) *err = QString::fromUtf8("无法定位 tif page %1").arg(pageIndex + 1);
+            return false;
+        }
+        const tsize_t scanline = TIFFScanlineSize(tif);
+        if (scanline < request.width * static_cast<tsize_t>(sizeof(quint16))) {
+            if (err) *err = QString::fromUtf8("tif scanline 尺寸异常");
+            return false;
+        }
+        const int pixels = request.width * request.height;
+        out->resize(pixels);
+        QByteArray row(static_cast<int>(scanline), '\0');
+        for (int y = 0; y < request.height; ++y) {
+            if (shouldCancel(request)) return false;
+            if (TIFFReadScanline(tif, row.data(), y, 0) < 0) {
+                if (err) *err = QString::fromUtf8("读取 tif scanline 失败");
+                return false;
+            }
+            std::memcpy(out->data() + y * request.width, row.constData(), request.width * sizeof(quint16));
+        }
+        return true;
+    }
+
+    bool renderGrayRange(TIFF* tif, const TifRenderRequest& request, int begin, int end,
+                         QImage* image, QString* err)
+    {
+        int b = 0, e = 0;
+        if (!normalizeRange(request.pageCount, begin, end, &b, &e, err)) return false;
+        const int pixels = request.width * request.height;
+        QVector<quint64> acc(pixels, 0);
+        QVector<quint16> page;
+        for (int p = b; p < e; ++p) {
+            emit progress(request.requestId, QString::fromUtf8("正在渲染 TIF...（波段 %1/%2）").arg(p + 1).arg(request.pageCount));
+            if (!readPage(tif, request, p, &page, err)) return false;
+            for (int i = 0; i < pixels; ++i) acc[i] += page[i];
+        }
+
+        const int count = e - b;
+        int minV = std::numeric_limits<int>::max();
+        int maxV = 0;
+        QVector<int> values(pixels, 0);
+        for (int i = 0; i < pixels; ++i) {
+            values[i] = static_cast<int>(acc[i] / count);
+            minV = std::min(minV, values[i]);
+            maxV = std::max(maxV, values[i]);
+        }
+        QByteArray gray(pixels, '\0');
+        if (maxV > minV) {
+            const double scale = 255.0 / (maxV - minV);
+            for (int i = 0; i < pixels; ++i) {
+                gray[i] = static_cast<char>(qBound(0, static_cast<int>((values[i] - minV) * scale), 255));
+            }
+        }
+        *image = QImage(reinterpret_cast<const uchar*>(gray.constData()),
+                        request.width, request.height, request.width,
+                        QImage::Format_Grayscale8).copy();
+        return true;
+    }
+
+    bool renderRgb(TIFF* tif, const TifRenderRequest& request,
+                   int rb, int re, int gb, int ge, int bb, int be,
+                   QImage* image, QString* err)
+    {
+        if (!normalizeRange(request.pageCount, rb, re, &rb, &re, err) ||
+            !normalizeRange(request.pageCount, gb, ge, &gb, &ge, err) ||
+            !normalizeRange(request.pageCount, bb, be, &bb, &be, err)) {
+            return false;
+        }
+
+        const int pixels = request.width * request.height;
+        auto readRange = [&](int begin, int end, QVector<int>* out) -> bool {
+            QVector<quint64> acc(pixels, 0);
+            QVector<quint16> page;
+            for (int p = begin; p < end; ++p) {
+                emit progress(request.requestId, QString::fromUtf8("正在渲染 TIF...（波段 %1/%2）").arg(p + 1).arg(request.pageCount));
+                if (!readPage(tif, request, p, &page, err)) return false;
+                for (int i = 0; i < pixels; ++i) acc[i] += page[i];
+            }
+            out->resize(pixels);
+            const int count = end - begin;
+            for (int i = 0; i < pixels; ++i) (*out)[i] = static_cast<int>(acc[i] / count);
+            return true;
+        };
+
+        QVector<int> rv, gv, bv;
+        if (!readRange(rb, re, &rv) || !readRange(gb, ge, &gv) || !readRange(bb, be, &bv)) {
+            return false;
+        }
+        auto minmax = [](const QVector<int>& v, int* mn, int* mx) {
+            *mn = std::numeric_limits<int>::max();
+            *mx = 0;
+            for (int x : v) {
+                *mn = std::min(*mn, x);
+                *mx = std::max(*mx, x);
+            }
+        };
+        int rMin, rMax, gMin, gMax, bMin, bMax;
+        minmax(rv, &rMin, &rMax);
+        minmax(gv, &gMin, &gMax);
+        minmax(bv, &bMin, &bMax);
+        QByteArray rgb(pixels * 3, '\0');
+        for (int i = 0; i < pixels; ++i) {
+            const int out = i * 3;
+            rgb[out] = static_cast<char>(rMax > rMin ? qBound(0, static_cast<int>((rv[i] - rMin) * 255.0 / (rMax - rMin)), 255) : 0);
+            rgb[out + 1] = static_cast<char>(gMax > gMin ? qBound(0, static_cast<int>((gv[i] - gMin) * 255.0 / (gMax - gMin)), 255) : 0);
+            rgb[out + 2] = static_cast<char>(bMax > bMin ? qBound(0, static_cast<int>((bv[i] - bMin) * 255.0 / (bMax - bMin)), 255) : 0);
+        }
+        *image = QImage(reinterpret_cast<const uchar*>(rgb.constData()),
+                        request.width, request.height, request.width * 3,
+                        QImage::Format_RGB888).copy();
+        return true;
+    }
+
+    bool renderRequest(const TifRenderRequest& request, QImage* image, QString* info, QString* err)
+    {
+        TIFF* tif = TIFFOpen(request.path.toLocal8Bit().constData(), "r");
+        if (!tif) {
+            if (err) *err = QString::fromUtf8("无法打开 tif: %1").arg(request.path);
+            return false;
+        }
+
+        bool ok = false;
+        if (request.mode == 0 || request.mode == 1) {
+            ok = renderGrayRange(tif, request, request.a, request.b, image, err);
+        } else {
+            ok = renderRgb(tif, request, request.a, request.b, request.c, request.d, request.e, request.f, image, err);
+        }
+        TIFFClose(tif);
+        if (!ok) return false;
+        if (info) {
+            *info = QString("tif %1 pages=%2 size=%3x%4")
+                .arg(request.recordId)
+                .arg(request.pageCount)
+                .arg(request.width)
+                .arg(request.height);
+        }
+        return true;
+    }
+
+    static ChannelImageStats imageStatsFromImage(const QImage& image)
+    {
+        ChannelImageStats stats;
+        if (image.isNull()) return stats;
+        quint64 sum = 0;
+        quint16 minV = std::numeric_limits<quint16>::max();
+        quint16 maxV = 0;
+        const QImage img = image.convertToFormat(QImage::Format_ARGB32);
+        const int pixels = img.width() * img.height();
+        if (pixels <= 0) return stats;
+        for (int y = 0; y < img.height(); ++y) {
+            const QRgb* row = reinterpret_cast<const QRgb*>(img.constScanLine(y));
+            for (int x = 0; x < img.width(); ++x) {
+                const QRgb px = row[x];
+                const quint16 v = static_cast<quint16>((qRed(px) + qGreen(px) + qBlue(px)) / 3);
+                minV = std::min(minV, v);
+                maxV = std::max(maxV, v);
+                sum += v;
+            }
+        }
+        stats.valid = true;
+        stats.min = minV;
+        stats.max = maxV;
+        stats.avg = static_cast<double>(sum) / pixels;
+        return stats;
+    }
+
+    std::atomic<quint64> newestRequestId_{0};
+    std::atomic_bool cancelRequested_{false};
+};
+
+class SeekSlider : public QSlider {
+public:
+    using QSlider::QSlider;
+
+protected:
+    void mousePressEvent(QMouseEvent* event) override
+    {
+        if (orientation() == Qt::Horizontal && event->button() == Qt::LeftButton && maximum() > minimum()) {
+            const int span = qMax(1, width());
+            const double ratio = qBound(0.0, static_cast<double>(event->pos().x()) / span, 1.0);
+            setValue(minimum() + static_cast<int>((maximum() - minimum()) * ratio + 0.5));
+            emit sliderReleased();
+            event->accept();
+            return;
+        }
+        QSlider::mousePressEvent(event);
+    }
+};
 
 RecordPlaybackPanel::RecordPlaybackPanel(DeviceClient* device, QWidget* parent)
     : QWidget(parent)
@@ -96,6 +411,9 @@ RecordPlaybackPanel::RecordPlaybackPanel(DeviceClient* device, QWidget* parent)
 {
     setupUi();
     qRegisterMetaType<QVector<RemoteFetchFile>>("QVector<RemoteFetchFile>");
+    qRegisterMetaType<ChannelImageStats>("ChannelImageStats");
+    qRegisterMetaType<RemoteDownloadErrorReason>("RemoteDownloadErrorReason");
+    qRegisterMetaType<TifRenderRequest>("TifRenderRequest");
 
     downloaderThread_ = new QThread(this);
     downloader_ = new RemoteFileDownloader();
@@ -111,9 +429,27 @@ RecordPlaybackPanel::RecordPlaybackPanel(DeviceClient* device, QWidget* parent)
             this, &RecordPlaybackPanel::onDownloadFailed);
     connect(downloader_, &RemoteFileDownloader::canceled, this, [this]() {
         downloadBusy_ = false;
+        retryAvailable_ = false;
+        setRecordSelectionLocked(false);
+        updateRecordCacheStatuses();
+        refreshCacheInfo();
         setStatus(QString::fromUtf8("下载已取消"), false);
         updateUiEnabled();
     });
+
+    tifRenderThread_ = new QThread(this);
+    tifRenderWorker_ = new TifRenderWorker();
+    tifRenderWorker_->moveToThread(tifRenderThread_);
+    connect(tifRenderThread_, &QThread::finished, tifRenderWorker_, &QObject::deleteLater);
+    connect(tifRenderWorker_, &TifRenderWorker::ready,
+            this, &RecordPlaybackPanel::onTifRenderReady);
+    connect(tifRenderWorker_, &TifRenderWorker::failed,
+            this, &RecordPlaybackPanel::onTifRenderFailed);
+    connect(tifRenderWorker_, &TifRenderWorker::canceled,
+            this, &RecordPlaybackPanel::onTifRenderCanceled);
+    connect(tifRenderWorker_, &TifRenderWorker::progress,
+            this, &RecordPlaybackPanel::onTifRenderProgress);
+    tifRenderThread_->start();
 
     if (device_) {
         connect(device_, &DeviceClient::connectionChanged, this,
@@ -121,8 +457,10 @@ RecordPlaybackPanel::RecordPlaybackPanel(DeviceClient* device, QWidget* parent)
             connected_ = connected;
             host_ = connected ? ip : QString();
             if (!connected) {
-                cancelRemoteWork();
+                cancelDownloadOnly();
+                queryBusy_ = false;
                 clearRecords();
+                setStatus(QString::fromUtf8("连接已断开，当前本地回放仍可使用"), false);
             } else {
                 refreshRetention();
                 queryRecords();
@@ -148,10 +486,20 @@ RecordPlaybackPanel::~RecordPlaybackPanel()
         downloaderThread_ = nullptr;
         downloader_ = nullptr;
     }
+    if (tifRenderThread_) {
+        if (tifRenderWorker_) {
+            tifRenderWorker_->requestCancel(tifRenderRequestId_ + 1);
+        }
+        tifRenderThread_->quit();
+        tifRenderThread_->wait(2000);
+        tifRenderThread_ = nullptr;
+        tifRenderWorker_ = nullptr;
+    }
 }
 
 void RecordPlaybackPanel::setupUi()
 {
+    setFocusPolicy(Qt::StrongFocus);
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(8, 8, 8, 8);
     root->setSpacing(8);
@@ -159,15 +507,32 @@ void RecordPlaybackPanel::setupUi()
     auto* retentionGroup = new QGroupBox(QString::fromUtf8("保留时间"), this);
     auto* retentionForm = new QFormLayout(retentionGroup);
     auto* retentionRow = new QHBoxLayout();
-    retentionSpin_ = new QSpinBox(this);
-    retentionSpin_->setRange(0, 24 * 3600 * 30);
-    retentionSpin_->setSuffix(QString::fromUtf8(" 秒"));
+    retentionDaysSpin_ = new QSpinBox(this);
+    retentionDaysSpin_->setRange(0, 30);
+    retentionDaysSpin_->setSuffix(QString::fromUtf8(" 天"));
+    retentionHoursSpin_ = new QSpinBox(this);
+    retentionHoursSpin_->setRange(0, 23);
+    retentionHoursSpin_->setSuffix(QString::fromUtf8(" 时"));
+    retentionMinutesSpin_ = new QSpinBox(this);
+    retentionMinutesSpin_->setRange(0, 59);
+    retentionMinutesSpin_->setSuffix(QString::fromUtf8(" 分"));
+    retentionSecondsSpin_ = new QSpinBox(this);
+    retentionSecondsSpin_->setRange(0, 59);
+    retentionSecondsSpin_->setSuffix(QString::fromUtf8(" 秒"));
     retentionRefreshBtn_ = new QPushButton(QString::fromUtf8("刷新"), this);
     retentionApplyBtn_ = new QPushButton(QString::fromUtf8("设置"), this);
-    retentionRow->addWidget(retentionSpin_);
-    retentionRow->addWidget(retentionRefreshBtn_);
-    retentionRow->addWidget(retentionApplyBtn_);
+    retentionRow->addWidget(retentionDaysSpin_);
+    retentionRow->addWidget(retentionHoursSpin_);
+    retentionRow->addWidget(retentionMinutesSpin_);
+    retentionRow->addWidget(retentionSecondsSpin_);
     retentionForm->addRow(QString::fromUtf8("服务端保留"), retentionRow);
+    auto* retentionButtonRow = new QHBoxLayout();
+    retentionButtonRow->addWidget(retentionRefreshBtn_);
+    retentionButtonRow->addWidget(retentionApplyBtn_);
+    retentionButtonRow->addStretch(1);
+    retentionForm->addRow(QString::fromUtf8("操作"), retentionButtonRow);
+    retentionTotalLbl_ = new QLabel(QString::fromUtf8("总计 0 秒"), this);
+    retentionForm->addRow(QString::fromUtf8("换算"), retentionTotalLbl_);
     retentionInfoLbl_ = new QLabel("-", this);
     retentionInfoLbl_->setWordWrap(true);
     retentionForm->addRow(QString::fromUtf8("估算"), retentionInfoLbl_);
@@ -176,70 +541,93 @@ void RecordPlaybackPanel::setupUi()
     auto* queryGroup = new QGroupBox(QString::fromUtf8("远程记录"), this);
     auto* queryLayout = new QVBoxLayout(queryGroup);
 
-    auto* queryForm = new QFormLayout();
-    queryForm->setFieldGrowthPolicy(QFormLayout::ExpandingFieldsGrow);
+    openRecordsDialogBtn_ = new QPushButton(QString::fromUtf8("打开远程记录"), this);
+    queryLayout->addWidget(openRecordsDialogBtn_);
+    root->addWidget(queryGroup);
 
-    typeCombo_ = new QComboBox(this);
+    recordsDialog_ = new QDialog(this);
+    recordsDialog_->setWindowTitle(QString::fromUtf8("远程数据记录"));
+    recordsDialog_->resize(1100, 620);
+    auto* recordsDialogLayout = new QVBoxLayout(recordsDialog_);
+
+    typeCombo_ = new QComboBox(recordsDialog_);
     typeCombo_->addItem("raw", "raw");
     typeCombo_->addItem("tif", "tif");
-    typeCombo_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    typeCombo_->setFixedWidth(130);
 
-    countSpin_ = new QSpinBox(this);
+    countSpin_ = new QSpinBox(recordsDialog_);
     countSpin_->setRange(0, 10000);
     countSpin_->setValue(10);
-    countSpin_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    countSpin_->setFixedWidth(110);
 
-    secondsSpin_ = new QSpinBox(this);
+    secondsSpin_ = new QSpinBox(recordsDialog_);
     secondsSpin_->setRange(0, 24 * 3600 * 30);
     secondsSpin_->setValue(0);
-    secondsSpin_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+    secondsSpin_->setFixedWidth(130);
 
-    queryBtn_ = new QPushButton(QString::fromUtf8("查询"), this);
+    queryBtn_ = new QPushButton(QString::fromUtf8("查询"), recordsDialog_);
 
-    auto* typeCountRow = new QHBoxLayout();
-    typeCountRow->addWidget(typeCombo_);
-    typeCountRow->addSpacing(8);
-    typeCountRow->addWidget(countSpin_);
-    queryForm->addRow(QString::fromUtf8("类型 / 最近数量"), typeCountRow);
+    auto* queryControlsRow = new QHBoxLayout();
+    queryControlsRow->addWidget(new QLabel(QString::fromUtf8("类型"), recordsDialog_));
+    queryControlsRow->addWidget(typeCombo_);
+    queryControlsRow->addSpacing(12);
+    queryControlsRow->addWidget(new QLabel(QString::fromUtf8("最近数量"), recordsDialog_));
+    queryControlsRow->addWidget(countSpin_);
+    queryControlsRow->addSpacing(12);
+    queryControlsRow->addWidget(new QLabel(QString::fromUtf8("最近秒数(0=不限)"), recordsDialog_));
+    queryControlsRow->addWidget(secondsSpin_);
+    queryControlsRow->addSpacing(12);
+    queryControlsRow->addWidget(queryBtn_);
+    queryControlsRow->addStretch(1);
+    recordsDialogLayout->addLayout(queryControlsRow);
 
-    auto* secondsRow = new QHBoxLayout();
-    secondsRow->addWidget(secondsSpin_);
-    secondsRow->addSpacing(8);
-    secondsRow->addWidget(queryBtn_);
-    queryForm->addRow(QString::fromUtf8("最近秒数 (0=不限)"), secondsRow);
+    auto* selectionRow = new QHBoxLayout();
+    selectAllBtn_ = new QPushButton(QString::fromUtf8("全选"), recordsDialog_);
+    invertSelectionBtn_ = new QPushButton(QString::fromUtf8("反选"), recordsDialog_);
+    clearSelectionBtn_ = new QPushButton(QString::fromUtf8("清除选择"), recordsDialog_);
+    selectionRow->addWidget(selectAllBtn_);
+    selectionRow->addWidget(invertSelectionBtn_);
+    selectionRow->addWidget(clearSelectionBtn_);
+    selectionRow->addStretch(1);
+    recordsDialogLayout->addLayout(selectionRow);
 
-    queryLayout->addLayout(queryForm);
-
-    recordsTable_ = new QTableWidget(this);
-    recordsTable_->setColumnCount(5);
+    recordsTable_ = new QTableWidget(recordsDialog_);
+    recordsTable_->setColumnCount(6);
     recordsTable_->setHorizontalHeaderLabels(QStringList()
-        << "record_id" << "type" << "timestamp" << QString::fromUtf8("文件") << QString::fromUtf8("大小"));
+        << "record_id" << "type" << "timestamp" << QString::fromUtf8("缓存状态")
+        << QString::fromUtf8("文件") << QString::fromUtf8("大小"));
     recordsTable_->setSelectionBehavior(QAbstractItemView::SelectRows);
     recordsTable_->setSelectionMode(QAbstractItemView::ExtendedSelection);
     recordsTable_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    recordsTable_->setContextMenuPolicy(Qt::CustomContextMenu);
     recordsTable_->verticalHeader()->setVisible(false);
     recordsTable_->setAlternatingRowColors(true);
     recordsTable_->setShowGrid(false);
-    recordsTable_->setMinimumHeight(150);
+    recordsTable_->setMinimumSize(960, 420);
+    recordsTable_->setStyleSheet(
+        "QTableWidget::item:selected { background-color: #2F6FED; color: white; }"
+        "QTableWidget::item:selected:!active { background-color: #2F6FED; color: white; }");
     recordsTable_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
     recordsTable_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
     recordsTable_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
-    recordsTable_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
-    recordsTable_->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
-    queryLayout->addWidget(recordsTable_);
+    recordsTable_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
+    recordsTable_->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Stretch);
+    recordsTable_->horizontalHeader()->setSectionResizeMode(5, QHeaderView::ResizeToContents);
+    recordsDialogLayout->addWidget(recordsTable_);
 
     auto* downloadRow = new QHBoxLayout();
-    downloadBtn_ = new QPushButton(QString::fromUtf8("下载/加入播放"), this);
+    downloadBtn_ = new QPushButton(QString::fromUtf8("下载/加入播放"), recordsDialog_);
     downloadBtn_->setProperty("primary", true);
-    downloadInfoLbl_ = new QLabel("-", this);
+    appendDownloadBtn_ = new QPushButton(QString::fromUtf8("下载并追加"), recordsDialog_);
+    downloadInfoLbl_ = new QLabel("-", recordsDialog_);
     downloadInfoLbl_->setWordWrap(true);
     downloadRow->addWidget(downloadBtn_);
+    downloadRow->addWidget(appendDownloadBtn_);
     downloadRow->addWidget(downloadInfoLbl_, 1);
-    queryLayout->addLayout(downloadRow);
-    root->addWidget(queryGroup, 1);
+    recordsDialogLayout->addLayout(downloadRow);
 
-    auto* renderGroup = new QGroupBox(QString::fromUtf8("tif 渲染参数"), this);
-    auto* renderForm = new QFormLayout(renderGroup);
+    renderGroup_ = new QGroupBox(QString::fromUtf8("tif 渲染参数"), this);
+    auto* renderForm = new QFormLayout(renderGroup_);
     renderModeCombo_ = new QComboBox(this);
     renderModeCombo_->addItem(QString::fromUtf8("单波段"), static_cast<int>(TifRenderMode::SingleBand));
     renderModeCombo_->addItem(QString::fromUtf8("范围平均"), static_cast<int>(TifRenderMode::RangeAverage));
@@ -258,26 +646,67 @@ void RecordPlaybackPanel::setupUi()
     gEndSpin_ = new QSpinBox(this);
     bBeginSpin_ = new QSpinBox(this);
     bEndSpin_ = new QSpinBox(this);
+    singleBandSlider_ = new QSlider(Qt::Horizontal, this);
+    rangeBeginSlider_ = new QSlider(Qt::Horizontal, this);
+    rangeEndSlider_ = new QSlider(Qt::Horizontal, this);
+    rBandSlider_ = new QSlider(Qt::Horizontal, this);
+    gBandSlider_ = new QSlider(Qt::Horizontal, this);
+    bBandSlider_ = new QSlider(Qt::Horizontal, this);
+    rBeginSlider_ = new QSlider(Qt::Horizontal, this);
+    rEndSlider_ = new QSlider(Qt::Horizontal, this);
+    gBeginSlider_ = new QSlider(Qt::Horizontal, this);
+    gEndSlider_ = new QSlider(Qt::Horizontal, this);
+    bBeginSlider_ = new QSlider(Qt::Horizontal, this);
+    bEndSlider_ = new QSlider(Qt::Horizontal, this);
+    rangeToLastChk_ = new QCheckBox(QString::fromUtf8("到最后一页"), this);
+    rToLastChk_ = new QCheckBox(QString::fromUtf8("R 到最后一页"), this);
+    gToLastChk_ = new QCheckBox(QString::fromUtf8("G 到最后一页"), this);
+    bToLastChk_ = new QCheckBox(QString::fromUtf8("B 到最后一页"), this);
+    tifRenderHintLbl_ = new QLabel(QString::fromUtf8("加载 TIF 后可设置波段"), this);
+    cancelTifRenderBtn_ = new QPushButton(QString::fromUtf8("取消 TIF 渲染"), this);
     const QList<QSpinBox*> bandSpins = {
         singleBandSpin_, rangeBeginSpin_, rangeEndSpin_, rBandSpin_, gBandSpin_, bBandSpin_,
         rBeginSpin_, rEndSpin_, gBeginSpin_, gEndSpin_, bBeginSpin_, bEndSpin_
     };
     for (QSpinBox* s : bandSpins) {
-        s->setRange(0, 0);
+        s->setRange(1, 1);
     }
-    renderForm->addRow(QString::fromUtf8("单波段"), singleBandSpin_);
-    renderForm->addRow(QString::fromUtf8("范围 begin"), rangeBeginSpin_);
-    renderForm->addRow(QString::fromUtf8("范围 end(0=末尾)"), rangeEndSpin_);
-    renderForm->addRow("R Band", rBandSpin_);
-    renderForm->addRow("G Band", gBandSpin_);
-    renderForm->addRow("B Band", bBandSpin_);
-    renderForm->addRow("R begin", rBeginSpin_);
-    renderForm->addRow("R end(0=end)", rEndSpin_);
-    renderForm->addRow("G begin", gBeginSpin_);
-    renderForm->addRow("G end(0=end)", gEndSpin_);
-    renderForm->addRow("B begin", bBeginSpin_);
-    renderForm->addRow("B end(0=end)", bEndSpin_);
-    root->addWidget(renderGroup);
+    const QList<QSlider*> bandSliders = {
+        singleBandSlider_, rangeBeginSlider_, rangeEndSlider_, rBandSlider_, gBandSlider_, bBandSlider_,
+        rBeginSlider_, rEndSlider_, gBeginSlider_, gEndSlider_, bBeginSlider_, bEndSlider_
+    };
+    for (QSlider* s : bandSliders) {
+        s->setRange(1, 1);
+        s->setTracking(false);
+    }
+    auto addBandRow = [renderForm, this](const QString& label, const char* objectName, QSlider* slider, QSpinBox* spin) {
+        auto* rowWidget = new QWidget(this);
+        rowWidget->setObjectName(QString::fromLatin1(objectName));
+        auto* row = new QHBoxLayout(rowWidget);
+        row->setContentsMargins(0, 0, 0, 0);
+        row->addWidget(slider, 1);
+        row->addWidget(spin);
+        renderForm->addRow(label, rowWidget);
+    };
+    renderForm->addRow(QString::fromUtf8("状态"), tifRenderHintLbl_);
+    addBandRow(QString::fromUtf8("单波段"), "singleBandRow", singleBandSlider_, singleBandSpin_);
+    addBandRow(QString::fromUtf8("起始波段"), "rangeBeginRow", rangeBeginSlider_, rangeBeginSpin_);
+    addBandRow(QString::fromUtf8("结束波段"), "rangeEndRow", rangeEndSlider_, rangeEndSpin_);
+    renderForm->addRow("", rangeToLastChk_);
+    addBandRow("R Band", "rBandRow", rBandSlider_, rBandSpin_);
+    addBandRow("G Band", "gBandRow", gBandSlider_, gBandSpin_);
+    addBandRow("B Band", "bBandRow", bBandSlider_, bBandSpin_);
+    addBandRow("R begin", "rBeginRow", rBeginSlider_, rBeginSpin_);
+    addBandRow("R end", "rEndRow", rEndSlider_, rEndSpin_);
+    renderForm->addRow("", rToLastChk_);
+    addBandRow("G begin", "gBeginRow", gBeginSlider_, gBeginSpin_);
+    addBandRow("G end", "gEndRow", gEndSlider_, gEndSpin_);
+    renderForm->addRow("", gToLastChk_);
+    addBandRow("B begin", "bBeginRow", bBeginSlider_, bBeginSpin_);
+    addBandRow("B end", "bEndRow", bEndSlider_, bEndSpin_);
+    renderForm->addRow("", bToLastChk_);
+    renderForm->addRow("", cancelTifRenderBtn_);
+    root->addWidget(renderGroup_);
 
     updateRenderVisibility();
 
@@ -288,7 +717,7 @@ void RecordPlaybackPanel::setupUi()
     playBtn_ = new QPushButton(QString::fromUtf8("播放"), this);
     playBtn_->setProperty("primary", true);
     pauseBtn_ = new QPushButton(QString::fromUtf8("暂停"), this);
-    stopBtn_ = new QPushButton(QString::fromUtf8("停止"), this);
+    stopBtn_ = new QPushButton(QString::fromUtf8("回到开头"), this);
     stopBtn_->setProperty("danger", true);
     nextBtn_ = new QPushButton(QString::fromUtf8("下一帧"), this);
     btnRow->addWidget(prevBtn_);
@@ -297,22 +726,91 @@ void RecordPlaybackPanel::setupUi()
     btnRow->addWidget(stopBtn_);
     btnRow->addWidget(nextBtn_);
     playbackForm->addRow(btnRow);
-    progressSlider_ = new QSlider(Qt::Horizontal, this);
+    progressSlider_ = new SeekSlider(Qt::Horizontal, this);
     progressSlider_->setRange(0, 0);
     playbackForm->addRow(QString::fromUtf8("进度"), progressSlider_);
+
+    frameSpin_ = new QSpinBox(this);
+    frameSpin_->setRange(0, 0);
+    exportFrameBtn_ = new QPushButton(QString::fromUtf8("导出当前帧"), this);
+    auto* frameRow = new QHBoxLayout();
+    frameRow->addWidget(frameSpin_);
+    frameRow->addWidget(exportFrameBtn_);
+    playbackForm->addRow(QString::fromUtf8("当前帧"), frameRow);
+
     intervalSpin_ = new QSpinBox(this);
     intervalSpin_->setRange(10, 600000);
     intervalSpin_->setValue(200);
     intervalSpin_->setSuffix(" ms");
+    fpsLbl_ = new QLabel("-", this);
     loopChk_ = new QCheckBox(QString::fromUtf8("循环播放"), this);
+    badFramePolicyCombo_ = new QComboBox(this);
+    badFramePolicyCombo_->addItem(QString::fromUtf8("坏帧暂停并提示"), static_cast<int>(BadFramePolicy::Pause));
+    badFramePolicyCombo_->addItem(QString::fromUtf8("坏帧跳过继续"), static_cast<int>(BadFramePolicy::Skip));
+    clearSkippedBadFramesBtn_ = new QPushButton(QString::fromUtf8("清除跳过计数"), this);
     auto* intervalRow = new QHBoxLayout();
     intervalRow->addWidget(intervalSpin_);
+    intervalRow->addWidget(fpsLbl_);
     intervalRow->addWidget(loopChk_);
     playbackForm->addRow(QString::fromUtf8("间隔"), intervalRow);
+    auto* badFrameRow = new QHBoxLayout();
+    badFrameRow->addWidget(badFramePolicyCombo_);
+    badFrameRow->addWidget(clearSkippedBadFramesBtn_);
+    playbackForm->addRow(QString::fromUtf8("坏帧策略"), badFrameRow);
     playbackInfoLbl_ = new QLabel("0/0", this);
     playbackInfoLbl_->setWordWrap(true);
     playbackForm->addRow(QString::fromUtf8("当前位置"), playbackInfoLbl_);
     root->addWidget(playbackGroup);
+
+    playbackSequenceGroup_ = new QGroupBox(QString::fromUtf8("播放序列"), this);
+    playbackSequenceGroup_->setCheckable(true);
+    playbackSequenceGroup_->setChecked(false);
+    auto* seqLayout = new QVBoxLayout(playbackSequenceGroup_);
+    playbackSequenceTable_ = new QTableWidget(this);
+    playbackSequenceTable_->setColumnCount(5);
+    playbackSequenceTable_->setHorizontalHeaderLabels(QStringList()
+        << "record_id" << "type" << QString::fromUtf8("帧/page") << QString::fromUtf8("缓存路径") << QString::fromUtf8("大小"));
+    playbackSequenceTable_->setSelectionBehavior(QAbstractItemView::SelectRows);
+    playbackSequenceTable_->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    playbackSequenceTable_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    playbackSequenceTable_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    playbackSequenceTable_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    playbackSequenceTable_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+    playbackSequenceTable_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::Stretch);
+    playbackSequenceTable_->horizontalHeader()->setSectionResizeMode(4, QHeaderView::ResizeToContents);
+    seqLayout->addWidget(playbackSequenceTable_);
+    auto* seqBtnRow = new QHBoxLayout();
+    playbackSeqRemoveBtn_ = new QPushButton(QString::fromUtf8("移除选中"), this);
+    playbackSeqClearBtn_ = new QPushButton(QString::fromUtf8("清空序列"), this);
+    seqBtnRow->addWidget(playbackSeqRemoveBtn_);
+    seqBtnRow->addWidget(playbackSeqClearBtn_);
+    seqBtnRow->addStretch(1);
+    seqLayout->addLayout(seqBtnRow);
+    playbackSequenceTable_->setVisible(false);
+    playbackSeqRemoveBtn_->setVisible(false);
+    playbackSeqClearBtn_->setVisible(false);
+    root->addWidget(playbackSequenceGroup_);
+
+    auto* cacheGroup = new QGroupBox(QString::fromUtf8("本地缓存"), this);
+    auto* cacheLayout = new QVBoxLayout(cacheGroup);
+    cacheInfoLbl_ = new QLabel("-", this);
+    cacheInfoLbl_->setWordWrap(true);
+    cacheLayout->addWidget(cacheInfoLbl_);
+    auto* cacheBtnRow = new QHBoxLayout();
+    cacheRefreshBtn_ = new QPushButton(QString::fromUtf8("刷新缓存大小"), this);
+    cacheOpenBtn_ = new QPushButton(QString::fromUtf8("打开缓存目录"), this);
+    cacheClearUnusedBtn_ = new QPushButton(QString::fromUtf8("清理非当前播放缓存"), this);
+    cacheClearAllBtn_ = new QPushButton(QString::fromUtf8("清理全部缓存"), this);
+    cacheBtnRow->addWidget(cacheRefreshBtn_);
+    cacheBtnRow->addWidget(cacheOpenBtn_);
+    cacheBtnRow->addStretch(1);
+    cacheLayout->addLayout(cacheBtnRow);
+    auto* cacheClearRow = new QHBoxLayout();
+    cacheClearRow->addWidget(cacheClearUnusedBtn_);
+    cacheClearRow->addWidget(cacheClearAllBtn_);
+    cacheClearRow->addStretch(1);
+    cacheLayout->addLayout(cacheClearRow);
+    root->addWidget(cacheGroup);
 
     auto* statusGroup = new QGroupBox(QString::fromUtf8("状态"), this);
     auto* statusLayout = new QVBoxLayout(statusGroup);
@@ -322,21 +820,78 @@ void RecordPlaybackPanel::setupUi()
     root->addWidget(statusGroup);
 
     playbackTimer_ = new QTimer(this);
+    tifRenderDebounceTimer_ = new QTimer(this);
+    tifRenderDebounceTimer_->setSingleShot(true);
+    tifRenderDebounceTimer_->setInterval(200);
+    tifRenderTimeoutTimer_ = new QTimer(this);
+    tifRenderTimeoutTimer_->setSingleShot(true);
 
     connect(retentionRefreshBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::refreshRetention);
     connect(retentionApplyBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::applyRetention);
+    const QList<QSpinBox*> retentionSpins = {
+        retentionDaysSpin_, retentionHoursSpin_, retentionMinutesSpin_, retentionSecondsSpin_
+    };
+    for (QSpinBox* s : retentionSpins) {
+        connect(s, QOverload<int>::of(&QSpinBox::valueChanged),
+                this, &RecordPlaybackPanel::updateRetentionTotalLabel);
+    }
     connect(queryBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::queryRecords);
+    connect(openRecordsDialogBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::showRecordsDialog);
     connect(downloadBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::downloadSelected);
+    connect(appendDownloadBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::appendSelectedToPlaybackSequence);
+    connect(selectAllBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::selectAllRecords);
+    connect(invertSelectionBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::invertRecordSelection);
+    connect(clearSelectionBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::clearRecordSelection);
     connect(recordsTable_, &QTableWidget::itemSelectionChanged,
             this, &RecordPlaybackPanel::updateUiEnabled);
+    connect(recordsTable_, &QTableWidget::itemDoubleClicked,
+            this, &RecordPlaybackPanel::showRecordDetails);
+    connect(recordsTable_, &QTableWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
+        QTableWidgetItem* item = recordsTable_->itemAt(pos);
+        if (!item) return;
+        QMenu menu(recordsTable_);
+        QAction* details = menu.addAction(QString::fromUtf8("查看详情"));
+        QAction* chosen = menu.exec(recordsTable_->viewport()->mapToGlobal(pos));
+        if (chosen == details) showRecordDetails(item);
+    });
     connect(prevBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::previousFrame);
     connect(nextBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::nextFrame);
     connect(playBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::startPlayback);
     connect(pauseBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::pausePlayback);
     connect(stopBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::stopPlayback);
-    connect(progressSlider_, &QSlider::sliderPressed, this, [this]() { sliderDragging_ = true; });
+    connect(progressSlider_, &QSlider::sliderPressed, this, [this]() {
+        sliderDragging_ = true;
+        progressWasPlayingBeforeDrag_ = playbackTimer_ && playbackTimer_->isActive();
+        if (progressWasPlayingBeforeDrag_) playbackTimer_->stop();
+    });
     connect(progressSlider_, &QSlider::sliderReleased, this, &RecordPlaybackPanel::onSliderReleased);
+    connect(frameSpin_, QOverload<int>::of(&QSpinBox::valueChanged),
+            this, &RecordPlaybackPanel::onFrameSpinChanged);
+    connect(exportFrameBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::exportCurrentFrame);
+    connect(intervalSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int value) {
+        if (playbackTimer_ && playbackTimer_->isActive()) playbackTimer_->setInterval(value);
+        updateUiEnabled();
+    });
     connect(playbackTimer_, &QTimer::timeout, this, &RecordPlaybackPanel::onPlaybackTick);
+    connect(tifRenderDebounceTimer_, &QTimer::timeout, this, [this]() {
+        if (!frameRefs_.isEmpty()) seekToFrame(currentFrame_, SeekTrigger::RenderSettings, false);
+    });
+    connect(tifRenderTimeoutTimer_, &QTimer::timeout, this, &RecordPlaybackPanel::onTifRenderTimeout);
+
+    connect(cacheRefreshBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::refreshCacheInfo);
+    connect(cacheOpenBtn_, &QPushButton::clicked, this, [this]() {
+        QDir().mkpath(cacheRoot());
+        QDesktopServices::openUrl(QUrl::fromLocalFile(QDir(cacheRoot()).absolutePath()));
+    });
+    connect(cacheClearUnusedBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::clearNonPlaybackCache);
+    connect(cacheClearAllBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::clearAllCache);
+    connect(clearSkippedBadFramesBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::clearSkippedBadFrames);
+    connect(cancelTifRenderBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::cancelTifRender);
+    connect(playbackSequenceGroup_, &QGroupBox::toggled, this, &RecordPlaybackPanel::togglePlaybackSequenceVisible);
+    connect(playbackSeqRemoveBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::removeSelectedPlaybackRecords);
+    connect(playbackSeqClearBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::clearPlaybackSequence);
+    connect(playbackSequenceTable_, &QTableWidget::itemSelectionChanged,
+            this, &RecordPlaybackPanel::updateUiEnabled);
 
     connect(renderModeCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &RecordPlaybackPanel::onRenderSettingsChanged);
@@ -344,8 +899,62 @@ void RecordPlaybackPanel::setupUi()
             this, &RecordPlaybackPanel::updateRenderVisibility);
     for (QSpinBox* s : bandSpins) {
         connect(s, QOverload<int>::of(&QSpinBox::valueChanged),
-                this, &RecordPlaybackPanel::onRenderSettingsChanged);
+                this, &RecordPlaybackPanel::scheduleTifRerender);
     }
+    const QList<QSlider*> bandSlidersForConnect = {
+        singleBandSlider_, rangeBeginSlider_, rangeEndSlider_, rBandSlider_, gBandSlider_, bBandSlider_,
+        rBeginSlider_, rEndSlider_, gBeginSlider_, gEndSlider_, bBeginSlider_, bEndSlider_
+    };
+    const QList<QSpinBox*> matchingSpins = {
+        singleBandSpin_, rangeBeginSpin_, rangeEndSpin_, rBandSpin_, gBandSpin_, bBandSpin_,
+        rBeginSpin_, rEndSpin_, gBeginSpin_, gEndSpin_, bBeginSpin_, bEndSpin_
+    };
+    for (int i = 0; i < bandSlidersForConnect.size(); ++i) {
+        QSlider* slider = bandSlidersForConnect[i];
+        QSpinBox* spin = matchingSpins[i];
+        connect(slider, &QSlider::valueChanged, this, [spin](int value) {
+            QSignalBlocker blocker(spin);
+            spin->setValue(value);
+        });
+        connect(slider, &QSlider::sliderReleased, this, &RecordPlaybackPanel::scheduleTifRerender);
+        connect(spin, QOverload<int>::of(&QSpinBox::valueChanged), this, [slider, this](int value) {
+            QSignalBlocker blocker(slider);
+            slider->setValue(value);
+            scheduleTifRerender();
+        });
+    }
+    const QList<QCheckBox*> toLastChecks = { rangeToLastChk_, rToLastChk_, gToLastChk_, bToLastChk_ };
+    for (QCheckBox* c : toLastChecks) {
+        connect(c, &QCheckBox::toggled, this, &RecordPlaybackPanel::scheduleTifRerender);
+        connect(c, &QCheckBox::toggled, this, &RecordPlaybackPanel::updateRenderVisibility);
+    }
+
+    auto shortcutAllowed = [this]() {
+        QWidget* fw = focusWidget();
+        return !qobject_cast<QAbstractSpinBox*>(fw) && !qobject_cast<QLineEdit*>(fw);
+    };
+    auto addShortcut = [this, shortcutAllowed](const QKeySequence& key, const std::function<void()>& fn) {
+        auto* shortcut = new QShortcut(key, this);
+        shortcut->setContext(Qt::WidgetWithChildrenShortcut);
+        connect(shortcut, &QShortcut::activated, this, [shortcutAllowed, fn]() {
+            if (shortcutAllowed()) fn();
+        });
+    };
+    addShortcut(QKeySequence(Qt::Key_Space), [this]() {
+        if (playbackRequested_ || (playbackTimer_ && playbackTimer_->isActive())) pausePlayback();
+        else startPlayback();
+    });
+    addShortcut(QKeySequence(Qt::Key_Left), [this]() { previousFrame(); });
+    addShortcut(QKeySequence(Qt::Key_Right), [this]() { nextFrame(); });
+    addShortcut(QKeySequence(Qt::Key_Home), [this]() {
+        if (!frameRefs_.isEmpty()) seekToFrame(0, SeekTrigger::Manual, false);
+    });
+    addShortcut(QKeySequence(Qt::Key_End), [this]() {
+        if (!frameRefs_.isEmpty()) seekToFrame(static_cast<quint64>(frameRefs_.size() - 1), SeekTrigger::Manual, false);
+    });
+
+    updateRetentionTotalLabel();
+    refreshCacheInfo();
 }
 
 void RecordPlaybackPanel::setStatus(const QString& text, bool isError)
@@ -356,37 +965,451 @@ void RecordPlaybackPanel::setStatus(const QString& text, bool isError)
 
 void RecordPlaybackPanel::updateUiEnabled()
 {
-    const bool busy = downloadBusy_;
+    const bool busy = downloadBusy_ || queryBusy_;
     const bool hasConnection = connected_ && device_ && device_->isConnected();
     const bool hasFrames = !frameRefs_.isEmpty();
-    const bool playing = playbackTimer_ && playbackTimer_->isActive();
+    const bool playing = playbackRequested_ || (playbackTimer_ && playbackTimer_->isActive());
+    const bool hasSelection = !selectedRecords().isEmpty();
 
     retentionRefreshBtn_->setEnabled(hasConnection && !busy);
     retentionApplyBtn_->setEnabled(hasConnection && !busy);
+    retentionDaysSpin_->setEnabled(!busy);
+    const bool retentionSubFieldsEnabled = !busy && retentionDaysSpin_->value() < retentionDaysSpin_->maximum();
+    retentionHoursSpin_->setEnabled(retentionSubFieldsEnabled);
+    retentionMinutesSpin_->setEnabled(retentionSubFieldsEnabled);
+    retentionSecondsSpin_->setEnabled(retentionSubFieldsEnabled);
+    typeCombo_->setEnabled(!busy);
+    countSpin_->setEnabled(!busy);
+    secondsSpin_->setEnabled(!busy);
     queryBtn_->setEnabled(hasConnection && !busy);
-    downloadBtn_->setEnabled(hasConnection && !busy && !recordsTable_->selectedItems().isEmpty());
+    openRecordsDialogBtn_->setEnabled(true);
+    downloadBtn_->setEnabled(downloadBusy_ || (hasConnection && !queryBusy_ && hasSelection));
+    if (appendDownloadBtn_) appendDownloadBtn_->setEnabled(hasConnection && !busy && hasSelection);
+    selectAllBtn_->setEnabled(!busy && recordsTable_->rowCount() > 0);
+    invertSelectionBtn_->setEnabled(!busy && recordsTable_->rowCount() > 0);
+    clearSelectionBtn_->setEnabled(!busy && hasSelection);
 
-    prevBtn_->setEnabled(hasFrames && !playing);
-    nextBtn_->setEnabled(hasFrames && !playing);
-    playBtn_->setEnabled(hasFrames && !playing);
+    prevBtn_->setEnabled(hasFrames && !tifRenderBusy_);
+    nextBtn_->setEnabled(hasFrames && !tifRenderBusy_);
+    playBtn_->setEnabled(hasFrames && !playing && !tifRenderBusy_);
     pauseBtn_->setEnabled(playing);
     stopBtn_->setEnabled(hasFrames);
-    progressSlider_->setEnabled(hasFrames && !playing);
+    progressSlider_->setEnabled(hasFrames && !tifRenderBusy_);
+    frameSpin_->setEnabled(hasFrames && !tifRenderBusy_);
+    exportFrameBtn_->setEnabled(!currentPlaybackImage_.isNull());
+    cancelTifRenderBtn_->setEnabled(tifRenderBusy_);
+    const bool hasSequenceSelection = playbackSequenceTable_
+        && playbackSequenceTable_->selectionModel()
+        && !playbackSequenceTable_->selectionModel()->selectedRows().isEmpty();
+    if (playbackSeqRemoveBtn_) playbackSeqRemoveBtn_->setEnabled(hasSequenceSelection);
+    if (playbackSeqClearBtn_) playbackSeqClearBtn_->setEnabled(!playbackRecordItems_.isEmpty());
+    cacheRefreshBtn_->setEnabled(true);
+    cacheOpenBtn_->setEnabled(true);
+    cacheClearUnusedBtn_->setEnabled(!downloadBusy_);
+    cacheClearAllBtn_->setEnabled(!downloadBusy_);
+    if (fpsLbl_) {
+        const double fps = intervalSpin_->value() > 0 ? 1000.0 / intervalSpin_->value() : 0.0;
+        fpsLbl_->setText(QString("%1 FPS").arg(QString::number(fps, 'f', 2)));
+    }
+    updateDownloadButtonText();
 }
 
 void RecordPlaybackPanel::cancelRemoteWork()
+{
+    cancelDownloadOnly();
+    queryBusy_ = false;
+    if (playbackTimer_) playbackTimer_->stop();
+    setPlaybackSequenceCleared();
+    updateUiEnabled();
+}
+
+void RecordPlaybackPanel::updateDownloadButtonText()
+{
+    if (!downloadBtn_) return;
+    if (downloadBusy_) {
+        downloadBtn_->setText(QString::fromUtf8("取消下载"));
+        return;
+    }
+    if (retryAvailable_) {
+        downloadBtn_->setText(QString::fromUtf8("重试下载"));
+        return;
+    }
+
+    const QVector<RecordItem> selected = retryAvailable_ && !pendingDownloadSelection_.isEmpty()
+        ? pendingDownloadSelection_
+        : selectedRecords();
+    if (selected.isEmpty()) {
+        downloadBtn_->setText(QString::fromUtf8("下载/加入播放"));
+        return;
+    }
+
+    bool allCached = true;
+    for (const RecordItem& item : selected) {
+        const CacheState state = cacheState(item);
+        if (state != CacheState::Cached && state != CacheState::CachedNoManifest) {
+            allCached = false;
+            break;
+        }
+    }
+    downloadBtn_->setText(allCached
+        ? QString::fromUtf8("加入播放")
+        : QString::fromUtf8("下载并播放"));
+}
+
+void RecordPlaybackPanel::showRecordsDialog()
+{
+    if (!recordsDialog_) return;
+    recordsDialog_->show();
+    recordsDialog_->raise();
+    recordsDialog_->activateWindow();
+}
+
+void RecordPlaybackPanel::setRecordSelectionLocked(bool locked)
+{
+    if (!recordsTable_ || recordSelectionLocked_ == locked) return;
+    recordSelectionLocked_ = locked;
+    recordsTable_->setSelectionMode(locked
+        ? QAbstractItemView::NoSelection
+        : QAbstractItemView::ExtendedSelection);
+}
+
+void RecordPlaybackPanel::cancelDownloadOnly()
 {
     if (downloader_ && downloadBusy_) {
         QMetaObject::invokeMethod(downloader_, "cancel", Qt::QueuedConnection);
         downloadBusy_ = false;
     }
-    if (playbackTimer_) playbackTimer_->stop();
+    setRecordSelectionLocked(false);
+}
+
+bool RecordPlaybackPanel::selectedRecordsType(const QVector<RecordItem>& items, QString* type, QString* err) const
+{
+    if (items.isEmpty()) return false;
+    const QString firstType = items.first().type;
+    for (const RecordItem& item : items) {
+        if (item.type != firstType) {
+            if (err) {
+                *err = QString::fromUtf8("选中了 raw 和 tif 两种类型记录，请只选择同一类型后再下载");
+            }
+            return false;
+        }
+    }
+    if (type) *type = firstType;
+    return true;
+}
+
+RecordPlaybackPanel::CacheState RecordPlaybackPanel::cacheState(const RecordItem& item) const
+{
+    const QString dir = recordCacheDir(item.type, item.recordId);
+    bool anyExists = false;
+    bool allValid = true;
+    for (const RecordFile& f : item.files) {
+        const QFileInfo info(QDir(dir).filePath(f.name));
+        if (info.exists()) anyExists = true;
+        if (!info.exists() || !info.isFile() || static_cast<quint64>(info.size()) != f.sizeBytes) {
+            allValid = false;
+        }
+    }
+    if (allValid) {
+        nlohmann::json manifest;
+        if (!readCacheManifest(item, &manifest)) return CacheState::CachedNoManifest;
+        return manifestFilesMatch(item, manifest) ? CacheState::Cached : CacheState::PossiblyStale;
+    }
+    return anyExists ? CacheState::Incomplete : CacheState::Missing;
+}
+
+QString RecordPlaybackPanel::cacheStateText(CacheState state) const
+{
+    if (state == CacheState::Cached) return QString::fromUtf8("已缓存");
+    if (state == CacheState::CachedNoManifest) return QString::fromUtf8("已缓存(无清单)");
+    if (state == CacheState::Incomplete) return QString::fromUtf8("不完整");
+    if (state == CacheState::PossiblyStale) return QString::fromUtf8("可能过期");
+    return QString::fromUtf8("未下载");
+}
+
+QIcon RecordPlaybackPanel::cacheStateIcon(CacheState state) const
+{
+    if (state == CacheState::Cached) {
+        return style()->standardIcon(QStyle::SP_DialogApplyButton);
+    }
+    if (state == CacheState::CachedNoManifest) {
+        return coloredDotIcon(QColor(60, 150, 215));
+    }
+    if (state == CacheState::Incomplete || state == CacheState::PossiblyStale) {
+        return style()->standardIcon(QStyle::SP_MessageBoxWarning);
+    }
+    return coloredDotIcon(QColor(145, 145, 145));
+}
+
+QString RecordPlaybackPanel::manifestPath(const RecordItem& item) const
+{
+    return QDir(recordCacheDir(item.type, item.recordId)).filePath("manifest.json");
+}
+
+bool RecordPlaybackPanel::readCacheManifest(const RecordItem& item, nlohmann::json* manifest) const
+{
+    QFile f(manifestPath(item));
+    if (!f.open(QIODevice::ReadOnly)) return false;
+    try {
+        if (manifest) *manifest = nlohmann::json::parse(f.readAll().constData());
+        return true;
+    } catch (...) {
+        return false;
+    }
+}
+
+bool RecordPlaybackPanel::manifestFilesMatch(const RecordItem& item, const nlohmann::json& manifest) const
+{
+    if (!manifest.contains("files") || !manifest["files"].is_array()) return false;
+    QHash<QString, quint64> expected;
+    for (const RecordFile& f : item.files) expected.insert(f.name, f.sizeBytes);
+    if (manifest["files"].size() != static_cast<std::size_t>(expected.size())) return false;
+    for (const auto& jf : manifest["files"]) {
+        const QString name = jsonString(jf, "name");
+        const quint64 size = jsonU64(jf, "size_bytes", 0);
+        if (!expected.contains(name) || expected.value(name) != size) return false;
+    }
+    return true;
+}
+
+bool RecordPlaybackPanel::writeCacheManifest(const RecordItem& item, QString* err) const
+{
+    QDir dir(recordCacheDir(item.type, item.recordId));
+    if (!dir.exists() && !QDir().mkpath(dir.absolutePath())) {
+        if (err) *err = QString::fromUtf8("无法创建缓存目录: %1").arg(dir.absolutePath());
+        return false;
+    }
+    nlohmann::json manifest;
+    manifest["manifest_version"] = 1;
+    manifest["type"] = item.type.toStdString();
+    manifest["record_id"] = item.recordId.toStdString();
+    manifest["timestamp_ns"] = item.timestampNs;
+    manifest["downloaded_at_ms"] = static_cast<quint64>(QDateTime::currentMSecsSinceEpoch());
+    manifest["files"] = nlohmann::json::array();
+    for (const RecordFile& f : item.files) {
+        manifest["files"].push_back({
+            {"name", f.name.toStdString()},
+            {"size_bytes", f.sizeBytes},
+        });
+    }
+
+    QFile out(manifestPath(item));
+    if (!out.open(QIODevice::WriteOnly | QIODevice::Truncate)) {
+        if (err) *err = QString::fromUtf8("无法写入缓存清单: %1").arg(out.fileName());
+        return false;
+    }
+    out.write(QByteArray::fromStdString(manifest.dump(2)));
+    return true;
+}
+
+void RecordPlaybackPanel::updateRecordCacheStatuses()
+{
+    if (!recordsTable_) return;
+    for (int row = 0; row < records_.size() && row < recordsTable_->rowCount(); ++row) {
+        const RecordItem& item = records_[row];
+        QTableWidgetItem* tableItem = recordsTable_->item(row, 3);
+        if (!tableItem) {
+            tableItem = new QTableWidgetItem();
+            recordsTable_->setItem(row, 3, tableItem);
+        }
+        const CacheState state = cacheState(item);
+        tableItem->setText(cacheStateText(state));
+        tableItem->setIcon(cacheStateIcon(state));
+        tableItem->setToolTip(QDir(recordCacheDir(item.type, item.recordId)).absolutePath());
+    }
+    updateDownloadButtonText();
+}
+
+QString RecordPlaybackPanel::formatRecordTimestamp(quint64 timestampNs) const
+{
+    if (timestampNs == 0) return "-";
+    const qint64 ms = static_cast<qint64>(timestampNs / 1000000ULL);
+    return QDateTime::fromMSecsSinceEpoch(ms).toLocalTime().toString("yyyy-MM-dd HH:mm:ss.zzz");
+}
+
+quint64 RecordPlaybackPanel::retentionSecondsFromInputs() const
+{
+    quint64 seconds = static_cast<quint64>(retentionDaysSpin_->value()) * 24ULL * 3600ULL;
+    seconds += static_cast<quint64>(retentionHoursSpin_->value()) * 3600ULL;
+    seconds += static_cast<quint64>(retentionMinutesSpin_->value()) * 60ULL;
+    seconds += static_cast<quint64>(retentionSecondsSpin_->value());
+    return seconds;
+}
+
+void RecordPlaybackPanel::setRetentionInputsFromSeconds(quint64 seconds)
+{
+    QSignalBlocker b1(retentionDaysSpin_);
+    QSignalBlocker b2(retentionHoursSpin_);
+    QSignalBlocker b3(retentionMinutesSpin_);
+    QSignalBlocker b4(retentionSecondsSpin_);
+    retentionDaysSpin_->setValue(static_cast<int>(qMin<quint64>(seconds / 86400ULL, retentionDaysSpin_->maximum())));
+    seconds %= 86400ULL;
+    retentionHoursSpin_->setValue(static_cast<int>(seconds / 3600ULL));
+    seconds %= 3600ULL;
+    retentionMinutesSpin_->setValue(static_cast<int>(seconds / 60ULL));
+    retentionSecondsSpin_->setValue(static_cast<int>(seconds % 60ULL));
+    updateRetentionTotalLabel();
+}
+
+void RecordPlaybackPanel::updateRetentionTotalLabel()
+{
+    if (!retentionTotalLbl_) return;
+    if (retentionDaysSpin_->value() >= retentionDaysSpin_->maximum()) {
+        QSignalBlocker b1(retentionHoursSpin_);
+        QSignalBlocker b2(retentionMinutesSpin_);
+        QSignalBlocker b3(retentionSecondsSpin_);
+        retentionHoursSpin_->setValue(0);
+        retentionMinutesSpin_->setValue(0);
+        retentionSecondsSpin_->setValue(0);
+        retentionHoursSpin_->setEnabled(false);
+        retentionMinutesSpin_->setEnabled(false);
+        retentionSecondsSpin_->setEnabled(false);
+    } else {
+        const bool busy = downloadBusy_ || queryBusy_;
+        retentionHoursSpin_->setEnabled(!busy);
+        retentionMinutesSpin_->setEnabled(!busy);
+        retentionSecondsSpin_->setEnabled(!busy);
+    }
+    retentionTotalLbl_->setText(QString::fromUtf8("总计 %1 秒").arg(retentionSecondsFromInputs()));
+}
+
+void RecordPlaybackPanel::setPlaybackSequenceCleared()
+{
+    cancelTifRender();
     playbackEntries_.clear();
     frameRefs_.clear();
+    playbackRecordItems_.clear();
     currentFrame_ = 0;
+    currentPlaybackImage_ = QImage();
+    currentPlaybackStats_ = ChannelImageStats();
+    currentPlaybackInfo_.clear();
     progressSlider_->setRange(0, 0);
+    frameSpin_->setRange(0, 0);
+    frameSpin_->setValue(0);
     playbackInfoLbl_->setText("0/0");
-    updateUiEnabled();
+    updatePlaybackSequenceTable();
+}
+
+QString RecordPlaybackPanel::currentExportFileName() const
+{
+    if (frameRefs_.isEmpty() || currentFrame_ >= static_cast<quint64>(frameRefs_.size())) {
+        return "record_frame.png";
+    }
+    const FrameRef ref = frameRefs_[static_cast<int>(currentFrame_)];
+    const PlaybackEntry& entry = playbackEntries_[ref.entryIndex];
+    QString name = QString("record_%1_frame_%2").arg(entry.recordId).arg(ref.frameIndex + 1);
+    if (entry.type == "tif") {
+        name += QString("_mode_%1").arg(renderModeCombo_->currentText().replace(' ', '_'));
+    }
+    return name + ".png";
+}
+
+ChannelImageStats RecordPlaybackPanel::imageStatsFromDisplayImage(const QImage& image) const
+{
+    ChannelImageStats stats;
+    if (image.isNull()) return stats;
+    quint64 sum = 0;
+    quint16 minV = std::numeric_limits<quint16>::max();
+    quint16 maxV = 0;
+    const QImage img = image.convertToFormat(QImage::Format_ARGB32);
+    const int pixels = img.width() * img.height();
+    if (pixels <= 0) return stats;
+    for (int y = 0; y < img.height(); ++y) {
+        const QRgb* row = reinterpret_cast<const QRgb*>(img.constScanLine(y));
+        for (int x = 0; x < img.width(); ++x) {
+            const QRgb px = row[x];
+            const quint16 v = static_cast<quint16>((qRed(px) + qGreen(px) + qBlue(px)) / 3);
+            minV = std::min(minV, v);
+            maxV = std::max(maxV, v);
+            sum += v;
+        }
+    }
+    stats.valid = true;
+    stats.min = minV;
+    stats.max = maxV;
+    stats.avg = static_cast<double>(sum) / pixels;
+    return stats;
+}
+
+QSet<QString> RecordPlaybackPanel::playbackCacheKeys() const
+{
+    QSet<QString> keys;
+    for (const PlaybackEntry& entry : playbackEntries_) {
+        keys.insert(cacheKey(entry.type, entry.recordId));
+    }
+    return keys;
+}
+
+RecordPlaybackPanel::CacheSummary RecordPlaybackPanel::summarizeCache(const QSet<QString>& keepKeys, bool onlyRemovable) const
+{
+    CacheSummary summary;
+    const QDir root(cacheRoot());
+    if (!root.exists()) return summary;
+    const QFileInfoList typeDirs = root.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
+    for (const QFileInfo& typeInfo : typeDirs) {
+        const QDir typeDir(typeInfo.absoluteFilePath());
+        const QFileInfoList recordDirs = typeDir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
+        for (const QFileInfo& recordInfo : recordDirs) {
+            const QString key = cacheKey(typeInfo.fileName(), recordInfo.fileName());
+            if (onlyRemovable && keepKeys.contains(key)) continue;
+            ++summary.recordCount;
+            const QDir recordDir(recordInfo.absoluteFilePath());
+            const QFileInfoList files = recordDir.entryInfoList(QDir::Files);
+            summary.fileCount += files.size();
+            for (const QFileInfo& file : files) {
+                summary.totalBytes += static_cast<quint64>(qMax<qint64>(0, file.size()));
+            }
+        }
+    }
+    return summary;
+}
+
+bool RecordPlaybackPanel::removeCacheRecords(const QSet<QString>& keepKeys, bool removeAll,
+                                             CacheSummary* removed, QString* err)
+{
+    if (removed) *removed = CacheSummary();
+    QDir root(cacheRoot());
+    if (!root.exists()) return true;
+    const QString rootPath = QFileInfo(root.absolutePath()).absoluteFilePath();
+    const QFileInfoList typeDirs = root.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
+    for (const QFileInfo& typeInfo : typeDirs) {
+        QDir typeDir(typeInfo.absoluteFilePath());
+        const QFileInfoList recordDirs = typeDir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
+        for (const QFileInfo& recordInfo : recordDirs) {
+            const QString key = cacheKey(typeInfo.fileName(), recordInfo.fileName());
+            if (!removeAll && keepKeys.contains(key)) continue;
+            const QString recordPath = recordInfo.absoluteFilePath();
+            if (!QFileInfo(recordPath).absoluteFilePath().startsWith(rootPath)) {
+                if (err) *err = QString::fromUtf8("缓存路径异常: %1").arg(recordPath);
+                return false;
+            }
+            QDir recordDir(recordPath);
+            CacheSummary local;
+            local.recordCount = 1;
+            const QFileInfoList files = recordDir.entryInfoList(QDir::Files);
+            local.fileCount = files.size();
+            for (const QFileInfo& file : files) {
+                local.totalBytes += static_cast<quint64>(qMax<qint64>(0, file.size()));
+            }
+            if (!recordDir.removeRecursively()) {
+                if (err) *err = QString::fromUtf8("无法删除缓存目录: %1").arg(recordPath);
+                return false;
+            }
+            if (removed) {
+                removed->recordCount += local.recordCount;
+                removed->fileCount += local.fileCount;
+                removed->totalBytes += local.totalBytes;
+            }
+        }
+        root.rmdir(typeInfo.fileName());
+    }
+    return true;
+}
+
+bool RecordPlaybackPanel::prepareForCacheMutation(QString* err)
+{
+    if (!cancelTifRenderAndWait(2000, err)) return false;
+    return true;
 }
 
 void RecordPlaybackPanel::refreshRetention()
@@ -398,7 +1421,9 @@ void RecordPlaybackPanel::refreshRetention()
             return;
         }
         const quint64 seconds = jsonU64(data, "retention_seconds", 0);
-        retentionSpin_->setValue(static_cast<int>(qMin<quint64>(seconds, retentionSpin_->maximum())));
+        currentRetentionSeconds_ = seconds;
+        hasCurrentRetention_ = true;
+        setRetentionInputsFromSeconds(seconds);
         retentionInfoLbl_->setText(QString::fromUtf8("当前保留 %1 秒").arg(seconds));
         setStatus(QString::fromUtf8("保留时间已刷新"), false);
     });
@@ -407,13 +1432,29 @@ void RecordPlaybackPanel::refreshRetention()
 void RecordPlaybackPanel::applyRetention()
 {
     if (!device_ || !device_->record()) return;
-    const quint64 seconds = static_cast<quint64>(retentionSpin_->value());
+    const quint64 seconds = retentionSecondsFromInputs();
+    if (seconds == 0 || (hasCurrentRetention_ && seconds < currentRetentionSeconds_)) {
+        const QString current = hasCurrentRetention_
+            ? QString::number(currentRetentionSeconds_)
+            : QString::fromUtf8("未知");
+        const QString msg = QString::fromUtf8(
+            "当前服务端保留时间为 %1 秒，设为 %2 秒后服务端可能按新策略清理数据，是否继续？")
+            .arg(current)
+            .arg(seconds);
+        if (QMessageBox::question(this, QString::fromUtf8("确认设置保留时间"), msg)
+            != QMessageBox::Yes) {
+            return;
+        }
+    }
     device_->record()->setRetention(this, seconds, [this](bool ok, const nlohmann::json& data, const QString& err) {
         if (!ok) {
             setStatus(err, true);
             return;
         }
         const quint64 s = jsonU64(data, "retention_seconds", 0);
+        currentRetentionSeconds_ = s;
+        hasCurrentRetention_ = true;
+        setRetentionInputsFromSeconds(s);
         retentionInfoLbl_->setText(QString::fromUtf8("当前=%1 秒 raw估算=%2 tif估算=%3")
             .arg(s)
             .arg(formatBytes(jsonU64(data, "raw_estimated_bytes", 0)))
@@ -425,20 +1466,31 @@ void RecordPlaybackPanel::applyRetention()
 void RecordPlaybackPanel::queryRecords()
 {
     if (!device_ || !device_->record()) return;
+    if (queryBusy_) return;
     const QString type = typeCombo_->currentData().toString();
     quint64 count = static_cast<quint64>(countSpin_->value());
     quint64 seconds = static_cast<quint64>(secondsSpin_->value());
     if (count == 0 && seconds == 0) count = 10;
+    queryBusy_ = true;
+    setStatus(QString::fromUtf8("正在查询远程记录..."), false);
+    updateUiEnabled();
     device_->record()->listRecent(this, type, count, seconds,
         [this](bool ok, const nlohmann::json& data, const QString& err) {
+        queryBusy_ = false;
+        if (!connected_) {
+            updateUiEnabled();
+            return;
+        }
         if (!ok) {
             setStatus(err, true);
+            updateUiEnabled();
             return;
         }
         QVector<RecordItem> items;
         QString parseErr;
         if (!parseRecordList(data, &items, &parseErr)) {
             setStatus(parseErr, true);
+            updateUiEnabled();
             return;
         }
         clearRecords();
@@ -446,7 +1498,10 @@ void RecordPlaybackPanel::queryRecords()
         for (const RecordItem& item : records_) {
             addRecordRow(item);
         }
-        setStatus(QString::fromUtf8("查询到 %1 条记录").arg(records_.size()), false);
+        updateRecordCacheStatuses();
+        setStatus(records_.isEmpty()
+            ? QString::fromUtf8("未查询到记录")
+            : QString::fromUtf8("查询到 %1 条记录").arg(records_.size()), false);
         updateUiEnabled();
     });
 }
@@ -455,6 +1510,7 @@ void RecordPlaybackPanel::clearRecords()
 {
     records_.clear();
     recordsTable_->setRowCount(0);
+    updateUiEnabled();
 }
 
 bool RecordPlaybackPanel::parseRecordList(const nlohmann::json& data, QVector<RecordItem>* out, QString* err) const
@@ -508,11 +1564,14 @@ void RecordPlaybackPanel::addRecordRow(const RecordItem& item)
     recordsTable_->insertRow(row);
     recordsTable_->setItem(row, 0, new QTableWidgetItem(item.recordId));
     recordsTable_->setItem(row, 1, new QTableWidgetItem(item.type));
-    recordsTable_->setItem(row, 2, new QTableWidgetItem(QString::number(item.timestampNs)));
-    recordsTable_->setItem(row, 3, new QTableWidgetItem(filesText(item)));
+    auto* tsItem = new QTableWidgetItem(formatRecordTimestamp(item.timestampNs));
+    tsItem->setToolTip(QString("timestamp_ns=%1").arg(item.timestampNs));
+    recordsTable_->setItem(row, 2, tsItem);
+    recordsTable_->setItem(row, 3, new QTableWidgetItem());
+    recordsTable_->setItem(row, 4, new QTableWidgetItem(filesText(item)));
     quint64 size = 0;
     for (const RecordFile& f : item.files) size += f.sizeBytes;
-    recordsTable_->setItem(row, 4, new QTableWidgetItem(formatBytes(size)));
+    recordsTable_->setItem(row, 5, new QTableWidgetItem(formatBytes(size)));
 }
 
 QVector<RecordPlaybackPanel::RecordItem> RecordPlaybackPanel::selectedRecords() const
@@ -532,10 +1591,22 @@ QVector<RecordPlaybackPanel::RecordItem> RecordPlaybackPanel::selectedRecords() 
 
 void RecordPlaybackPanel::downloadSelected()
 {
+    if (downloadBusy_) {
+        cancelDownloadOnly();
+        setStatus(QString::fromUtf8("正在取消下载..."), false);
+        updateUiEnabled();
+        return;
+    }
     const QVector<RecordItem> selected = selectedRecords();
     if (selected.isEmpty()) return;
     if (host_.isEmpty()) {
         setStatus(QString::fromUtf8("未连接服务端"), true);
+        return;
+    }
+    QString selectedType;
+    QString typeErr;
+    if (!selectedRecordsType(selected, &selectedType, &typeErr)) {
+        setStatus(typeErr, true);
         return;
     }
 
@@ -547,28 +1618,42 @@ void RecordPlaybackPanel::downloadSelected()
         }
     }
     downloadedSelection_ = selected;
+    pendingDownloadSelection_ = selected;
+    pendingDownloadType_ = selectedType;
 
     if (missing.isEmpty()) {
-        if (!buildPlaybackSequence(downloadedSelection_, &err)) {
-            setStatus(err, true);
-            return;
-        }
-        setStatus(QString::fromUtf8("已复用本地缓存并加入播放序列"), false);
+        setPlaybackSequence(downloadedSelection_, appendAfterDownload_);
+        appendAfterDownload_ = false;
+        automaticDownloadRetryCount_ = 0;
+        retryAvailable_ = false;
+        setStatus(QString::fromUtf8("已复用本地缓存，播放序列已更新"), false);
         return;
     }
 
     QStringList ids;
     for (const RecordItem& item : missing) ids << item.recordId;
-    device_->record()->fetch(this, typeCombo_->currentData().toString(), ids,
-        [this, missing](bool ok, const nlohmann::json& data, const QString& rpcErr) {
+    downloadBusy_ = true;
+    retryAvailable_ = false;
+    setRecordSelectionLocked(true);
+    setStatus(QString::fromUtf8("正在准备下载远程记录..."), false);
+    updateUiEnabled();
+    device_->record()->fetch(this, selectedType, ids,
+        [this, selectedType](bool ok, const nlohmann::json& data, const QString& rpcErr) {
+        if (!downloadBusy_) return;
         if (!ok) {
-            setStatus(rpcErr, true);
+            downloadBusy_ = false;
+            setRecordSelectionLocked(false);
+            onDownloadFailed(RemoteDownloadErrorReason::Protocol, rpcErr);
+            updateUiEnabled();
             return;
         }
         const QString transferId = jsonString(data, "transfer_id");
         const quint16 filePort = static_cast<quint16>(jsonU64(data, "file_port", 0));
         if (transferId.isEmpty() || filePort == 0 || !data.contains("files") || !data["files"].is_array()) {
-            setStatus(QString::fromUtf8("record.fetch 响应无效"), true);
+            downloadBusy_ = false;
+            setRecordSelectionLocked(false);
+            onDownloadFailed(RemoteDownloadErrorReason::Protocol, QString::fromUtf8("record.fetch 响应无效"));
+            updateUiEnabled();
             return;
         }
         QVector<RemoteFetchFile> fetchFiles;
@@ -579,19 +1664,18 @@ void RecordPlaybackPanel::downloadSelected()
             ff.sizeBytes = jsonU64(f, "size_bytes", 0);
             fetchFiles.append(ff);
         }
-        downloadBusy_ = true;
-        const QString type = typeCombo_->currentData().toString();
         const QString root = cacheRoot();
         const bool invoked = QMetaObject::invokeMethod(
             downloader_, "start", Qt::QueuedConnection,
             Q_ARG(QString, host_),
             Q_ARG(quint16, filePort),
             Q_ARG(QString, transferId),
-            Q_ARG(QString, type),
+            Q_ARG(QString, selectedType),
             Q_ARG(QVector<RemoteFetchFile>, fetchFiles),
             Q_ARG(QString, root));
         if (!invoked) {
             downloadBusy_ = false;
+            setRecordSelectionLocked(false);
             setStatus(QString::fromUtf8("无法启动下载线程"), true);
             updateUiEnabled();
             return;
@@ -603,26 +1687,53 @@ void RecordPlaybackPanel::downloadSelected()
 
 void RecordPlaybackPanel::onDownloadProgress(quint64 received, quint64 total, const QString& currentFile)
 {
-    downloadInfoLbl_->setText(QString("%1 / %2  %3")
-        .arg(formatBytes(received), formatBytes(total), currentFile));
+    const QString pct = total > 0
+        ? QString("  %1%").arg(QString::number(received * 100.0 / total, 'f', 1))
+        : QString();
+    downloadInfoLbl_->setText(QString("%1 / %2%3  %4")
+        .arg(formatBytes(received), formatBytes(total), pct, currentFile));
 }
 
 void RecordPlaybackPanel::onDownloadFinished(const QStringList&)
 {
     downloadBusy_ = false;
+    setRecordSelectionLocked(false);
     QString err;
-    if (!buildPlaybackSequence(downloadedSelection_, &err)) {
+    for (const RecordItem& item : downloadedSelection_) {
+        writeCacheManifest(item, nullptr);
+    }
+    setPlaybackSequence(downloadedSelection_, appendAfterDownload_);
+    appendAfterDownload_ = false;
+    automaticDownloadRetryCount_ = 0;
+    retryAvailable_ = false;
+    if (frameRefs_.isEmpty() && !downloadedSelection_.isEmpty()) {
         setStatus(err, true);
         updateUiEnabled();
         return;
     }
-    setStatus(QString::fromUtf8("下载完成，播放序列已就绪"), false);
+    updateRecordCacheStatuses();
+    refreshCacheInfo();
+    setStatus(QString::fromUtf8("下载完成，播放序列已更新"), false);
     updateUiEnabled();
 }
 
-void RecordPlaybackPanel::onDownloadFailed(const QString& error)
+void RecordPlaybackPanel::onDownloadFailed(RemoteDownloadErrorReason reason, const QString& error)
 {
     downloadBusy_ = false;
+    setRecordSelectionLocked(false);
+    if (reason != RemoteDownloadErrorReason::UserCanceled && automaticDownloadRetryCount_ < 1 && !pendingDownloadSelection_.isEmpty()) {
+        ++automaticDownloadRetryCount_;
+        setStatus(QString::fromUtf8("下载失败，正在自动重试 1 次: %1").arg(error), true);
+        downloadBusy_ = false;
+        QTimer::singleShot(0, this, [this]() {
+            downloadedSelection_ = pendingDownloadSelection_;
+            downloadSelected();
+        });
+        return;
+    }
+    retryAvailable_ = reason != RemoteDownloadErrorReason::UserCanceled && !pendingDownloadSelection_.isEmpty();
+    updateRecordCacheStatuses();
+    refreshCacheInfo();
     setStatus(error, true);
     updateUiEnabled();
 }
@@ -639,19 +1750,93 @@ QString RecordPlaybackPanel::recordCacheDir(const QString& type, const QString& 
 
 bool RecordPlaybackPanel::isRecordCached(const RecordItem& item, QString*) const
 {
-    const QString dir = recordCacheDir(item.type, item.recordId);
-    for (const RecordFile& f : item.files) {
-        QFileInfo info(QDir(dir).filePath(f.name));
-        if (!info.exists() || !info.isFile() || static_cast<quint64>(info.size()) != f.sizeBytes) {
-            return false;
+    const CacheState state = cacheState(item);
+    return state == CacheState::Cached || state == CacheState::CachedNoManifest;
+}
+
+QVector<RecordPlaybackPanel::RecordItem> RecordPlaybackPanel::currentPlaybackRecordItems() const
+{
+    return playbackRecordItems_;
+}
+
+void RecordPlaybackPanel::setPlaybackSequence(const QVector<RecordItem>& items, bool append)
+{
+    QVector<RecordItem> next = append ? playbackRecordItems_ : QVector<RecordItem>();
+    int skipped = 0;
+    QSet<QString> seen;
+    for (const RecordItem& item : next) seen.insert(cacheKey(item.type, item.recordId));
+    for (const RecordItem& item : items) {
+        const QString key = cacheKey(item.type, item.recordId);
+        if (seen.contains(key)) {
+            ++skipped;
+            continue;
+        }
+        seen.insert(key);
+        next.append(item);
+    }
+    QString err;
+    if (!buildPlaybackSequence(next, &err)) {
+        setStatus(err, true);
+        return;
+    }
+    playbackRecordItems_ = next;
+    updatePlaybackSequenceTable();
+    resetSkippedBadFrames();
+    if (skipped > 0) {
+        setStatus(QString::fromUtf8("已跳过 %1 条已在播放序列中的记录").arg(skipped), false);
+    }
+}
+
+QVector<RecordPlaybackPanel::RecordItem> RecordPlaybackPanel::selectedPlaybackRecords() const
+{
+    QVector<RecordItem> result;
+    if (!playbackSequenceTable_) return result;
+    QSet<int> rows;
+    if (playbackSequenceTable_->selectionModel()) {
+        for (const QModelIndex& index : playbackSequenceTable_->selectionModel()->selectedRows()) {
+            rows.insert(index.row());
         }
     }
-    return true;
+    if (rows.isEmpty()) {
+        for (QTableWidgetItem* item : playbackSequenceTable_->selectedItems()) rows.insert(item->row());
+    }
+    const QList<int> rowList = rows.values();
+    for (int row : rowList) {
+        if (row >= 0 && row < playbackRecordItems_.size()) result.append(playbackRecordItems_[row]);
+    }
+    return result;
+}
+
+void RecordPlaybackPanel::updatePlaybackSequenceTable()
+{
+    if (!playbackSequenceTable_) return;
+    playbackSequenceTable_->setRowCount(0);
+    for (const RecordItem& item : playbackRecordItems_) {
+        const int row = playbackSequenceTable_->rowCount();
+        playbackSequenceTable_->insertRow(row);
+        playbackSequenceTable_->setItem(row, 0, new QTableWidgetItem(item.recordId));
+        playbackSequenceTable_->setItem(row, 1, new QTableWidgetItem(item.type));
+        QString countText = "-";
+        for (const PlaybackEntry& entry : playbackEntries_) {
+            if (entry.type == item.type && entry.recordId == item.recordId) {
+                countText = entry.type == "tif"
+                    ? QString::fromUtf8("%1 page").arg(entry.pageCount)
+                    : QString::fromUtf8("%1 帧").arg(entry.frameCount);
+                break;
+            }
+        }
+        playbackSequenceTable_->setItem(row, 2, new QTableWidgetItem(countText));
+        playbackSequenceTable_->setItem(row, 3, new QTableWidgetItem(QDir(recordCacheDir(item.type, item.recordId)).absolutePath()));
+        quint64 size = 0;
+        for (const RecordFile& f : item.files) size += f.sizeBytes;
+        playbackSequenceTable_->setItem(row, 4, new QTableWidgetItem(formatBytes(size)));
+    }
+    updateUiEnabled();
 }
 
 bool RecordPlaybackPanel::buildPlaybackSequence(const QVector<RecordItem>& items, QString* err)
 {
-    stopPlayback();
+    pausePlayback();
     playbackEntries_.clear();
     frameRefs_.clear();
 
@@ -675,6 +1860,7 @@ bool RecordPlaybackPanel::buildPlaybackSequence(const QVector<RecordItem>& items
 
     rebuildFrameRefs();
     progressSlider_->setRange(0, frameRefs_.isEmpty() ? 0 : frameRefs_.size() - 1);
+    frameSpin_->setRange(frameRefs_.isEmpty() ? 0 : 1, frameRefs_.isEmpty() ? 0 : frameRefs_.size());
     currentFrame_ = 0;
     if (!frameRefs_.isEmpty()) {
         showFrame(0);
@@ -803,51 +1989,333 @@ void RecordPlaybackPanel::rebuildFrameRefs()
 
 void RecordPlaybackPanel::showFrame(quint64 globalIndex)
 {
+    seekToFrame(globalIndex, SeekTrigger::Manual, false);
+}
+
+void RecordPlaybackPanel::seekToFrame(quint64 globalIndex, SeekTrigger trigger, bool resumeIfWasPlaying)
+{
     if (frameRefs_.isEmpty()) return;
     if (globalIndex >= static_cast<quint64>(frameRefs_.size())) globalIndex = frameRefs_.size() - 1;
 
     const FrameRef ref = frameRefs_[static_cast<int>(globalIndex)];
     const PlaybackEntry& entry = playbackEntries_[ref.entryIndex];
     if (entry.type == "tif") {
-        const int maxBand = qMax(0, entry.pageCount - 1);
-        const QList<QSpinBox*> bandSpins = {singleBandSpin_, rBandSpin_, gBandSpin_, bBandSpin_};
-        const QList<QSpinBox*> rangeSpins = {
-            rangeBeginSpin_, rangeEndSpin_, rBeginSpin_, rEndSpin_,
-            gBeginSpin_, gEndSpin_, bBeginSpin_, bEndSpin_
-        };
-        for (QSpinBox* s : bandSpins) {
-            QSignalBlocker blocker(s);
-            s->setRange(0, maxBand);
-        }
-        for (QSpinBox* s : rangeSpins) {
-            QSignalBlocker blocker(s);
-            s->setRange(0, entry.pageCount);
-        }
+        updateTifBandRanges(entry);
+        updateRenderVisibility();
+        submitTifRenderRequest(globalIndex, trigger, resumeIfWasPlaying);
+        return;
     }
+    cancelTifRender();
+    updateRenderVisibility();
     QImage image;
     QString info;
     QString err;
-    const bool ok = entry.type == "raw"
-        ? renderRawFrame(entry, ref.frameIndex, &image, &info, &err)
-        : renderTifFrame(entry, &image, &info, &err);
+    ChannelImageStats stats;
+    const bool ok = renderRawFrame(entry, ref.frameIndex, &image, &info, &stats, &err);
     if (!ok) {
-        setStatus(err, true);
-        pausePlayback();
+        handleFrameError(globalIndex, ref, entry, err);
         return;
     }
+    finishDisplayedFrame(globalIndex, image, info, stats);
+    if (resumeIfWasPlaying && playbackRequested_ && playbackTimer_) {
+        playbackTimer_->start(intervalSpin_->value());
+        updateUiEnabled();
+    }
+}
 
+void RecordPlaybackPanel::finishDisplayedFrame(quint64 globalIndex, const QImage& image,
+                                               const QString& info, const ChannelImageStats& stats)
+{
     currentFrame_ = globalIndex;
     if (!sliderDragging_) progressSlider_->setValue(static_cast<int>(globalIndex));
+    {
+        QSignalBlocker blocker(frameSpin_);
+        frameSpin_->setValue(static_cast<int>(globalIndex + 1));
+    }
+    currentPlaybackImage_ = image;
+    currentPlaybackStats_ = stats;
+    currentPlaybackInfo_ = info;
     playbackInfoLbl_->setText(QString("%1/%2  %3")
         .arg(globalIndex + 1)
         .arg(frameRefs_.size())
         .arg(info));
     emit requestSwitchToPlaybackView();
-    emit playbackImageReady(image, info);
+    emit playbackImageReady(image, info, stats);
+    updateUiEnabled();
+}
+
+int RecordPlaybackPanel::bandValue0(const BandSelector& selector) const
+{
+    return qMax(0, selector.spin ? selector.spin->value() - 1 : 0);
+}
+
+int RecordPlaybackPanel::rangeEndValueExclusive(const BandSelector& selector, const QCheckBox* toLast, int pageCount) const
+{
+    if (toLast && toLast->isChecked()) return pageCount;
+    return qBound(1, selector.spin ? selector.spin->value() : 1, pageCount);
+}
+
+bool RecordPlaybackPanel::currentTifRenderArgs(int pageCount, int* mode, int* a, int* b, int* c, int* d, int* e, int* f, QString* err) const
+{
+    const int m = renderModeCombo_->currentData().toInt();
+    if (mode) *mode = m;
+    auto requireRange = [pageCount, err](int begin, int end) {
+        if (begin < 0 || begin >= pageCount || end <= begin || end > pageCount) {
+            if (err) *err = QString::fromUtf8("波段范围非法");
+            return false;
+        }
+        return true;
+    };
+
+    if (m == static_cast<int>(TifRenderMode::SingleBand)) {
+        const int begin = bandValue0({singleBandSlider_, singleBandSpin_, pageCount});
+        if (!requireRange(begin, begin + 1)) return false;
+        if (a) *a = begin;
+        if (b) *b = begin + 1;
+    } else if (m == static_cast<int>(TifRenderMode::RangeAverage)) {
+        const int begin = bandValue0({rangeBeginSlider_, rangeBeginSpin_, pageCount});
+        const int end = rangeEndValueExclusive({rangeEndSlider_, rangeEndSpin_, pageCount}, rangeToLastChk_, pageCount);
+        if (!requireRange(begin, end)) return false;
+        if (a) *a = begin;
+        if (b) *b = end;
+    } else if (m == static_cast<int>(TifRenderMode::RgbSingleBand)) {
+        const int rb = bandValue0({rBandSlider_, rBandSpin_, pageCount});
+        const int gb = bandValue0({gBandSlider_, gBandSpin_, pageCount});
+        const int bb = bandValue0({bBandSlider_, bBandSpin_, pageCount});
+        if (!requireRange(rb, rb + 1) || !requireRange(gb, gb + 1) || !requireRange(bb, bb + 1)) return false;
+        if (a) *a = rb;
+        if (b) *b = rb + 1;
+        if (c) *c = gb;
+        if (d) *d = gb + 1;
+        if (e) *e = bb;
+        if (f) *f = bb + 1;
+    } else {
+        const int rb = bandValue0({rBeginSlider_, rBeginSpin_, pageCount});
+        const int re = rangeEndValueExclusive({rEndSlider_, rEndSpin_, pageCount}, rToLastChk_, pageCount);
+        const int gb = bandValue0({gBeginSlider_, gBeginSpin_, pageCount});
+        const int ge = rangeEndValueExclusive({gEndSlider_, gEndSpin_, pageCount}, gToLastChk_, pageCount);
+        const int bb = bandValue0({bBeginSlider_, bBeginSpin_, pageCount});
+        const int be = rangeEndValueExclusive({bEndSlider_, bEndSpin_, pageCount}, bToLastChk_, pageCount);
+        if (!requireRange(rb, re) || !requireRange(gb, ge) || !requireRange(bb, be)) return false;
+        if (a) *a = rb;
+        if (b) *b = re;
+        if (c) *c = gb;
+        if (d) *d = ge;
+        if (e) *e = bb;
+        if (f) *f = be;
+    }
+    return true;
+}
+
+void RecordPlaybackPanel::submitTifRenderRequest(quint64 globalIndex, SeekTrigger trigger, bool resumeWhenReady)
+{
+    if (!tifRenderWorker_ || frameRefs_.isEmpty()) return;
+    const FrameRef ref = frameRefs_[static_cast<int>(globalIndex)];
+    const PlaybackEntry& entry = playbackEntries_[ref.entryIndex];
+    int mode = 0, a = 0, b = 0, c = 0, d = 0, e = 0, f = 0;
+    QString err;
+    if (!currentTifRenderArgs(entry.pageCount, &mode, &a, &b, &c, &d, &e, &f, &err)) {
+        handleFrameError(globalIndex, ref, entry, err);
+        return;
+    }
+
+    const quint64 requestId = ++tifRenderRequestId_;
+    activeTifRenderRequestId_ = requestId;
+    activeTifRenderFrame_ = globalIndex;
+    activeTifRenderTrigger_ = trigger;
+    tifRenderResumeWhenReady_ = resumeWhenReady;
+    tifRenderBusy_ = true;
+    if (playbackTimer_) playbackTimer_->stop();
+    if (tifRenderWorker_) tifRenderWorker_->requestCancel(requestId);
+
+    TifRenderRequest request;
+    request.requestId = requestId;
+    request.globalIndex = globalIndex;
+    request.recordId = entry.recordId;
+    request.path = entry.tifPath;
+    request.pageCount = entry.pageCount;
+    request.width = entry.tifWidth;
+    request.height = entry.tifHeight;
+    request.mode = mode;
+    request.a = a;
+    request.b = b;
+    request.c = c;
+    request.d = d;
+    request.e = e;
+    request.f = f;
+
+    if (tifRenderHintLbl_) tifRenderHintLbl_->setText(QString::fromUtf8("正在渲染 TIF..."));
+    setStatus(QString::fromUtf8("正在渲染 TIF..."), false);
+    tifRenderTimeoutTimer_->start(qMax(2000, intervalSpin_->value() * 2));
+    QMetaObject::invokeMethod(tifRenderWorker_, "render", Qt::QueuedConnection,
+                              Q_ARG(TifRenderRequest, request));
+    updateUiEnabled();
+}
+
+void RecordPlaybackPanel::onTifRenderReady(quint64 requestId, quint64 globalIndex, QImage image, QString info, ChannelImageStats stats)
+{
+    if (requestId != activeTifRenderRequestId_ || globalIndex != activeTifRenderFrame_) return;
+    tifRenderBusy_ = false;
+    tifRenderTimeoutTimer_->stop();
+    finishDisplayedFrame(globalIndex, image, info, stats);
+    if (tifRenderHintLbl_) tifRenderHintLbl_->setText(QString::fromUtf8("TIF 渲染完成"));
+    if (tifRenderResumeWhenReady_ && playbackRequested_ && playbackTimer_) {
+        playbackTimer_->start(intervalSpin_->value());
+    }
+    tifRenderResumeWhenReady_ = false;
+    updateUiEnabled();
+}
+
+void RecordPlaybackPanel::onTifRenderFailed(quint64 requestId, quint64 globalIndex, QString error)
+{
+    if (requestId != activeTifRenderRequestId_) return;
+    tifRenderBusy_ = false;
+    tifRenderTimeoutTimer_->stop();
+    const FrameRef ref = frameRefs_.isEmpty() ? FrameRef() : frameRefs_[static_cast<int>(qMin<quint64>(globalIndex, frameRefs_.size() - 1))];
+    const PlaybackEntry entry = (ref.entryIndex >= 0 && ref.entryIndex < playbackEntries_.size()) ? playbackEntries_[ref.entryIndex] : PlaybackEntry();
+    handleFrameError(globalIndex, ref, entry, error);
+}
+
+void RecordPlaybackPanel::onTifRenderCanceled(quint64 requestId)
+{
+    if (requestId != activeTifRenderRequestId_) return;
+    tifRenderBusy_ = false;
+    tifRenderTimeoutTimer_->stop();
+    tifRenderResumeWhenReady_ = false;
+    if (tifRenderHintLbl_) tifRenderHintLbl_->setText(QString::fromUtf8("TIF 渲染已取消"));
+    updateUiEnabled();
+}
+
+void RecordPlaybackPanel::onTifRenderProgress(quint64 requestId, QString text)
+{
+    if (requestId != activeTifRenderRequestId_) return;
+    if (tifRenderHintLbl_) tifRenderHintLbl_->setText(text);
+}
+
+void RecordPlaybackPanel::onTifRenderTimeout()
+{
+    if (!tifRenderBusy_) return;
+    const quint64 timedOutFrame = activeTifRenderFrame_;
+    cancelTifRender();
+    if (badFramePolicyCombo_->currentData().toInt() == static_cast<int>(BadFramePolicy::Skip)) {
+        ++skippedBadFrames_;
+        updateSkippedBadFramesStatus();
+        if (timedOutFrame + 1 < static_cast<quint64>(frameRefs_.size())) {
+            seekToFrame(timedOutFrame + 1, SeekTrigger::Playback, true);
+        }
+    } else {
+        setStatus(QString::fromUtf8("TIF 渲染超时，已暂停"), true);
+    }
+}
+
+void RecordPlaybackPanel::cancelTifRender()
+{
+    if (!tifRenderBusy_) return;
+    const quint64 cancelMarker = ++tifRenderRequestId_;
+    if (tifRenderWorker_) tifRenderWorker_->requestCancel(cancelMarker);
+    tifRenderTimeoutTimer_->stop();
+    tifRenderResumeWhenReady_ = false;
+    if (tifRenderHintLbl_) tifRenderHintLbl_->setText(QString::fromUtf8("正在取消 TIF 渲染..."));
+    updateUiEnabled();
+}
+
+bool RecordPlaybackPanel::cancelTifRenderAndWait(int timeoutMs, QString* err)
+{
+    if (!tifRenderBusy_) return true;
+    cancelTifRender();
+    QElapsedTimer timer;
+    timer.start();
+    while (tifRenderBusy_ && timer.elapsed() < timeoutMs) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+    }
+    if (tifRenderBusy_) {
+        if (err) *err = QString::fromUtf8("渲染任务未结束，稍后重试");
+        return false;
+    }
+    return true;
+}
+
+void RecordPlaybackPanel::handleFrameError(quint64 globalIndex, const FrameRef& ref, const PlaybackEntry& entry, const QString& err)
+{
+    const QString detail = QString::fromUtf8("%1 record_id=%2 global_frame=%3 entry_frame=%4 path=%5")
+        .arg(err)
+        .arg(entry.recordId)
+        .arg(globalIndex + 1)
+        .arg(ref.frameIndex + 1)
+        .arg(entry.type == "tif" ? entry.tifPath : entry.rawPath);
+    if (badFramePolicyCombo_ && badFramePolicyCombo_->currentData().toInt() == static_cast<int>(BadFramePolicy::Skip)) {
+        ++skippedBadFrames_;
+        updateSkippedBadFramesStatus();
+        if (globalIndex + 1 < static_cast<quint64>(frameRefs_.size())) {
+            seekToFrame(globalIndex + 1, SeekTrigger::Playback, playbackRequested_ || (playbackTimer_ && playbackTimer_->isActive()));
+            return;
+        }
+    }
+    pausePlayback();
+    setStatus(detail, true);
+}
+
+void RecordPlaybackPanel::resetSkippedBadFrames()
+{
+    skippedBadFrames_ = 0;
+    updateSkippedBadFramesStatus();
+}
+
+void RecordPlaybackPanel::updateSkippedBadFramesStatus()
+{
+    if (skippedBadFrames_ > 0) {
+        setStatus(QString::fromUtf8("已跳过 %1 帧").arg(skippedBadFrames_), false);
+    }
+}
+
+void RecordPlaybackPanel::clearSkippedBadFrames()
+{
+    resetSkippedBadFrames();
+    setStatus(QString::fromUtf8("已清除坏帧跳过计数"), false);
+}
+
+void RecordPlaybackPanel::syncBandSelector(BandSelector* selector, int pageCount)
+{
+    if (!selector || !selector->slider || !selector->spin) return;
+    const int maxValue = qMax(1, pageCount);
+    const int value = qBound(1, selector->spin->value(), maxValue);
+    {
+        QSignalBlocker b1(selector->slider);
+        QSignalBlocker b2(selector->spin);
+        selector->slider->setRange(1, maxValue);
+        selector->spin->setRange(1, maxValue);
+        selector->slider->setValue(value);
+        selector->spin->setValue(value);
+    }
+    selector->maxPageCount = pageCount;
+}
+
+void RecordPlaybackPanel::updateTifBandRanges(const PlaybackEntry& entry)
+{
+    const int pageCount = qMax(1, entry.pageCount);
+    QVector<BandSelector> selectors = {
+        {singleBandSlider_, singleBandSpin_, 0},
+        {rangeBeginSlider_, rangeBeginSpin_, 0},
+        {rangeEndSlider_, rangeEndSpin_, 0},
+        {rBandSlider_, rBandSpin_, 0},
+        {gBandSlider_, gBandSpin_, 0},
+        {bBandSlider_, bBandSpin_, 0},
+        {rBeginSlider_, rBeginSpin_, 0},
+        {rEndSlider_, rEndSpin_, 0},
+        {gBeginSlider_, gBeginSpin_, 0},
+        {gEndSlider_, gEndSpin_, 0},
+        {bBeginSlider_, bBeginSpin_, 0},
+        {bEndSlider_, bEndSpin_, 0},
+    };
+    for (BandSelector& selector : selectors) syncBandSelector(&selector, pageCount);
+    if (tifRenderHintLbl_) {
+        tifRenderHintLbl_->setText(QString::fromUtf8("TIF pages=%1 size=%2x%3")
+            .arg(entry.pageCount).arg(entry.tifWidth).arg(entry.tifHeight));
+    }
 }
 
 bool RecordPlaybackPanel::renderRawFrame(const PlaybackEntry& entry, quint64 frameIndex,
-                                         QImage* image, QString* info, QString* err) const
+                                         QImage* image, QString* info, ChannelImageStats* stats, QString* err) const
 {
     quint64 offset = 0;
     if (!checkedMul(entry.bytesPerFrame, frameIndex, &offset) ||
@@ -871,6 +2339,7 @@ bool RecordPlaybackPanel::renderRawFrame(const PlaybackEntry& entry, quint64 fra
         return false;
     }
     if (image) *image = img;
+    if (stats) *stats = makeChannelImageStats(entry.width, entry.height, cli::proto::Mono16, data);
     if (info) {
         const quint8 ft = frameIndex < static_cast<quint64>(entry.frameTypes.size())
             ? entry.frameTypes[static_cast<int>(frameIndex)]
@@ -886,7 +2355,7 @@ bool RecordPlaybackPanel::renderRawFrame(const PlaybackEntry& entry, quint64 fra
     return true;
 }
 
-bool RecordPlaybackPanel::renderTifFrame(const PlaybackEntry& entry, QImage* image, QString* info, QString* err) const
+bool RecordPlaybackPanel::renderTifFrame(const PlaybackEntry& entry, QImage* image, QString* info, ChannelImageStats* stats, QString* err) const
 {
     const int pageCount = entry.pageCount;
     const auto mode = static_cast<TifRenderMode>(renderModeCombo_->currentData().toInt());
@@ -913,6 +2382,7 @@ bool RecordPlaybackPanel::renderTifFrame(const PlaybackEntry& entry, QImage* ima
                           image, err);
     }
     if (!ok) return false;
+    if (stats && image) *stats = imageStatsFromDisplayImage(*image);
     if (info) {
         *info = QString("tif %1 pages=%2 size=%3x%4")
             .arg(entry.recordId)
@@ -1153,26 +2623,299 @@ bool RecordPlaybackPanel::renderTifRgb(const QString& path, int pageCount,
     return true;
 }
 
+void RecordPlaybackPanel::keyPressEvent(QKeyEvent* event)
+{
+    QWidget* fw = focusWidget();
+    if (qobject_cast<QAbstractSpinBox*>(fw) || qobject_cast<QLineEdit*>(fw)) {
+        QWidget::keyPressEvent(event);
+        return;
+    }
+
+    switch (event->key()) {
+    case Qt::Key_Space:
+        if (playbackRequested_ || (playbackTimer_ && playbackTimer_->isActive())) pausePlayback();
+        else startPlayback();
+        event->accept();
+        return;
+    case Qt::Key_Left:
+        previousFrame();
+        event->accept();
+        return;
+    case Qt::Key_Right:
+        nextFrame();
+        event->accept();
+        return;
+    case Qt::Key_Home:
+        if (!frameRefs_.isEmpty()) seekToFrame(0, SeekTrigger::Manual, false);
+        event->accept();
+        return;
+    case Qt::Key_End:
+        if (!frameRefs_.isEmpty()) seekToFrame(static_cast<quint64>(frameRefs_.size() - 1), SeekTrigger::Manual, false);
+        event->accept();
+        return;
+    default:
+        QWidget::keyPressEvent(event);
+        return;
+    }
+}
+
+void RecordPlaybackPanel::onFrameSpinChanged(int value)
+{
+    if (frameRefs_.isEmpty() || value <= 0) return;
+    seekToFrame(static_cast<quint64>(value - 1), SeekTrigger::Manual, false);
+}
+
+void RecordPlaybackPanel::exportCurrentFrame()
+{
+    if (currentPlaybackImage_.isNull()) return;
+    QDir().mkpath(QDir("recordings").filePath("exports"));
+    const QString initialDir = lastExportDir_.isEmpty()
+        ? QDir("recordings").filePath("exports")
+        : lastExportDir_;
+    const QString initialPath = QDir(initialDir).filePath(currentExportFileName());
+    const QString path = QFileDialog::getSaveFileName(
+        this,
+        QString::fromUtf8("导出当前帧"),
+        initialPath,
+        QString::fromUtf8("PNG 图片 (*.png)"));
+    if (path.isEmpty()) return;
+    lastExportDir_ = QFileInfo(path).absolutePath();
+    if (!currentPlaybackImage_.save(path, "PNG")) {
+        setStatus(QString::fromUtf8("导出当前帧失败: %1").arg(path), true);
+        return;
+    }
+    setStatus(QString::fromUtf8("当前帧已导出: %1").arg(path), false);
+}
+
+void RecordPlaybackPanel::refreshCacheInfo()
+{
+    const CacheSummary summary = summarizeCache();
+    if (cacheInfoLbl_) {
+        cacheInfoLbl_->setText(QString::fromUtf8("目录: %1\n记录: %2  文件: %3  大小: %4")
+            .arg(QDir(cacheRoot()).absolutePath())
+            .arg(summary.recordCount)
+            .arg(summary.fileCount)
+            .arg(formatBytes(summary.totalBytes)));
+    }
+}
+
+void RecordPlaybackPanel::clearNonPlaybackCache()
+{
+    const QSet<QString> keep = playbackCacheKeys();
+    const CacheSummary summary = summarizeCache(keep, true);
+    if (summary.recordCount == 0) {
+        setStatus(QString::fromUtf8("没有可清理的非当前播放缓存"), false);
+        return;
+    }
+    const QString msg = QString::fromUtf8("将删除 %1 条记录、%2 个文件（共 %3）。是否继续？")
+        .arg(summary.recordCount)
+        .arg(summary.fileCount)
+        .arg(formatBytes(summary.totalBytes));
+    if (QMessageBox::question(this, QString::fromUtf8("清理非当前播放缓存"), msg) != QMessageBox::Yes) {
+        return;
+    }
+    CacheSummary removed;
+    QString err;
+    if (!prepareForCacheMutation(&err)) {
+        setStatus(err, true);
+        return;
+    }
+    if (!removeCacheRecords(keep, false, &removed, &err)) {
+        setStatus(err, true);
+        return;
+    }
+    updateRecordCacheStatuses();
+    refreshCacheInfo();
+    setStatus(QString::fromUtf8("已清理 %1 条缓存记录").arg(removed.recordCount), false);
+}
+
+void RecordPlaybackPanel::clearAllCache()
+{
+    const CacheSummary summary = summarizeCache();
+    if (summary.recordCount == 0) {
+        setStatus(QString::fromUtf8("缓存为空"), false);
+        return;
+    }
+    const QString msg = QString::fromUtf8("将删除 %1 条记录、%2 个文件（共 %3），当前播放序列将一并清空。是否继续？")
+        .arg(summary.recordCount)
+        .arg(summary.fileCount)
+        .arg(formatBytes(summary.totalBytes));
+    if (QMessageBox::question(this, QString::fromUtf8("清理全部缓存"), msg) != QMessageBox::Yes) {
+        return;
+    }
+    CacheSummary removed;
+    QString err;
+    if (!prepareForCacheMutation(&err)) {
+        setStatus(err, true);
+        return;
+    }
+    pausePlayback();
+    if (!removeCacheRecords(QSet<QString>(), true, &removed, &err)) {
+        setStatus(err, true);
+        return;
+    }
+    setPlaybackSequenceCleared();
+    updateRecordCacheStatuses();
+    refreshCacheInfo();
+    setStatus(QString::fromUtf8("已清理全部缓存"), false);
+    updateUiEnabled();
+}
+
+void RecordPlaybackPanel::selectAllRecords()
+{
+    if (recordSelectionLocked_) return;
+    recordsTable_->selectAll();
+}
+
+void RecordPlaybackPanel::invertRecordSelection()
+{
+    if (recordSelectionLocked_) return;
+    QSignalBlocker blocker(recordsTable_);
+    for (int row = 0; row < recordsTable_->rowCount(); ++row) {
+        const bool selected = recordsTable_->item(row, 0) && recordsTable_->item(row, 0)->isSelected();
+        for (int col = 0; col < recordsTable_->columnCount(); ++col) {
+            if (QTableWidgetItem* item = recordsTable_->item(row, col)) item->setSelected(!selected);
+        }
+    }
+    updateUiEnabled();
+}
+
+void RecordPlaybackPanel::clearRecordSelection()
+{
+    if (recordSelectionLocked_) return;
+    recordsTable_->clearSelection();
+}
+
+void RecordPlaybackPanel::appendSelectedToPlaybackSequence()
+{
+    appendAfterDownload_ = true;
+    downloadSelected();
+}
+
+void RecordPlaybackPanel::togglePlaybackSequenceVisible(bool checked)
+{
+    if (playbackSequenceTable_) playbackSequenceTable_->setVisible(checked);
+    if (playbackSeqRemoveBtn_) playbackSeqRemoveBtn_->setVisible(checked);
+    if (playbackSeqClearBtn_) playbackSeqClearBtn_->setVisible(checked);
+    updateUiEnabled();
+}
+
+void RecordPlaybackPanel::removeSelectedPlaybackRecords()
+{
+    const QVector<RecordItem> selected = selectedPlaybackRecords();
+    if (selected.isEmpty()) return;
+    QSet<QString> removeKeys;
+    for (const RecordItem& item : selected) removeKeys.insert(cacheKey(item.type, item.recordId));
+    if (tifRenderBusy_ && activeTifRenderFrame_ < static_cast<quint64>(frameRefs_.size())) {
+        const FrameRef ref = frameRefs_[static_cast<int>(activeTifRenderFrame_)];
+        const PlaybackEntry& entry = playbackEntries_[ref.entryIndex];
+        if (removeKeys.contains(cacheKey(entry.type, entry.recordId))) {
+            QString err;
+            if (!cancelTifRenderAndWait(2000, &err)) {
+                setStatus(err, true);
+                return;
+            }
+        }
+    }
+    QVector<RecordItem> next;
+    for (const RecordItem& item : playbackRecordItems_) {
+        if (!removeKeys.contains(cacheKey(item.type, item.recordId))) next.append(item);
+    }
+    setPlaybackSequence(next, false);
+}
+
+void RecordPlaybackPanel::clearPlaybackSequence()
+{
+    QString err;
+    if (!cancelTifRenderAndWait(2000, &err)) {
+        setStatus(err, true);
+        return;
+    }
+    pausePlayback();
+    setPlaybackSequenceCleared();
+    resetSkippedBadFrames();
+    updateUiEnabled();
+}
+
+void RecordPlaybackPanel::showRecordDetails(QTableWidgetItem* item)
+{
+    if (!item) return;
+    const int row = item->row();
+    if (row < 0 || row >= records_.size()) return;
+    const RecordItem& record = records_[row];
+    QDialog dlg(this);
+    dlg.setWindowTitle(QString::fromUtf8("记录详情"));
+    auto* form = new QFormLayout(&dlg);
+    auto addText = [form, &dlg](const QString& label, const QString& value) {
+        auto* lbl = new QLabel(value, &dlg);
+        lbl->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        lbl->setWordWrap(true);
+        form->addRow(label, lbl);
+    };
+    addText("record_id", record.recordId);
+    addText("type", record.type);
+    addText("timestamp", formatRecordTimestamp(record.timestampNs));
+    addText("timestamp_ns", QString::number(record.timestampNs));
+    addText(QString::fromUtf8("文件"), filesText(record));
+    quint64 size = 0;
+    for (const RecordFile& f : record.files) size += f.sizeBytes;
+    addText(QString::fromUtf8("总大小"), formatBytes(size));
+    addText(QString::fromUtf8("缓存状态"), cacheStateText(cacheState(record)));
+    addText(QString::fromUtf8("缓存目录"), QDir(recordCacheDir(record.type, record.recordId)).absolutePath());
+    PlaybackEntry entry;
+    QString err;
+    if (isRecordCached(record, nullptr)) {
+        if (record.type == "raw" && loadRawEntry(record, &entry, &err)) {
+            addText(QString::fromUtf8("raw 尺寸/帧数"), QString("%1x%2 / %3").arg(entry.width).arg(entry.height).arg(entry.frameCount));
+        } else if (record.type == "tif" && loadTifEntry(record, &entry, &err)) {
+            addText(QString::fromUtf8("tif 尺寸/page"), QString("%1x%2 / %3").arg(entry.tifWidth).arg(entry.tifHeight).arg(entry.pageCount));
+        }
+    }
+    auto* buttons = new QHBoxLayout();
+    auto* openBtn = new QPushButton(QString::fromUtf8("打开缓存目录"), &dlg);
+    auto* copyBtn = new QPushButton(QString::fromUtf8("复制缓存路径"), &dlg);
+    buttons->addWidget(openBtn);
+    buttons->addWidget(copyBtn);
+    buttons->addStretch(1);
+    form->addRow(buttons);
+    const QString cachePath = QDir(recordCacheDir(record.type, record.recordId)).absolutePath();
+    connect(openBtn, &QPushButton::clicked, &dlg, [cachePath]() {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(cachePath));
+    });
+    connect(copyBtn, &QPushButton::clicked, &dlg, [cachePath]() {
+        QGuiApplication::clipboard()->setText(cachePath);
+    });
+    dlg.exec();
+}
+
 void RecordPlaybackPanel::previousFrame()
 {
     if (currentFrame_ == 0) return;
-    showFrame(currentFrame_ - 1);
+    const bool wasPlaying = playbackTimer_ && playbackTimer_->isActive();
+    if (wasPlaying) playbackTimer_->stop();
+    seekToFrame(currentFrame_ - 1, SeekTrigger::Manual, wasPlaying);
 }
 
 void RecordPlaybackPanel::nextFrame()
 {
     if (frameRefs_.isEmpty()) return;
     if (currentFrame_ + 1 >= static_cast<quint64>(frameRefs_.size())) {
-        if (loopChk_->isChecked()) showFrame(0);
+        if (loopChk_->isChecked()) seekToFrame(0, SeekTrigger::Playback, playbackTimer_ && playbackTimer_->isActive());
         else pausePlayback();
         return;
     }
-    showFrame(currentFrame_ + 1);
+    const bool wasPlaying = playbackTimer_ && playbackTimer_->isActive();
+    if (wasPlaying) playbackTimer_->stop();
+    seekToFrame(currentFrame_ + 1, wasPlaying ? SeekTrigger::Playback : SeekTrigger::Manual, wasPlaying);
 }
 
 void RecordPlaybackPanel::startPlayback()
 {
     if (frameRefs_.isEmpty()) return;
+    if (!loopChk_->isChecked() && currentFrame_ + 1 >= static_cast<quint64>(frameRefs_.size())) {
+        seekToFrame(0, SeekTrigger::Manual, false);
+    }
+    playbackRequested_ = true;
     playbackTimer_->start(intervalSpin_->value());
     emit requestSwitchToPlaybackView();
     updateUiEnabled();
@@ -1180,6 +2923,8 @@ void RecordPlaybackPanel::startPlayback()
 
 void RecordPlaybackPanel::pausePlayback()
 {
+    playbackRequested_ = false;
+    tifRenderResumeWhenReady_ = false;
     if (playbackTimer_) playbackTimer_->stop();
     updateUiEnabled();
 }
@@ -1188,7 +2933,8 @@ void RecordPlaybackPanel::stopPlayback()
 {
     pausePlayback();
     if (!frameRefs_.isEmpty()) {
-        showFrame(0);
+        resetSkippedBadFrames();
+        seekToFrame(0, SeekTrigger::Manual, false);
     }
 }
 
@@ -1199,28 +2945,47 @@ void RecordPlaybackPanel::onPlaybackTick()
 
 void RecordPlaybackPanel::onSliderReleased()
 {
+    const bool resume = progressWasPlayingBeforeDrag_;
     sliderDragging_ = false;
-    showFrame(static_cast<quint64>(progressSlider_->value()));
+    seekToFrame(static_cast<quint64>(progressSlider_->value()), SeekTrigger::Manual, resume);
+    progressWasPlayingBeforeDrag_ = false;
 }
 
 void RecordPlaybackPanel::onRenderSettingsChanged()
 {
+    scheduleTifRerender();
+}
+
+void RecordPlaybackPanel::scheduleTifRerender()
+{
     if (frameRefs_.isEmpty()) return;
     const FrameRef ref = frameRefs_[static_cast<int>(currentFrame_)];
     if (ref.entryIndex >= 0 && playbackEntries_[ref.entryIndex].type == "tif") {
-        showFrame(currentFrame_);
+        if (tifRenderDebounceTimer_) tifRenderDebounceTimer_->start(200);
     }
 }
 
 void RecordPlaybackPanel::updateRenderVisibility()
 {
+    bool currentIsTif = false;
+    if (!frameRefs_.isEmpty() && currentFrame_ < static_cast<quint64>(frameRefs_.size())) {
+        const FrameRef ref = frameRefs_[static_cast<int>(currentFrame_)];
+        currentIsTif = ref.entryIndex >= 0
+            && ref.entryIndex < playbackEntries_.size()
+            && playbackEntries_[ref.entryIndex].type == "tif";
+    }
+    if (renderGroup_) {
+        renderGroup_->setVisible(currentIsTif);
+    }
+    if (!currentIsTif) return;
+
     const auto mode = static_cast<TifRenderMode>(renderModeCombo_->currentData().toInt());
     const bool single = mode == TifRenderMode::SingleBand;
     const bool range = mode == TifRenderMode::RangeAverage;
     const bool rgbSingle = mode == TifRenderMode::RgbSingleBand;
     const bool rgbRange = mode == TifRenderMode::RgbRangeAverage;
 
-    auto* renderForm = qobject_cast<QFormLayout*>(singleBandSpin_->parentWidget()->layout());
+    auto* renderForm = renderGroup_ ? qobject_cast<QFormLayout*>(renderGroup_->layout()) : nullptr;
     if (!renderForm) return;
 
     auto setFieldVisible = [renderForm](QWidget* field, bool visible) {
@@ -1230,19 +2995,27 @@ void RecordPlaybackPanel::updateRenderVisibility()
             label->setVisible(visible);
         }
     };
+    auto setBandRowVisible = [this, setFieldVisible](const char* objectName, bool visible) {
+        QWidget* row = renderGroup_ ? renderGroup_->findChild<QWidget*>(QString::fromLatin1(objectName)) : nullptr;
+        setFieldVisible(row, visible);
+    };
 
-    setFieldVisible(singleBandSpin_, single);
-    setFieldVisible(rangeBeginSpin_, range);
-    setFieldVisible(rangeEndSpin_, range);
-    setFieldVisible(rBandSpin_, rgbSingle || rgbRange);
-    setFieldVisible(gBandSpin_, rgbSingle || rgbRange);
-    setFieldVisible(bBandSpin_, rgbSingle || rgbRange);
-    setFieldVisible(rBeginSpin_, rgbRange);
-    setFieldVisible(rEndSpin_, rgbRange);
-    setFieldVisible(gBeginSpin_, rgbRange);
-    setFieldVisible(gEndSpin_, rgbRange);
-    setFieldVisible(bBeginSpin_, rgbRange);
-    setFieldVisible(bEndSpin_, rgbRange);
+    setBandRowVisible("singleBandRow", single);
+    setBandRowVisible("rangeBeginRow", range);
+    setBandRowVisible("rangeEndRow", range && !(rangeToLastChk_ && rangeToLastChk_->isChecked()));
+    if (rangeToLastChk_) rangeToLastChk_->setVisible(range);
+    setBandRowVisible("rBandRow", rgbSingle);
+    setBandRowVisible("gBandRow", rgbSingle);
+    setBandRowVisible("bBandRow", rgbSingle);
+    setBandRowVisible("rBeginRow", rgbRange);
+    setBandRowVisible("rEndRow", rgbRange && !(rToLastChk_ && rToLastChk_->isChecked()));
+    if (rToLastChk_) rToLastChk_->setVisible(rgbRange);
+    setBandRowVisible("gBeginRow", rgbRange);
+    setBandRowVisible("gEndRow", rgbRange && !(gToLastChk_ && gToLastChk_->isChecked()));
+    if (gToLastChk_) gToLastChk_->setVisible(rgbRange);
+    setBandRowVisible("bBeginRow", rgbRange);
+    setBandRowVisible("bEndRow", rgbRange && !(bToLastChk_ && bToLastChk_->isChecked()));
+    if (bToLastChk_) bToLastChk_->setVisible(rgbRange);
 }
 
 QString RecordPlaybackPanel::filesText(const RecordItem& item) const
@@ -1271,3 +3044,5 @@ QString RecordPlaybackPanel::frameTypeText(quint8 frameType) const
     if (frameType == TailFrame) return "TailFrame";
     return "UnknownFrame";
 }
+
+#include "RecordPlaybackPanel.moc"

@@ -18,6 +18,16 @@ struct RemoteFetchFile {
 Q_DECLARE_METATYPE(RemoteFetchFile)
 Q_DECLARE_METATYPE(QVector<RemoteFetchFile>)
 
+enum class RemoteDownloadErrorReason {
+    UserCanceled = 0,
+    Network,
+    Protocol,
+    FileIo,
+    CacheCommit,
+    Unknown,
+};
+Q_DECLARE_METATYPE(RemoteDownloadErrorReason)
+
 class RemoteFileDownloader : public QObject {
     Q_OBJECT
 public:
@@ -35,7 +45,7 @@ public slots:
 signals:
     void progress(quint64 receivedBytes, quint64 totalBytes, QString currentFile);
     void finished(QStringList recordIds);
-    void failed(QString error);
+    void failed(RemoteDownloadErrorReason reason, QString error);
     void canceled();
 
 private slots:
@@ -66,7 +76,7 @@ private:
     void cleanupSocket();
     void cleanupOpenFile();
     void cleanupTempFiles();
-    void fail(const QString& err);
+    void fail(RemoteDownloadErrorReason reason, const QString& err);
     void complete();
     bool consumeAvailable(QString* err);
     bool consumeOneChunk(QString* err, bool* consumed);
