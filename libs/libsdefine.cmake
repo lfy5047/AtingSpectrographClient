@@ -36,8 +36,10 @@ include_directories(${BOOST_LIBRARIES_INCLUDE_DIRS})
 
 # --- libtiff ---
 set(LIBTIFF_LIBRARIES_INCLUDE_DIRS ${THIRD_PARTY_LIBRARY_PATH}/public/libtiff/include)
+set(LIBTIFF_LIBRARY ${THIRD_PARTY_LIBRARY_PATH}/public/libtiff/lib/tiff.lib)
+set(LIBTIFF_DLL ${THIRD_PARTY_LIBRARY_PATH}/public/libtiff/lib/tiff.dll)
 include_directories(${LIBTIFF_LIBRARIES_INCLUDE_DIRS})
-list(APPEND LIB_LIST tiff tiffxx)
+list(APPEND LIB_LIST ${LIBTIFF_LIBRARY})
 
 
 message(STATUS "LIB_LIST: ${LIB_LIST}")

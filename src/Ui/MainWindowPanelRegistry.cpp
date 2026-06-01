@@ -110,7 +110,7 @@ void MainWindowPanelRegistry::setupPanels()
     collectPanel_ = new CollectPanel(device_, stack);
     streamPanel_ = new StreamPanel(device_, stack);
     spectralPanel_ = new SpectralPanel(stack);
-    recordPlaybackPanel_ = new RecordPlaybackPanel(stack);
+    recordPlaybackPanel_ = new RecordPlaybackPanel(device_, stack);
     spectrumAnalysisPanel_ = new SpectrumAnalysisPanel(stack);
 
     stack->addWidget(wrapInScroll(dashPanel_));

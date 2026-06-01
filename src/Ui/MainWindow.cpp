@@ -44,11 +44,6 @@ MainWindow::~MainWindow() = default;
 
 void MainWindow::closeEvent(QCloseEvent* e)
 {
-    if (!deviceUiCoordinator_->stopRecordingForClose(this)) {
-        e->ignore();
-        return;
-    }
-
     deviceUiCoordinator_->stopPlaybackForClose();
     WindowSettingsStore::save(this,
                               chrome_->mainSplitter(),

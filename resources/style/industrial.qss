@@ -538,6 +538,55 @@ QScrollBar::add-page:horizontal, QScrollBar::sub-page:horizontal {
     background: none;
 }
 
+/* ===== TableWidget ===== */
+QTableWidget {
+    background-color: #161B23;
+    border: 1px solid #21262E;
+    border-radius: 6px;
+    gridline-color: #21262E;
+    color: #E6EDF3;
+    selection-background-color: rgba(76, 142, 247, 0.2);
+    selection-color: #E6EDF3;
+    outline: none;
+}
+
+QTableWidget::item {
+    padding: 4px 8px;
+    border: none;
+}
+
+QTableWidget::item:selected {
+    background-color: rgba(76, 142, 247, 0.2);
+    color: #E6EDF3;
+}
+
+QTableWidget::item:alternate {
+    background-color: #1A1F28;
+}
+
+QHeaderView::section {
+    background-color: #12171D;
+    color: #7D8590;
+    border: none;
+    border-bottom: 1px solid #21262E;
+    border-right: 1px solid #21262E;
+    padding: 5px 8px;
+    font-size: 10pt;
+    font-weight: bold;
+}
+
+QHeaderView::section:hover {
+    background-color: #1A1F28;
+    color: #E6EDF3;
+}
+
+QTableCornerButton::section {
+    background-color: #12171D;
+    border: none;
+    border-bottom: 1px solid #21262E;
+    border-right: 1px solid #21262E;
+}
+
 /* ===== Splitter ===== */
 QSplitter::handle {
     background-color: #21262E;

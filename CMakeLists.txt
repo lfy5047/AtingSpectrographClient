@@ -43,7 +43,16 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt5::Widgets
     Qt5::PrintSupport
     Qt5::Network
+    ${LIB_LIST}
 )
+
+if(WIN32 AND EXISTS "${LIBTIFF_DLL}")
+    add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${LIBTIFF_DLL}"
+            "$<TARGET_FILE_DIR:${PROJECT_NAME}>"
+    )
+endif()
 
 if(WIN32)
     set_target_properties(${PROJECT_NAME} PROPERTIES

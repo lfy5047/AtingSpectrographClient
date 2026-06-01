@@ -11,6 +11,7 @@
 #include "IrService.h"
 #include "CollectService.h"
 #include "StreamControlService.h"
+#include "RecordService.h"
 
 class DeviceClient : public QObject {
     Q_OBJECT
@@ -26,6 +27,7 @@ public:
     IrService* ir() { return &ir_; }
     CollectService* collect() { return &collect_; }
     StreamControlService* streamControl() { return &streamControl_; }
+    RecordService* record() { return &record_; }
 
     void connectTo(const QString& host, quint16 port);
     void disconnect();
@@ -45,4 +47,5 @@ private:
     IrService ir_;
     CollectService collect_;
     StreamControlService streamControl_;
+    RecordService record_;
 };

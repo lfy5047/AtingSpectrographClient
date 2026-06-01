@@ -43,6 +43,8 @@ ipch/
 *.dll
 *.exe
 *.out
+!libs/public/libtiff/lib/tiff.lib
+!libs/public/libtiff/lib/tiff.dll
 
 # Qt / Qt Creator
 *.pro.user*

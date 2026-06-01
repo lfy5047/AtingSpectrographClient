@@ -173,6 +173,13 @@ void ViewerAreaWidget::renderFrame(int channel, int width, int height, int pixfm
     }
 }
 
+void ViewerAreaWidget::setChannelImage(int channel, const QImage& image)
+{
+    ImageView* target = imageView(channel);
+    if (!target || image.isNull()) return;
+    target->setImage(image);
+}
+
 void ViewerAreaWidget::setImageStats(int channel, const ChannelImageStats& stats)
 {
     if (channel == Raw16View) {

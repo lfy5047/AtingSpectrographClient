@@ -2,7 +2,7 @@
 
 ## 项目概览
 
-AtingSpectrographClient 是一个 Windows 桌面端光谱仪/成像设备控制客户端。主界面使用 Qt Widgets 构建，通过 TCP JSON-RPC 控制设备，通过 UDP 接收 Raw16、SliceStitch16 和 Spectral 图像流，并支持把实时原始帧录制为 `.asrec` 文件后按 FPS 回放。
+AtingSpectrographClient 是一个 Windows 桌面端光谱仪/成像设备控制客户端。主界面使用 Qt Widgets 构建，通过 TCP JSON-RPC 控制设备，通过 UDP 接收 Raw16、SliceStitch16 和 Spectral 图像流，并通过服务端 `record.*` 接口查询、下载和回放历史 raw/tif 录制数据。
 
 主要运行目标：
 - Windows 桌面应用：`AtingSpectrographClient.exe`
@@ -59,7 +59,7 @@ AtingSpectrographClient 是一个 Windows 桌面端光谱仪/成像设备控制�
 - `src/Client/rpc/`：TCP 控制协议、JSON-RPC 请求/响应封装、命令名定义。
 - `src/Client/services/`：面向 UI 的业务 API 封装，把按钮行为转换为 RPC 命令。
 - `src/Client/stream/`：UDP 图像流接收、分片重组、`StreamFrame` 元数据透传、FPS/丢帧统计。
-- `src/Client/recording/`：`.asrec` 文件格式、实时录制、录制文件扫描建索引与回放控制。
+- `src/Client/recording/`：远程文件 TCP 下载器，以及保留的旧 `.asrec` 录制/回放实现文件；当前 UI 已断开旧 `.asrec` 路径。
 - `resources/`：Qt 资源文件和 `resources/style/industrial.qss` 主题。
 - `Common/`：通用工具库源码；当前顶层 CMake 只包含 `Common/include`，没有链接 `Common` 子库。
 - `libs/public/`：随仓库提交的第三方依赖，默认不要全量扫描。
@@ -100,10 +100,10 @@ AtingSpectrographClient 是一个 Windows 桌面端光谱仪/成像设备控制�
 5. 各控制 Panel 通过 `DeviceClient` 下的 service 调用 RPC 命令。
 6. `ControlClient` 发送 `CtrlHeader + JSON`，按 seq 管理 pending 回调、超时和断线清理。
 7. UDP 包进入 `StreamClient`，`FrameAssembler` 按通道和 frame id 重组完整帧并发出 `StreamFrame`。
-8. `DeviceUiCoordinator` 收到完整帧后，若录制开启，先把原始帧数据和光谱帧元数据交给 `FrameRecorder` 写入 `.asrec`。
-9. Raw16/SliceStitch16 的 Mono8/Mono16 数据经 `ImageFrameUtils` 转换为 8-bit `QImage`，由 `ViewerAreaWidget` 显示并更新图像统计 overlay。
-10. `HeaderFrame/DataFrame/TailFrame` 同时进入 `SpectralScanController` 管理的 `SpectralScanBuilder`，Spectral 页按单波段、范围平均或 RGB 合成渲染。
-11. `RecordPlaybackPanel` 选择 `.asrec` 后由 `FramePlaybackController` 异步扫描索引并按 FPS 回放到 Playback 视图。
+8. Raw16/SliceStitch16 的 Mono8/Mono16 数据经 `ImageFrameUtils` 转换为 8-bit `QImage`，由 `ViewerAreaWidget` 显示并更新图像统计 overlay。
+9. `HeaderFrame/DataFrame/TailFrame` 同时进入 `SpectralScanController` 管理的 `SpectralScanBuilder`，Spectral 页按单波段、范围平均或 RGB 合成渲染。
+10. `RecordPlaybackPanel` 通过 `record.list_recent` 查询服务端历史数据，通过 `record.fetch` 和独立文件 TCP 端口下载 raw/tif 到 `recordings/remote_cache/`。
+11. 远程 raw 按 `.json + .raw` 逐帧读取并渲染到 Playback 视图；远程 tif 使用 libtiff 读取 BigTIFF 并按面板内参数渲染为一张投影图。
 12. 光谱分析 Panel 激活时由 `MainWindowPanelRegistry` 自动切到 SliceStitch16 页；`SpectrumAnalysisCoordinator` 打开独立曲线窗口，并从最新 SliceStitch16 Mono16 原始帧中采样曲线。
 
 ## 光谱分析功能
@@ -139,15 +139,16 @@ RPC 命令名集中在 `src/Client/rpc/RpcCommands.h`，当前分组包括：
 - `camera.*`
 - `ir.*`
 - `collect.*`
+- `record.*`
 
 ## 配置与持久化
 
 - UI 状态通过 `WindowSettingsStore` 和 `QSettings` 保存：窗口 geometry、splitter、当前 Panel、侧边栏折叠状态等。
 - 光谱分析使用 `spectrumAnalysis/` 前缀保存参数、采样线、曲线窗口 geometry。
-- 录制/回放状态通过 `QSettings` 保存：最近录制路径、最近回放路径、回放 FPS、播放帧数限制、循环开关。
+- 远程录制数据缓存默认写入 `recordings/remote_cache/<type>/<record_id>/`；成功缓存可复用，失败/取消/断连会删除本次不完整缓存。
 - 应用组织与名称：`AtingSpectrograph` / `AtingSpectrographClient`。
 - 运行时日志写入 `log/log.txt`，最大 1 MiB，保留 10 个滚动文件。
-- 录制文件默认写入 `recordings/record_yyyyMMdd_HHmmss.asrec`。
+- 客户端不再写入本地 `.asrec` 录制文件。
 - Qt 资源入口：`resources/resources.qrc`，当前主要打包 `resources/style/industrial.qss`。
 
 ## 当前状态观察
@@ -157,6 +158,7 @@ RPC 命令名集中在 `src/Client/rpc/RpcCommands.h`，当前分组包括：
 - `Common/CMakeLists.txt` 定义了 `Common` 库，但顶层 CMake 当前没有 `add_subdirectory(Common)`，主目标也未链接该库。
 - `libs/public` 很大且多为第三方源码/头文件，除非依赖升级或编译问题，不要默认扫描。
 - 工作区可能长期存在未提交业务改动与生成目录；开始新任务前用 `git status --short` 区分已有改动和本次改动。
+- libtiff 运行时依赖当前为 `libs/public/libtiff/lib/tiff.lib` 和 `tiff.dll`；CMake 会把 `tiff.dll` 复制到目标输出目录。
 
 ## AI 交接规则
 

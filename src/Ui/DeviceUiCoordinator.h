@@ -9,8 +9,6 @@ class DeviceClient;
 class MainWindowChrome;
 class MainWindowPanelRegistry;
 class SpectrumAnalysisCoordinator;
-class QWidget;
-struct RecordedFrame;
 struct StreamFrame;
 
 class DeviceUiCoordinator : public QObject {
@@ -25,7 +23,6 @@ public:
     void startTimersAndRefresh();
     void refreshStreamStats();
     void refreshConnectionDashboard();
-    bool stopRecordingForClose(QWidget* parent);
     void stopPlaybackForClose();
     void disconnectDevice();
 
@@ -35,7 +32,6 @@ private:
     void refreshSpectralStats();
     void refreshSpectralProgressOverlay();
     void handleLiveFrame(const StreamFrame& frame);
-    void handlePlaybackFrame(const RecordedFrame& frame);
     void updateSpectralView();
 
     DeviceClient* device_ = nullptr;

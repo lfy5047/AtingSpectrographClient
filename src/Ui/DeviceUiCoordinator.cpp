@@ -5,9 +5,6 @@
 #include "MainWindowChrome.h"
 #include "MainWindowPanelRegistry.h"
 #include "SpectrumAnalysisCoordinator.h"
-#include "Client/recording/FramePlaybackController.h"
-#include "Client/recording/FrameRecorder.h"
-#include "Client/recording/RecordedFrame.h"
 #include "Client/stream/StreamFrame.h"
 #include "Protocol.h"
 #include "panels/ConnectionPanel.h"
@@ -20,7 +17,7 @@
 #include "widgets/TopBarWidget.h"
 #include "widgets/ViewerAreaWidget.h"
 
-#include <QMessageBox>
+#include <QImage>
 #include <QTimer>
 
 namespace {
@@ -121,35 +118,11 @@ void DeviceUiCoordinator::refreshConnectionDashboard()
                                               device_->isConnected(), deviceVersion_);
 }
 
-bool DeviceUiCoordinator::stopRecordingForClose(QWidget* parent)
-{
-    auto* panel = registry_->recordPlayback();
-    if (!panel || !panel->recorder() || !panel->recorder()->isRecording()) {
-        return true;
-    }
-
-    const auto ret = QMessageBox::question(
-        parent,
-        QString::fromUtf8("录制"),
-        QString::fromUtf8("正在录制中，是否停止录制并退出？"),
-        QMessageBox::Yes | QMessageBox::No,
-        QMessageBox::No);
-    if (ret != QMessageBox::Yes) {
-        return false;
-    }
-
-    QString err;
-    if (!panel->recorder()->stopRecording(5000, &err)) {
-        QMessageBox::warning(parent, QString::fromUtf8("录制"), err);
-    }
-    return true;
-}
-
 void DeviceUiCoordinator::stopPlaybackForClose()
 {
     auto* panel = registry_->recordPlayback();
-    if (panel && panel->playback()) {
-        panel->playback()->stop();
+    if (panel) {
+        panel->cancelRemoteWork();
     }
 }
 
@@ -212,13 +185,6 @@ void DeviceUiCoordinator::setupConnections()
             [this](const StreamFrame& frame) {
         using namespace cli::proto;
 
-        auto* recordPanel = registry_->recordPlayback();
-        if (recordPanel && recordPanel->recorder()) {
-            recordPanel->recorder()->recordFrame(frame.channel, frame.width, frame.height,
-                                                 frame.pixfmt, frame.frameType,
-                                                 frame.streamFrameId, frame.data);
-        }
-
         handleLiveFrame(frame);
 
         if (frame.channel == SliceStitch16 && frame.pixfmt == Mono16 && spectrumAnalysisCoordinator_) {
@@ -256,26 +222,11 @@ void DeviceUiCoordinator::setupConnections()
         refreshSpectralProgressOverlay();
     });
 
-    connect(registry_->recordPlayback(), &RecordPlaybackPanel::playbackFrameReady, this,
-            [this](const RecordedFrame& f) {
-        handlePlaybackFrame(f);
-        chrome_->viewerArea()->renderFrame(ViewerAreaWidget::PlaybackView, f.width, f.height, f.pixfmt, f.data);
+    connect(registry_->recordPlayback(), &RecordPlaybackPanel::playbackImageReady, this,
+            [this](const QImage& image, const QString&) {
+        chrome_->viewerArea()->setCurrentChannel(ViewerAreaWidget::PlaybackView);
+        chrome_->viewerArea()->setChannelImage(ViewerAreaWidget::PlaybackView, image);
     }, Qt::QueuedConnection);
-
-    if (registry_->recordPlayback() && registry_->recordPlayback()->playback()) {
-        connect(registry_->recordPlayback()->playback(), &FramePlaybackController::playbackStarted, this, [this]() {
-            spectralController_.setPlaybackActive(true);
-            spectralController_.clearPlayback();
-            refreshSpectralSource();
-            refreshSpectralProgressOverlay();
-        });
-        connect(registry_->recordPlayback()->playback(), &FramePlaybackController::playbackStopped, this, [this]() {
-            spectralController_.setPlaybackActive(false);
-            refreshSpectralSource();
-            refreshSpectralStats();
-            refreshSpectralProgressOverlay();
-        });
-    }
 
     connect(registry_->spectral(), &SpectralPanel::settingsChanged, this, [this]() {
         refreshSpectralSource();
@@ -322,23 +273,6 @@ void DeviceUiCoordinator::handleLiveFrame(const StreamFrame& frame)
 {
     const SpectralFrameResult result = spectralController_.feedLiveFrame(frame, uptime_.elapsed());
     const bool sourceMatches = spectralController_.source() == SpectralSource::Live;
-    const bool channelMatches = sourceMatches && registry_->spectral()->sourceChannel() == frame.channel;
-
-    if (chrome_->viewerArea()->currentChannel() == ViewerAreaWidget::SpectralView && channelMatches) {
-        refreshSpectralStats();
-    }
-    if (sourceMatches && result.committed) {
-        spectralDirty_ = true;
-    }
-    if (result.progressChanged) {
-        refreshSpectralProgressOverlay();
-    }
-}
-
-void DeviceUiCoordinator::handlePlaybackFrame(const RecordedFrame& frame)
-{
-    const SpectralFrameResult result = spectralController_.feedPlaybackFrame(frame, uptime_.elapsed());
-    const bool sourceMatches = spectralController_.source() == SpectralSource::Playback;
     const bool channelMatches = sourceMatches && registry_->spectral()->sourceChannel() == frame.channel;
 
     if (chrome_->viewerArea()->currentChannel() == ViewerAreaWidget::SpectralView && channelMatches) {

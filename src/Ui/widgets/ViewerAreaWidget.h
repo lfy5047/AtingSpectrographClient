@@ -29,6 +29,7 @@ public:
     void setCurrentChannel(int channel);
     ImageView* imageView(int channel) const;
     void renderFrame(int channel, int width, int height, int pixfmt, const QByteArray& data);
+    void setChannelImage(int channel, const QImage& image);
     void setImageStats(int channel, const ChannelImageStats& stats);
     void setSpectralImage(const QImage& image);
     void setSpectralNoSignal();

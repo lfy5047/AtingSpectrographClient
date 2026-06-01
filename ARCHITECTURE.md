@@ -29,7 +29,7 @@
   - `CollectPanel`：采集流程开始/停止/状态查询。
   - `StreamPanel`：Raw16/SliceStitch16 通道订阅、取消订阅、状态轮询。
   - `SpectralPanel`：光谱显示来源、源通道、单波段/范围平均/RGB 合成参数与扫描状态。
-  - `RecordPlaybackPanel`：实时帧录制、`.asrec` 选择、回放 FPS/帧数/循环控制、进度跳转与损坏帧统计。
+- `RecordPlaybackPanel`：远程录制数据查询、保留时间设置、`raw/tif` 下载缓存、Playback 播放控制和 tif 渲染参数。
   - `SpectrumAnalysisPanel`：SliceStitch16 光谱分析参数、水平采样线列表、曲线处理和曲线窗口入口。
   - `DashboardPanel`：连接、转镜、流统计、运行时间等摘要信息。
   - `LogPanel`：显示 TCP raw log。
@@ -130,30 +130,31 @@ Service 类继承或使用 `RpcServiceBase`，把业务 API 封装为命令名�
 8. X 轴使用原始 x 在 `xStart..xEnd` 内的线性位置映射为波长，Y 轴使用滤波后的 DN 值。
 9. `SpectrumCurveDialog` 用所有实际绘制点计算全局 Y 范围；小于最小跨度时固定跨度，超过阈值时应用 `yRangeMultiplier`，并把最小值锚定到指定百分比位置。
 
-### 录制流程
+### 远程录制数据下载流程
 
-1. 用户在 `RecordPlaybackPanel` 选择或生成 `.asrec` 路径并开始录制。
-2. `FrameRecorder` 启动 `FrameRecorderWriterWorker`，先写入占位文件头。
-3. `DeviceUiCoordinator` 每次收到 `DeviceClient::frameReady` 时，把原始帧数据、`frameType` 和 `streamFrameId` 交给 recorder。
-4. worker 为每帧生成帧头、CRC 和相对时间戳，进入队列后由写入线程落盘。
-5. 停止录制时 worker drain 队列，重写文件头并发出停止信号。
+1. 用户在 `RecordPlaybackPanel` 查询 `record.get_retention` 或设置 `record.set_retention`。
+2. 用户按 `raw` 或 `tif` 调用 `record.list_recent` 查询最近记录，列表以服务端返回的 `record_id` 和文件清单展示。
+3. 用户多选记录后，客户端先检查 `recordings/remote_cache/<type>/<record_id>/` 是否已有完整缓存；已缓存且大小校验通过的记录直接加入播放序列。
+4. 未缓存记录通过 `record.fetch` 获取一次性 `transfer_id` 和 `file_port`。
+5. `RemoteFileDownloader` 异步连接文件 TCP 端口，发送 `{"transfer_id":"..."}` 握手，并按 `FileChunkHeader + filename + payload` 接收文件。
+6. 下载时按 `record.fetch.files[].record_id + name` 分发到对应 record 缓存目录；文件名必须匹配 fetch 响应且不能包含绝对路径、`..` 或路径分隔符。
+7. 校验 magic、version、file index、file size、offset、LastChunk/LastFile 和累计字节数；失败、取消、断连或关闭窗口都会删除本次临时缓存。
 
-### 回放流程
+### 远程回放流程
 
-1. 用户在 `RecordPlaybackPanel` 选择 `.asrec` 文件。
-2. `FramePlaybackController` 的扫描线程读取文件头和所有帧头，建立随机访问索引。
-3. 用户设置 FPS、播放帧数限制和循环开关后开始回放。
-4. controller 按定时器读取当前索引对应的 payload，校验 CRC，发出 `RecordedFrame`。
-5. `RecordPlaybackPanel` 转发帧，`DeviceUiCoordinator` 渲染到 Playback `ImageView`，并把光谱帧送入 `SpectralScanController` 的 Playback 扫描缓存。
-6. 进度条释放时调用 `seekTo()`；播放结束按循环设置回到窗口起点或停止。
+1. raw 记录由 `.raw + .json` 组成，客户端读取 `.json` 的 `width`、`height`、`frame_count` 和 `frames`，并用 `width * height * 2 * frame_count` 校验 `.raw` 文件大小。
+2. raw 多选记录按 `record_id` 的 unsigned 64-bit 数值从小到大合并为播放序列；播放时按帧偏移读取当前帧，不整文件载入内存。
+3. tif 记录是 BigTIFF，一个 tif 文件是 Playback 播放序列中的一张投影图；客户端用 libtiff 遍历 page，校验所有 page 尺寸和 16bit 单通道灰度格式一致。
+4. tif 渲染参数位于 `RecordPlaybackPanel` 内部，包括单波段、范围平均、单波段 RGB 合成和范围平均 RGB 合成；范围按 `[begin, end)`，`end=0` 表示到最后一个 page。
+5. `RecordPlaybackPanel` 将 raw/tif 渲染结果作为 `QImage` 发给 `DeviceUiCoordinator`，只显示到 `ViewerAreaWidget::PlaybackView`。
+6. 远程回放不再进入 `SpectralScanController` 的 Playback 缓存；`SpectralPanel` 只保留 Live/Auto 光谱显示。
 
 ## 存储与持久化
 
-- 实时设备帧默认只显示到 UI；用户开启录制后，原始帧持久化为 `.asrec`。
-- `.asrec` 文件头 magic 为 `ASRC`，帧头 magic 为 `AFRM`，当前版本为 `1`。
-- 正常停止录制会重写文件头并设置 `FileFlagClosedOk`。
-- 回放扫描会用真实帧头/payload 偏移建立索引；未正常关闭或文件头统计为空时，使用扫描结果恢复帧数和时长。
-- 回放读取时校验 payload CRC，失败帧计入损坏帧统计。
+- 客户端不再本地录制 `.asrec`；历史数据由服务端保存并通过 `record.*` 查询与拉取。
+- 远程下载缓存默认位于 `recordings/remote_cache/<type>/<record_id>/`。
+- raw 缓存必须包含同名 `.raw + .json`；tif 缓存为 BigTIFF `.tif`。
+- 成功缓存会被复用；失败、取消、断连和关闭窗口会删除本次不完整缓存。
 - 光谱分析参数、采样线和曲线窗口 geometry 使用 `QSettings` 的 `spectrumAnalysis/` 前缀。
 - 运行日志由 plog 写入 `log/log.txt`。
 - 用户界面状态由 `QSettings` 保存到平台默认位置。
@@ -165,8 +166,8 @@ Service 类继承或使用 `RpcServiceBase`，把业务 API 封装为命令名�
 - 新增图像通道：更新 `Protocol.h` 的 `StreamChannel`、`StreamPanel` 的通道选择、`DeviceUiCoordinator` 的通道分发和 `ViewerAreaWidget` 的图像视图。
 - 调整 Spectral 重建：优先看 `src/Ui/SpectralScanController.*`、`src/Ui/SpectralScanBuilder.*`、`src/Ui/panels/SpectralPanel.*` 和 `DeviceUiCoordinator` 的 Spectral 刷新逻辑。
 - 调整光谱分析：优先看 `src/Ui/SpectrumAnalysisCoordinator.*`、`src/Ui/panels/SpectrumAnalysisPanel.*`、`src/Ui/SpectrumCurveDialog.*`、`src/Ui/widgets/ImageView.*`。
-- 调整录制文件格式：优先改 `RecordingFileFormat.*`，再同步 `FrameRecorderWriterWorker` 和 `FramePlaybackController`。
-- 调整录制/回放 UI：改 `RecordPlaybackPanel.*`，必要时同步 `DeviceUiCoordinator` 的 Playback 视图切换和帧渲染连接。
+- 调整远程录制数据接口：优先改 `RecordService.*` 和 `RemoteFileDownloader.*`，再同步 `RecordPlaybackPanel.*`。
+- 调整远程回放 UI：改 `RecordPlaybackPanel.*`，必要时同步 `DeviceUiCoordinator` 的 Playback `QImage` 渲染连接。
 - 调整 UI 视觉：优先改 `resources/style/industrial.qss`；结构性布局改 `MainWindowChrome`、`ViewerAreaWidget` 或具体 panel/widget。
 - 修改构建环境：优先改 `config.bat`；依赖目录和 include/link 规则在 `libs/libsdefine.cmake` 与顶层 `CMakeLists.txt`。
 

@@ -10,6 +10,7 @@ DeviceClient::DeviceClient(QObject* parent)
     , ir_(&ctrl_)
     , collect_(&ctrl_)
     , streamControl_(&ctrl_)
+    , record_(&ctrl_)
 {
     connect(&ctrl_, &ControlClient::connectionChanged,
             this, &DeviceClient::connectionChanged);

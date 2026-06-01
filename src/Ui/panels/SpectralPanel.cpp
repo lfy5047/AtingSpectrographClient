@@ -19,9 +19,8 @@ SpectralPanel::SpectralPanel(QWidget* parent)
     auto* form = new QFormLayout(modeGroup);
 
     sourceModeCombo_ = new QComboBox(this);
-    sourceModeCombo_->addItem("Auto (Playback first)", static_cast<int>(SpectralSourceMode::Auto));
+    sourceModeCombo_->addItem("Auto", static_cast<int>(SpectralSourceMode::Auto));
     sourceModeCombo_->addItem("Live", static_cast<int>(SpectralSourceMode::Live));
-    sourceModeCombo_->addItem("Playback", static_cast<int>(SpectralSourceMode::Playback));
     form->addRow("Stream Source", sourceModeCombo_);
 
     sourceCombo_ = new QComboBox(this);
