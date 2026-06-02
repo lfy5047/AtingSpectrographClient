@@ -302,14 +302,20 @@ void RecordPlaybackPanel::setupUi()
     typeCombo_->addItem("tif", "tif");
     typeCombo_->setFixedWidth(130);
 
+    queryModeCombo_ = new QComboBox(recordsDialog_);
+    queryModeCombo_->addItem(QString::fromUtf8("最近数量"), "count");
+    queryModeCombo_->addItem(QString::fromUtf8("最近秒数"), "seconds");
+    queryModeCombo_->setFixedWidth(130);
+
     countSpin_ = new QSpinBox(recordsDialog_);
-    countSpin_->setRange(0, 10000);
+    countSpin_->setRange(1, 10000);
     countSpin_->setValue(10);
     countSpin_->setFixedWidth(110);
 
     secondsSpin_ = new QSpinBox(recordsDialog_);
-    secondsSpin_->setRange(0, 24 * 3600 * 30);
-    secondsSpin_->setValue(0);
+    secondsSpin_->setRange(1, 24 * 3600 * 30);
+    secondsSpin_->setValue(60);
+    secondsSpin_->setSuffix(" s");
     secondsSpin_->setFixedWidth(130);
 
     queryBtn_ = new QPushButton(QString::fromUtf8("查询"), recordsDialog_);
@@ -318,10 +324,13 @@ void RecordPlaybackPanel::setupUi()
     queryControlsRow->addWidget(new QLabel(QString::fromUtf8("类型"), recordsDialog_));
     queryControlsRow->addWidget(typeCombo_);
     queryControlsRow->addSpacing(12);
-    queryControlsRow->addWidget(new QLabel(QString::fromUtf8("最近数量"), recordsDialog_));
+    queryControlsRow->addWidget(new QLabel(QString::fromUtf8("查询模式"), recordsDialog_));
+    queryControlsRow->addWidget(queryModeCombo_);
+    queryControlsRow->addSpacing(12);
+    queryControlsRow->addWidget(new QLabel(QString::fromUtf8("数量"), recordsDialog_));
     queryControlsRow->addWidget(countSpin_);
     queryControlsRow->addSpacing(12);
-    queryControlsRow->addWidget(new QLabel(QString::fromUtf8("最近秒数(0=不限)"), recordsDialog_));
+    queryControlsRow->addWidget(new QLabel(QString::fromUtf8("秒数"), recordsDialog_));
     queryControlsRow->addWidget(secondsSpin_);
     queryControlsRow->addSpacing(12);
     queryControlsRow->addWidget(queryBtn_);
@@ -583,6 +592,8 @@ void RecordPlaybackPanel::setupUi()
                 this, &RecordPlaybackPanel::updateRetentionTotalLabel);
     }
     connect(queryBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::queryRecords);
+    connect(queryModeCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, &RecordPlaybackPanel::updateUiEnabled);
     connect(openRecordsDialogBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::showRecordsDialog);
     connect(downloadBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::downloadSelected);
     connect(appendDownloadBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::appendSelectedToPlaybackSequence);
@@ -726,8 +737,10 @@ void RecordPlaybackPanel::updateUiEnabled()
     retentionMinutesSpin_->setEnabled(retentionSubFieldsEnabled);
     retentionSecondsSpin_->setEnabled(retentionSubFieldsEnabled);
     typeCombo_->setEnabled(!busy);
-    countSpin_->setEnabled(!busy);
-    secondsSpin_->setEnabled(!busy);
+    if (queryModeCombo_) queryModeCombo_->setEnabled(!busy);
+    const bool queryBySeconds = queryModeCombo_ && queryModeCombo_->currentData().toString() == "seconds";
+    countSpin_->setEnabled(!busy && !queryBySeconds);
+    secondsSpin_->setEnabled(!busy && queryBySeconds);
     queryBtn_->setEnabled(hasConnection && !busy);
     openRecordsDialogBtn_->setEnabled(true);
     downloadBtn_->setEnabled(downloadBusy_ || (hasConnection && !queryBusy_ && hasSelection));
@@ -1161,24 +1174,39 @@ bool RecordPlaybackPanel::prepareForCacheMutation(QString* err)
 
 void RecordPlaybackPanel::refreshRetention()
 {
-    if (!device_ || !device_->record()) return;
+    if (!device_ || !device_->record()) {
+        setStatus(QString::fromUtf8("保留时间刷新失败：未连接服务端"), true);
+        if (retentionInfoLbl_) retentionInfoLbl_->setText(QString::fromUtf8("刷新失败：未连接服务端"));
+        return;
+    }
     device_->record()->getRetention(this, [this](bool ok, const nlohmann::json& data, const QString& err) {
         if (!ok) {
-            setStatus(err, true);
+            const QString message = err.trimmed().isEmpty()
+                ? QString::fromUtf8("保留时间刷新失败：服务端未返回错误信息")
+                : QString::fromUtf8("保留时间刷新失败：%1").arg(err);
+            setStatus(message, true);
+            if (retentionInfoLbl_) retentionInfoLbl_->setText(message);
             return;
         }
         const quint64 seconds = jsonU64(data, "retention_seconds", 0);
         currentRetentionSeconds_ = seconds;
         hasCurrentRetention_ = true;
         setRetentionInputsFromSeconds(seconds);
-        retentionInfoLbl_->setText(QString::fromUtf8("当前保留 %1 秒").arg(seconds));
+        retentionInfoLbl_->setText(QString::fromUtf8("当前=%1 秒 raw估算=%2 tif估算=%3")
+            .arg(seconds)
+            .arg(formatBytes(jsonU64(data, "raw_estimated_bytes", 0)))
+            .arg(formatBytes(jsonU64(data, "tif_estimated_bytes", 0))));
         setStatus(QString::fromUtf8("保留时间已刷新"), false);
     });
 }
 
 void RecordPlaybackPanel::applyRetention()
 {
-    if (!device_ || !device_->record()) return;
+    if (!device_ || !device_->record()) {
+        setStatus(QString::fromUtf8("保留时间设置失败：未连接服务端"), true);
+        if (retentionInfoLbl_) retentionInfoLbl_->setText(QString::fromUtf8("设置失败：未连接服务端"));
+        return;
+    }
     const quint64 seconds = retentionSecondsFromInputs();
     if (seconds == 0 || (hasCurrentRetention_ && seconds < currentRetentionSeconds_)) {
         const QString current = hasCurrentRetention_
@@ -1193,9 +1221,16 @@ void RecordPlaybackPanel::applyRetention()
             return;
         }
     }
+    const QString applyingText = QString::fromUtf8("正在设置保留时间为 %1 秒...").arg(seconds);
+    setStatus(applyingText, false);
+    if (retentionInfoLbl_) retentionInfoLbl_->setText(applyingText);
     device_->record()->setRetention(this, seconds, [this](bool ok, const nlohmann::json& data, const QString& err) {
         if (!ok) {
-            setStatus(err, true);
+            const QString message = err.trimmed().isEmpty()
+                ? QString::fromUtf8("保留时间设置失败：服务端未返回错误信息")
+                : QString::fromUtf8("保留时间设置失败：%1").arg(err);
+            setStatus(message, true);
+            if (retentionInfoLbl_) retentionInfoLbl_->setText(message);
             return;
         }
         const quint64 s = jsonU64(data, "retention_seconds", 0);
@@ -1215,11 +1250,13 @@ void RecordPlaybackPanel::queryRecords()
     if (!device_ || !device_->record()) return;
     if (queryBusy_) return;
     const QString type = typeCombo_->currentData().toString();
-    quint64 count = static_cast<quint64>(countSpin_->value());
-    quint64 seconds = static_cast<quint64>(secondsSpin_->value());
-    if (count == 0 && seconds == 0) count = 10;
+    const bool queryBySeconds = queryModeCombo_ && queryModeCombo_->currentData().toString() == "seconds";
+    const quint64 count = queryBySeconds ? 0 : static_cast<quint64>(countSpin_->value());
+    const quint64 seconds = queryBySeconds ? static_cast<quint64>(secondsSpin_->value()) : 0;
     queryBusy_ = true;
-    setStatus(QString::fromUtf8("正在查询远程记录..."), false);
+    setStatus(queryBySeconds
+        ? QString::fromUtf8("正在按最近 %1 秒查询远程记录...").arg(seconds)
+        : QString::fromUtf8("正在按最近 %1 条查询远程记录...").arg(count), false);
     updateUiEnabled();
     device_->record()->listRecent(this, type, count, seconds,
         [this](bool ok, const nlohmann::json& data, const QString& err) {

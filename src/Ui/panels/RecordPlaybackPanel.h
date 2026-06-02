@@ -245,6 +245,7 @@ private:
     bool hasCurrentRetention_ = false;
 
     QComboBox* typeCombo_ = nullptr;
+    QComboBox* queryModeCombo_ = nullptr;
     QSpinBox* countSpin_ = nullptr;
     QSpinBox* secondsSpin_ = nullptr;
     QPushButton* queryBtn_ = nullptr;

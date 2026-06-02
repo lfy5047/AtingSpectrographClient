@@ -286,7 +286,7 @@ bool RemoteFileDownloader::consumeOneChunk(QString* err, bool* consumed)
         finishing_ = true;
         if (sock_) sock_->disconnectFromHost();
     }
-    LOGD << "接收进度: " << receivedBytes_ << " / " << totalBytes_ << " (" << name.toStdString() << ")";
+    // LOGD << "接收进度: " << receivedBytes_ << " / " << totalBytes_ << " (" << name.toStdString() << ")";
     if (!progressTimer_.isValid() || progressTimer_.elapsed() >= 100 || lastChunk || lastFile) {
         progressTimer_.restart();
         emit progress(receivedBytes_, totalBytes_, name);
