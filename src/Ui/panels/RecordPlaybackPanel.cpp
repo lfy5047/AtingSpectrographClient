@@ -56,11 +56,14 @@
 #include <QPixmap>
 #include <QRectF>
 #include <QShortcut>
+#include <QSettings>
 #include <QStyle>
 #include <QTableWidgetItem>
 #include <QUrl>
 
 namespace {
+const char* kSettingsPrefix = "recordPlayback/";
+
 QString jsonString(const nlohmann::json& j, const char* key)
 {
     return j.contains(key) && j[key].is_string()
@@ -75,6 +78,11 @@ quint64 jsonU64(const nlohmann::json& j, const char* key, quint64 def = 0)
     if (j[key].is_number_integer()) {
         const qint64 v = j[key].get<qint64>();
         return v >= 0 ? static_cast<quint64>(v) : def;
+    }
+    if (j[key].is_string()) {
+        bool ok = false;
+        const quint64 v = QString::fromStdString(j[key].get<std::string>()).toULongLong(&ok);
+        return ok ? v : def;
     }
     return def;
 }
@@ -592,8 +600,20 @@ void RecordPlaybackPanel::setupUi()
                 this, &RecordPlaybackPanel::updateRetentionTotalLabel);
     }
     connect(queryBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::queryRecords);
+    connect(typeCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        saveSettings();
+    });
     connect(queryModeCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &RecordPlaybackPanel::updateUiEnabled);
+    connect(queryModeCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        saveSettings();
+    });
+    connect(countSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) {
+        saveSettings();
+    });
+    connect(secondsSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) {
+        saveSettings();
+    });
     connect(openRecordsDialogBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::showRecordsDialog);
     connect(downloadBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::downloadSelected);
     connect(appendDownloadBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::appendSelectedToPlaybackSequence);
@@ -628,7 +648,14 @@ void RecordPlaybackPanel::setupUi()
     connect(exportFrameBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::exportCurrentFrame);
     connect(intervalSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int value) {
         if (playbackTimer_ && playbackTimer_->isActive()) playbackTimer_->setInterval(value);
+        saveSettings();
         updateUiEnabled();
+    });
+    connect(loopChk_, &QCheckBox::toggled, this, [this](bool) {
+        saveSettings();
+    });
+    connect(badFramePolicyCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        saveSettings();
     });
     connect(playbackTimer_, &QTimer::timeout, this, &RecordPlaybackPanel::onPlaybackTick);
     connect(tifRenderDebounceTimer_, &QTimer::timeout, this, [this]() {
@@ -655,9 +682,15 @@ void RecordPlaybackPanel::setupUi()
             this, &RecordPlaybackPanel::onRenderSettingsChanged);
     connect(renderModeCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &RecordPlaybackPanel::updateRenderVisibility);
+    connect(renderModeCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        saveSettings();
+    });
     for (QSpinBox* s : bandSpins) {
         connect(s, QOverload<int>::of(&QSpinBox::valueChanged),
                 this, &RecordPlaybackPanel::scheduleTifRerender);
+        connect(s, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) {
+            saveSettings();
+        });
     }
     const QList<QSlider*> bandSlidersForConnect = {
         singleBandSlider_, rangeBeginSlider_, rangeEndSlider_, rBandSlider_, gBandSlider_, bBandSlider_,
@@ -674,7 +707,10 @@ void RecordPlaybackPanel::setupUi()
             QSignalBlocker blocker(spin);
             spin->setValue(value);
         });
-        connect(slider, &QSlider::sliderReleased, this, &RecordPlaybackPanel::scheduleTifRerender);
+        connect(slider, &QSlider::sliderReleased, this, [this]() {
+            saveSettings();
+            scheduleTifRerender();
+        });
         connect(spin, QOverload<int>::of(&QSpinBox::valueChanged), this, [slider, this](int value) {
             QSignalBlocker blocker(slider);
             slider->setValue(value);
@@ -685,6 +721,9 @@ void RecordPlaybackPanel::setupUi()
     for (QCheckBox* c : toLastChecks) {
         connect(c, &QCheckBox::toggled, this, &RecordPlaybackPanel::scheduleTifRerender);
         connect(c, &QCheckBox::toggled, this, &RecordPlaybackPanel::updateRenderVisibility);
+        connect(c, &QCheckBox::toggled, this, [this](bool) {
+            saveSettings();
+        });
     }
 
     auto shortcutAllowed = [this]() {
@@ -711,6 +750,7 @@ void RecordPlaybackPanel::setupUi()
         if (!frameRefs_.isEmpty()) seekToFrame(static_cast<quint64>(frameRefs_.size() - 1), SeekTrigger::Manual, false);
     });
 
+    loadSettings();
     updateRetentionTotalLabel();
     refreshCacheInfo();
 }
@@ -772,6 +812,108 @@ void RecordPlaybackPanel::updateUiEnabled()
         fpsLbl_->setText(QString("%1 FPS").arg(QString::number(fps, 'f', 2)));
     }
     updateDownloadButtonText();
+}
+
+void RecordPlaybackPanel::setComboByData(QComboBox* combo, const QVariant& data, int fallbackIndex)
+{
+    if (!combo) return;
+    int index = combo->findData(data);
+    if (index < 0) index = qBound(0, fallbackIndex, combo->count() - 1);
+    if (index >= 0) combo->setCurrentIndex(index);
+}
+
+void RecordPlaybackPanel::loadSettings()
+{
+    loadingSettings_ = true;
+    QSettings s;
+    const QString p = QString::fromLatin1(kSettingsPrefix);
+
+    setComboByData(typeCombo_, s.value(p + "query/type", "raw"), 0);
+    setComboByData(queryModeCombo_, s.value(p + "query/mode", "count"), 0);
+    countSpin_->setValue(s.value(p + "query/count", 10).toInt());
+    secondsSpin_->setValue(s.value(p + "query/seconds", 60).toInt());
+
+    setComboByData(renderModeCombo_, s.value(p + "tif/mode", static_cast<int>(TifRenderMode::SingleBand)), 0);
+    pendingTifBandSettings_ = {
+        s.value(p + "tif/singleBand", 1).toInt(),
+        s.value(p + "tif/rangeBegin", 1).toInt(),
+        s.value(p + "tif/rangeEnd", 1).toInt(),
+        s.value(p + "tif/rBand", 1).toInt(),
+        s.value(p + "tif/gBand", 1).toInt(),
+        s.value(p + "tif/bBand", 1).toInt(),
+        s.value(p + "tif/rBegin", 1).toInt(),
+        s.value(p + "tif/rEnd", 1).toInt(),
+        s.value(p + "tif/gBegin", 1).toInt(),
+        s.value(p + "tif/gEnd", 1).toInt(),
+        s.value(p + "tif/bBegin", 1).toInt(),
+        s.value(p + "tif/bEnd", 1).toInt(),
+    };
+    pendingTifBandSettingsValid_ = true;
+    rangeToLastChk_->setChecked(s.value(p + "tif/rangeToLast", false).toBool());
+    rToLastChk_->setChecked(s.value(p + "tif/rToLast", false).toBool());
+    gToLastChk_->setChecked(s.value(p + "tif/gToLast", false).toBool());
+    bToLastChk_->setChecked(s.value(p + "tif/bToLast", false).toBool());
+
+    intervalSpin_->setValue(s.value(p + "playback/intervalMs", 200).toInt());
+    loopChk_->setChecked(s.value(p + "playback/loop", false).toBool());
+    setComboByData(badFramePolicyCombo_,
+                   s.value(p + "playback/badFramePolicy", static_cast<int>(BadFramePolicy::Pause)), 0);
+    playbackSequenceGroup_->setChecked(s.value(p + "ui/playbackSequenceExpanded", false).toBool());
+
+    loadingSettings_ = false;
+    updateRenderVisibility();
+    updateUiEnabled();
+}
+
+void RecordPlaybackPanel::saveSettings() const
+{
+    if (loadingSettings_) return;
+    QSettings s;
+    const QString p = QString::fromLatin1(kSettingsPrefix);
+
+    s.setValue(p + "query/type", typeCombo_->currentData());
+    s.setValue(p + "query/mode", queryModeCombo_->currentData());
+    s.setValue(p + "query/count", countSpin_->value());
+    s.setValue(p + "query/seconds", secondsSpin_->value());
+
+    s.setValue(p + "tif/mode", renderModeCombo_->currentData());
+    const QVector<int> tifBandValues = pendingTifBandSettingsValid_ && pendingTifBandSettings_.size() == 12
+        ? pendingTifBandSettings_
+        : QVector<int>{
+            singleBandSpin_->value(),
+            rangeBeginSpin_->value(),
+            rangeEndSpin_->value(),
+            rBandSpin_->value(),
+            gBandSpin_->value(),
+            bBandSpin_->value(),
+            rBeginSpin_->value(),
+            rEndSpin_->value(),
+            gBeginSpin_->value(),
+            gEndSpin_->value(),
+            bBeginSpin_->value(),
+            bEndSpin_->value(),
+        };
+    s.setValue(p + "tif/singleBand", tifBandValues[0]);
+    s.setValue(p + "tif/rangeBegin", tifBandValues[1]);
+    s.setValue(p + "tif/rangeEnd", tifBandValues[2]);
+    s.setValue(p + "tif/rBand", tifBandValues[3]);
+    s.setValue(p + "tif/gBand", tifBandValues[4]);
+    s.setValue(p + "tif/bBand", tifBandValues[5]);
+    s.setValue(p + "tif/rBegin", tifBandValues[6]);
+    s.setValue(p + "tif/rEnd", tifBandValues[7]);
+    s.setValue(p + "tif/gBegin", tifBandValues[8]);
+    s.setValue(p + "tif/gEnd", tifBandValues[9]);
+    s.setValue(p + "tif/bBegin", tifBandValues[10]);
+    s.setValue(p + "tif/bEnd", tifBandValues[11]);
+    s.setValue(p + "tif/rangeToLast", rangeToLastChk_->isChecked());
+    s.setValue(p + "tif/rToLast", rToLastChk_->isChecked());
+    s.setValue(p + "tif/gToLast", gToLastChk_->isChecked());
+    s.setValue(p + "tif/bToLast", bToLastChk_->isChecked());
+
+    s.setValue(p + "playback/intervalMs", intervalSpin_->value());
+    s.setValue(p + "playback/loop", loopChk_->isChecked());
+    s.setValue(p + "playback/badFramePolicy", badFramePolicyCombo_->currentData());
+    s.setValue(p + "ui/playbackSequenceExpanded", playbackSequenceGroup_->isChecked());
 }
 
 void RecordPlaybackPanel::cancelRemoteWork()
@@ -2091,7 +2233,24 @@ void RecordPlaybackPanel::updateTifBandRanges(const PlaybackEntry& entry)
         {bBeginSlider_, bBeginSpin_, 0},
         {bEndSlider_, bEndSpin_, 0},
     };
-    for (BandSelector& selector : selectors) syncBandSelector(&selector, pageCount);
+    if (pendingTifBandSettingsValid_ && pendingTifBandSettings_.size() == selectors.size()) {
+        for (int i = 0; i < selectors.size(); ++i) {
+            BandSelector& selector = selectors[i];
+            if (!selector.slider || !selector.spin) continue;
+            const int value = qBound(1, pendingTifBandSettings_[i], pageCount);
+            QSignalBlocker b1(selector.slider);
+            QSignalBlocker b2(selector.spin);
+            selector.slider->setRange(1, pageCount);
+            selector.spin->setRange(1, pageCount);
+            selector.slider->setValue(value);
+            selector.spin->setValue(value);
+            selector.maxPageCount = pageCount;
+        }
+        pendingTifBandSettingsValid_ = false;
+        pendingTifBandSettings_.clear();
+    } else {
+        for (BandSelector& selector : selectors) syncBandSelector(&selector, pageCount);
+    }
     if (tifRenderHintLbl_) {
         tifRenderHintLbl_->setText(QString::fromUtf8("TIF pages=%1 size=%2x%3")
             .arg(entry.pageCount).arg(entry.tifWidth).arg(entry.tifHeight));
@@ -2581,6 +2740,7 @@ void RecordPlaybackPanel::togglePlaybackSequenceVisible(bool checked)
     if (playbackSequenceTable_) playbackSequenceTable_->setVisible(checked);
     if (playbackSeqRemoveBtn_) playbackSeqRemoveBtn_->setVisible(checked);
     if (playbackSeqClearBtn_) playbackSeqClearBtn_->setVisible(checked);
+    saveSettings();
     updateUiEnabled();
 }
 
@@ -2737,11 +2897,13 @@ void RecordPlaybackPanel::onSliderReleased()
 
 void RecordPlaybackPanel::onRenderSettingsChanged()
 {
+    if (loadingSettings_) return;
     scheduleTifRerender();
 }
 
 void RecordPlaybackPanel::scheduleTifRerender()
 {
+    if (loadingSettings_) return;
     if (frameRefs_.isEmpty()) return;
     const FrameRef ref = frameRefs_[static_cast<int>(currentFrame_)];
     if (ref.entryIndex >= 0 && playbackEntries_[ref.entryIndex].type == "tif") {

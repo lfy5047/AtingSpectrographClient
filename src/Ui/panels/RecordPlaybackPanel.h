@@ -19,6 +19,7 @@ class QKeyEvent;
 class QLabel;
 class QTableWidgetItem;
 class QPushButton;
+class QVariant;
 class QSlider;
 class QSpinBox;
 class QTableWidget;
@@ -223,6 +224,9 @@ private:
     QString filesText(const RecordItem& item) const;
     QString formatBytes(quint64 bytes) const;
     QString frameTypeText(quint8 frameType) const;
+    void loadSettings();
+    void saveSettings() const;
+    void setComboByData(QComboBox* combo, const QVariant& data, int fallbackIndex);
 
     DeviceClient* device_ = nullptr;
     RemoteFileDownloader* downloader_ = nullptr;
@@ -230,6 +234,7 @@ private:
     bool downloadBusy_ = false;
     bool queryBusy_ = false;
     bool recordSelectionLocked_ = false;
+    bool loadingSettings_ = false;
     QString host_;
     bool connected_ = false;
 
@@ -335,8 +340,10 @@ private:
     bool progressWasPlayingBeforeDrag_ = false;
     bool playbackRequested_ = false;
     bool appendAfterDownload_ = false;
+    bool pendingTifBandSettingsValid_ = false;
     int automaticDownloadRetryCount_ = 0;
     bool retryAvailable_ = false;
+    QVector<int> pendingTifBandSettings_;
     QImage currentPlaybackImage_;
     ChannelImageStats currentPlaybackStats_;
     QString currentPlaybackInfo_;
