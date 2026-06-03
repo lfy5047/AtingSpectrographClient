@@ -55,8 +55,14 @@ if(WIN32 AND EXISTS "${LIBTIFF_DLL}")
 endif()
 
 if(WIN32)
-    set_target_properties(${PROJECT_NAME} PROPERTIES
-        WIN32_EXECUTABLE false
-        # WIN32_EXECUTABLE true
-    )
+    if(DEBUG)
+        set_target_properties(${PROJECT_NAME} PROPERTIES
+            WIN32_EXECUTABLE false
+            # WIN32_EXECUTABLE true
+        )
+    else()
+        set_target_properties(${PROJECT_NAME} PROPERTIES
+            WIN32_EXECUTABLE true
+        )
+    endif()
 endif()

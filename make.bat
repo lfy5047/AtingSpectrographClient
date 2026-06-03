@@ -4,9 +4,9 @@
 call config.bat
 
 :: 编译类型
-set BUILD_TYPE=Release
-if "%1" == "d" (
-    set BUILD_TYPE=Debug
+set BUILD_TYPE=Debug
+if "%1" == "r" (
+    set BUILD_TYPE=Release
 )
 
 :: 创建构建目录
