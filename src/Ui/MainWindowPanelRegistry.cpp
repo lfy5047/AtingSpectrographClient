@@ -82,8 +82,9 @@ void MainWindowPanelRegistry::selectPanel(int index)
                                        : QString::fromUtf8(kPanelNames[index]));
     chrome_->panelTitle()->setCursor(index == SpectrumAnalysis ? Qt::PointingHandCursor : Qt::ArrowCursor);
 
+    selectAssociatedViewerChannel(index);
+
     if (index == SpectrumAnalysis && spectrumAnalysisCoordinator_) {
-        chrome_->viewerArea()->setCurrentChannel(ViewerAreaWidget::SliceStitch16View);
         spectrumAnalysisCoordinator_->openDialog();
     }
 }
@@ -123,4 +124,34 @@ void MainWindowPanelRegistry::setupPanels()
     stack->addWidget(wrapInScroll(spectralPanel_));
     stack->addWidget(wrapInScroll(recordPlaybackPanel_));
     stack->addWidget(wrapInScroll(spectrumAnalysisPanel_));
+}
+
+int MainWindowPanelRegistry::preferredStreamViewerChannel() const
+{
+    auto* viewer = chrome_->viewerArea();
+    if (viewer->hasChannelImage(ViewerAreaWidget::SliceStitch16View)) {
+        return ViewerAreaWidget::SliceStitch16View;
+    }
+    return ViewerAreaWidget::Raw16View;
+}
+
+void MainWindowPanelRegistry::selectAssociatedViewerChannel(int panelIndex)
+{
+    auto* viewer = chrome_->viewerArea();
+    switch (panelIndex) {
+    case Stream:
+        viewer->setCurrentChannel(preferredStreamViewerChannel());
+        break;
+    case Spectral:
+        viewer->setCurrentChannel(ViewerAreaWidget::SpectralView);
+        break;
+    case RecordPlayback:
+        viewer->setCurrentChannel(ViewerAreaWidget::PlaybackView);
+        break;
+    case SpectrumAnalysis:
+        viewer->setCurrentChannel(ViewerAreaWidget::SliceStitch16View);
+        break;
+    default:
+        break;
+    }
 }

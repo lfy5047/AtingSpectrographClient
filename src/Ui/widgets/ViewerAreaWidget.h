@@ -27,6 +27,7 @@ public:
 
     int currentChannel() const { return currentChannel_; }
     void setCurrentChannel(int channel);
+    bool hasChannelImage(int channel) const;
     ImageView* imageView(int channel) const;
     void renderFrame(int channel, int width, int height, int pixfmt, const QByteArray& data);
     void setChannelImage(int channel, const QImage& image);

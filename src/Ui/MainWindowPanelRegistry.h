@@ -52,6 +52,8 @@ protected:
 
 private:
     void setupPanels();
+    int preferredStreamViewerChannel() const;
+    void selectAssociatedViewerChannel(int panelIndex);
 
     DeviceClient* device_ = nullptr;
     MainWindowChrome* chrome_ = nullptr;

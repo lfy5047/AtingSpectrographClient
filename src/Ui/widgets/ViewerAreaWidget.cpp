@@ -155,6 +155,12 @@ void ViewerAreaWidget::setCurrentChannel(int channel)
     emit channelChanged(channel);
 }
 
+bool ViewerAreaWidget::hasChannelImage(int channel) const
+{
+    const ImageView* target = imageView(channel);
+    return target && !target->currentImage().isNull();
+}
+
 ImageView* ViewerAreaWidget::imageView(int channel) const
 {
     switch (channel) {
