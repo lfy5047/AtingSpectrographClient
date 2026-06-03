@@ -24,8 +24,8 @@ SpectralPanel::SpectralPanel(QWidget* parent)
     form->addRow("Stream Source", sourceModeCombo_);
 
     sourceCombo_ = new QComboBox(this);
-    sourceCombo_->addItem("Raw16", static_cast<int>(cli::proto::Raw16));
     sourceCombo_->addItem("SliceStitch16", static_cast<int>(cli::proto::SliceStitch16));
+    sourceCombo_->addItem("Raw16", static_cast<int>(cli::proto::Raw16));
     form->addRow(QString::fromUtf8("来源通道"), sourceCombo_);
 
     modeCombo_ = new QComboBox(this);

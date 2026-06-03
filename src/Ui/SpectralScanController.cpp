@@ -20,13 +20,14 @@ SpectralSource SpectralScanController::effectiveSource(SpectralSourceMode mode) 
 SpectralFrameResult SpectralScanController::feedLiveFrame(const StreamFrame& frame, qint64 nowMs)
 {
     return feedFrame(SpectralSource::Live, frame.channel, frame.frameType, frame.streamFrameId,
-                     frame.width, frame.height, frame.pixfmt, frame.data, nowMs);
+                     frame.width, frame.height, frame.pixfmt, frame.data,
+                     frame.hasScanDirection, frame.reverseScan, nowMs);
 }
 
 SpectralFrameResult SpectralScanController::feedPlaybackFrame(const RecordedFrame& frame, qint64 nowMs)
 {
     return feedFrame(SpectralSource::Playback, frame.channel, frame.frameType, frame.streamFrameId,
-                     frame.width, frame.height, frame.pixfmt, frame.data, nowMs);
+                     frame.width, frame.height, frame.pixfmt, frame.data, false, false, nowMs);
 }
 
 SpectralStats SpectralScanController::stats(SpectralSource source, int channel) const
@@ -95,7 +96,8 @@ const SpectralScanBuilder* SpectralScanController::builderFor(SpectralSource sou
 
 SpectralFrameResult SpectralScanController::feedFrame(SpectralSource source, int channel, quint8 frameType,
                                                       quint64 streamFrameId, int width, int height,
-                                                      int pixfmt, const QByteArray& data, qint64 nowMs)
+                                                      int pixfmt, const QByteArray& data, bool hasScanDirection,
+                                                      bool reverseScan, qint64 nowMs)
 {
     using namespace cli::proto;
 
@@ -108,7 +110,8 @@ SpectralFrameResult SpectralScanController::feedFrame(SpectralSource source, int
     if (!b) return result;
 
     const bool wasActive = b->hasActiveScan();
-    result.committed = b->feedFrame(frameType, streamFrameId, width, height, pixfmt, data);
+    result.committed = b->feedFrame(frameType, streamFrameId, width, height, pixfmt, data,
+                                    hasScanDirection, reverseScan);
     const bool hasActive = b->hasActiveScan();
 
     if (frameType == HeaderFrame) {

@@ -25,7 +25,7 @@ file(GLOB_RECURSE CLIENT_SRCS
 
 set(RESOURCES resources/resources.qrc)
 
-add_executable(${PROJECT_NAME} WIN32 ${CLIENT_SRCS} ${RESOURCES})
+add_executable(${PROJECT_NAME} ${CLIENT_SRCS} ${RESOURCES})
 
 target_include_directories(${PROJECT_NAME} PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}
@@ -55,14 +55,13 @@ if(WIN32 AND EXISTS "${LIBTIFF_DLL}")
 endif()
 
 if(WIN32)
-    if(DEBUG)
+    if(CMAKE_BUILD_TYPE STREQUAL "Debug" OR CMAKE_BUILD_TYPE STREQUAL "RelWithDebInfo")
         set_target_properties(${PROJECT_NAME} PROPERTIES
-            WIN32_EXECUTABLE false
-            # WIN32_EXECUTABLE true
+            WIN32_EXECUTABLE false   # Debug 显示控制台
         )
     else()
         set_target_properties(${PROJECT_NAME} PROPERTIES
-            WIN32_EXECUTABLE true
+            WIN32_EXECUTABLE true    # Release 隐藏控制台
         )
     endif()
 endif()

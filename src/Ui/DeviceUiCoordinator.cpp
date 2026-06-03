@@ -279,7 +279,8 @@ void DeviceUiCoordinator::handleLiveFrame(const StreamFrame& frame)
     if (chrome_->viewerArea()->currentChannel() == ViewerAreaWidget::SpectralView && channelMatches) {
         refreshSpectralStats();
     }
-    if (sourceMatches && result.committed) {
+    if (sourceMatches && (result.committed ||
+                          (channelMatches && chrome_->viewerArea()->currentChannel() == ViewerAreaWidget::SpectralView))) {
         spectralDirty_ = true;
     }
     if (result.progressChanged) {

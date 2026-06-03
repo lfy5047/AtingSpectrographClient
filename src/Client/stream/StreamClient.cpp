@@ -15,6 +15,7 @@ namespace {
 const qint64 kDropLogIntervalMs = 1000;
 const uint8_t kMinStreamChannel = 1;
 const uint8_t kMaxStreamChannel = 4;
+const uint8_t kMinSupportedStreamVersion = 2;
 }
 
 StreamClient::StreamClient(QObject* parent)
@@ -87,7 +88,7 @@ void StreamClient::onReadyRead()
             logDropRateLimited("bad stream magic", &hdr, dg.size());
             continue;
         }
-        if (hdr.version != kStreamProtoVersion) {
+        if (hdr.version < kMinSupportedStreamVersion || hdr.version > kStreamProtoVersion) {
             logDropRateLimited("unsupported stream version", &hdr, dg.size());
             continue;
         }
@@ -109,6 +110,8 @@ void StreamClient::onReadyRead()
         }
 
         const bool hasMeta = (hdr.meta_flags & HasRawFrameMeta) != 0;
+        const bool hasDirection = hdr.version >= kStreamProtoVersion &&
+                                  (hdr.meta_flags & HasScanDirection) != 0;
         if (hasMeta) {
             if (hdr.is_latest_mirror_frame > 1) {
                 logDropRateLimited("invalid is_latest_mirror_frame", &hdr, dg.size());
@@ -121,7 +124,6 @@ void StreamClient::onReadyRead()
             (void)hdr.mirror_timestamp_ns;
 
         }
-
         assembler_.feedPacket(hdr, payload, payloadLen);
     }
 }
@@ -155,6 +157,7 @@ void StreamClient::logDropRateLimited(const char* reason, const cli::proto::Stre
                   << " total=" << hdr->pkt_total
                   << " meta=" << hdr->meta_flags
                   << " frameType=" << static_cast<int>(hdr->frame_type)
+                  << " reverseScan=" << static_cast<int>(hdr->reverse_scan)
                   << " dgBytes=" << datagramBytes
                   << " suppressed=" << dropLogSuppressed_;
         } else {

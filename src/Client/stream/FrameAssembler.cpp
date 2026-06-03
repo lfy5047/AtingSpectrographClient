@@ -5,6 +5,19 @@
 #include <cstring>
 #include <limits>
 
+namespace {
+bool hasScanDirection(const cli::proto::StreamHeader& hdr)
+{
+    return hdr.version >= cli::proto::kStreamProtoVersion &&
+           (hdr.meta_flags & cli::proto::HasScanDirection) != 0;
+}
+
+bool reverseScan(const cli::proto::StreamHeader& hdr)
+{
+    return hasScanDirection(hdr) && hdr.reverse_scan != 0;
+}
+}
+
 FrameAssembler::FrameAssembler(QObject* parent)
     : QObject(parent)
 {
@@ -47,6 +60,8 @@ void FrameAssembler::feedPacket(const cli::proto::StreamHeader& hdr,
         s.channel = hdr.channel;
         s.streamFrameId = hdr.frame_id;
         s.frameType = hdr.frame_type;
+        s.hasScanDirection = hasScanDirection(hdr);
+        s.reverseScan = reverseScan(hdr);
         s.buf.resize(static_cast<int>(hdr.frame_bytes));
         s.buf.fill('\0');
         s.got.resize(hdr.pkt_total);
@@ -65,13 +80,19 @@ void FrameAssembler::feedPacket(const cli::proto::StreamHeader& hdr,
 
     if (slot.pktTotal != hdr.pkt_total || slot.frameBytes != hdr.frame_bytes ||
         slot.width != hdr.width || slot.height != hdr.height ||
-        slot.pixfmt != hdr.pixel_format || slot.frameType != hdr.frame_type) {
+        slot.pixfmt != hdr.pixel_format || slot.frameType != hdr.frame_type ||
+        slot.hasScanDirection != hasScanDirection(hdr) ||
+        slot.reverseScan != reverseScan(hdr)) {
         PLOGW << "FrameAssembler: metadata changed channel=" << static_cast<int>(hdr.channel)
               << " fid=" << hdr.frame_id
               << " oldTotal=" << slot.pktTotal << " newTotal=" << hdr.pkt_total
               << " oldBytes=" << slot.frameBytes << " newBytes=" << hdr.frame_bytes
               << " oldFrameType=" << static_cast<int>(slot.frameType)
-              << " newFrameType=" << static_cast<int>(hdr.frame_type);
+              << " newFrameType=" << static_cast<int>(hdr.frame_type)
+              << " oldHasScanDirection=" << slot.hasScanDirection
+              << " newHasScanDirection=" << hasScanDirection(hdr)
+              << " oldReverseScan=" << slot.reverseScan
+              << " newReverseScan=" << reverseScan(hdr);
         bufferedBytes_ -= slot.buf.size();
         slots_.erase(it);
         ++framesDropped_;
@@ -118,6 +139,8 @@ void FrameAssembler::feedPacket(const cli::proto::StreamHeader& hdr,
         frame.pixfmt = slot.pixfmt;
         frame.streamFrameId = slot.streamFrameId;
         frame.frameType = slot.frameType;
+        frame.hasScanDirection = slot.hasScanDirection;
+        frame.reverseScan = slot.reverseScan;
         frame.data = slot.buf;
         emit frameReady(frame);
         bufferedBytes_ -= slot.buf.size();

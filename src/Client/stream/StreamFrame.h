@@ -11,6 +11,8 @@ struct StreamFrame {
     int pixfmt = 0;
     quint64 streamFrameId = 0;
     quint8 frameType = 0;
+    bool hasScanDirection = false;
+    bool reverseScan = false;
     QByteArray data;
 };
 

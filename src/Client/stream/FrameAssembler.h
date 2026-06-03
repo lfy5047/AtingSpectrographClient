@@ -48,6 +48,8 @@ private:
         uint8_t    channel     = 0;
         quint64    streamFrameId = 0;
         quint8     frameType   = 0;
+        bool       hasScanDirection = false;
+        bool       reverseScan = false;
         int        payloadSize = 0;
         int        received    = 0;
         qint64     created     = 0;

@@ -61,7 +61,8 @@ private:
     const SpectralScanBuilder* builderFor(SpectralSource source, int channel) const;
     SpectralFrameResult feedFrame(SpectralSource source, int channel, quint8 frameType,
                                   quint64 streamFrameId, int width, int height,
-                                  int pixfmt, const QByteArray& data, qint64 nowMs);
+                                  int pixfmt, const QByteArray& data, bool hasScanDirection,
+                                  bool reverseScan, qint64 nowMs);
     bool startProgress(SpectralSource source, int channel, qint64 nowMs);
     bool stopProgress(SpectralSource source, int channel);
     void clearProgress(SpectralSource source);

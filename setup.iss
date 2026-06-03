@@ -32,14 +32,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "build\Release\{#MyAppExeName}"; DestDir: "{app}"; Flags: ignoreversion
-Source: "build\Release\*.dll"; DestDir: "{app}"; Flags: ignoreversion
-Source: "build\Release\platforms\*.dll"; DestDir: "{app}\platforms"; Flags: ignoreversion
-Source: "build\Release\styles\*.dll"; DestDir: "{app}\styles"; Flags: ignoreversion
-Source: "build\Release\imageformats\*.dll"; DestDir: "{app}\imageformats"; Flags: ignoreversion
-Source: "build\Release\iconengines\*.dll"; DestDir: "{app}\iconengines"; Flags: ignoreversion
-Source: "build\Release\bearer\*.dll"; DestDir: "{app}\bearer"; Flags: ignoreversion
-Source: "build\Release\translations\*.qm"; DestDir: "{app}\translations"; Flags: ignoreversion
+Source: "build\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"

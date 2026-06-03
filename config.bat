@@ -8,7 +8,11 @@ set PROJECT_ROOT=C:\work\liufangyin\project\AtingSpectrographClient
 set BUILD_DIR=%PROJECT_ROOT%\build
 
 :: 安装目录
-set INSTALL_DIR=%BUILD_DIR%\Release
+set BUILD_TYPE=Debug
+if "%1" == "r" (
+    set BUILD_TYPE=Release
+)
+set INSTALL_DIR=%BUILD_DIR%\%BUILD_TYPE%
 
 :: 工具链路径
 set CMAKE_PATH="C:\Program Files\CMake\bin\cmake.exe"

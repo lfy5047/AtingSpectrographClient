@@ -8,7 +8,7 @@ namespace cli { namespace proto {
 static const uint32_t kCtrlMagic   = 0x4E495441u;  // 'ATIN' LE
 static const uint32_t kStreamMagic = 0x4D545341u;  // 'ASTM' LE
 static const uint16_t kCtrlProtoVersion = 2;
-static const uint8_t kStreamProtoVersion = 2;
+static const uint8_t kStreamProtoVersion = 3;
 static const uint32_t kMaxCtrlPayload = 1u << 20;  // 1 MiB
 
 enum MsgType : uint16_t {
@@ -36,6 +36,7 @@ enum StreamFlag : uint16_t {
 
 enum StreamMetaFlag : uint16_t {
     HasRawFrameMeta = 0x1,
+    HasScanDirection = 0x2,
 };
 
 enum StreamFrameType : uint8_t {
@@ -72,7 +73,8 @@ struct StreamHeader {
     uint64_t mirror_angle_bits;
     uint8_t  frame_type;
     uint8_t  is_latest_mirror_frame;
-    uint16_t reserved0;
+    uint8_t  reverse_scan;
+    uint8_t  reserved0;
     uint32_t reserved1;
 };
 #pragma pack(pop)
@@ -96,6 +98,9 @@ static_assert(offsetof(StreamHeader, mirror_timestamp_ns) == 40, "StreamHeader.m
 static_assert(offsetof(StreamHeader, mirror_angle_bits) == 48, "StreamHeader.mirror_angle_bits offset mismatch");
 static_assert(offsetof(StreamHeader, frame_type) == 56, "StreamHeader.frame_type offset mismatch");
 static_assert(offsetof(StreamHeader, is_latest_mirror_frame) == 57, "StreamHeader.is_latest_mirror_frame offset mismatch");
+static_assert(offsetof(StreamHeader, reverse_scan) == 58, "StreamHeader.reverse_scan offset mismatch");
+static_assert(offsetof(StreamHeader, reserved0) == 59, "StreamHeader.reserved0 offset mismatch");
+static_assert(offsetof(StreamHeader, reserved1) == 60, "StreamHeader.reserved1 offset mismatch");
 
 #if defined(__BYTE_ORDER__) && defined(__ORDER_LITTLE_ENDIAN__) && (__BYTE_ORDER__ != __ORDER_LITTLE_ENDIAN__)
 #error "Stream protocol currently supports little-endian hosts only."

@@ -3,6 +3,7 @@
 #include "ImageView.h"
 
 #include <QEvent>
+#include <QDateTime>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QProgressBar>
@@ -10,6 +11,8 @@
 #include <QStackedWidget>
 #include <QStyle>
 #include <QVBoxLayout>
+
+#include "plog/Log.h"
 
 ViewerAreaWidget::ViewerAreaWidget(QWidget* parent)
     : QWidget(parent)
@@ -171,6 +174,18 @@ void ViewerAreaWidget::renderFrame(int channel, int width, int height, int pixfm
     const QImage img = makeDisplayImage(width, height, pixfmt, data);
     if (!img.isNull()) {
         target->setImage(img);
+    } else {
+        static qint64 lastWarnMs = 0;
+        const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
+        if (lastWarnMs == 0 || nowMs - lastWarnMs >= 1000) {
+            PLOGW << "ViewerAreaWidget: renderFrame produced null image"
+                  << " channel=" << channel
+                  << " width=" << width
+                  << " height=" << height
+                  << " pixfmt=" << pixfmt
+                  << " dataBytes=" << data.size();
+            lastWarnMs = nowMs;
+        }
     }
 }
 
