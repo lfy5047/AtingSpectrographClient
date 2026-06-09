@@ -1,8 +1,9 @@
-#define MyAppName "AtingSpectrographClient"
-#define MyAppVersion "0.1.0"
+#define MyAppName "@PROJECT_NAME@"
+#define MyAppVersion "@PROJECT_VERSION@"
 #define MyAppPublisher "Ating"
 #define MyAppURL "https://www.ating-tech.com"
-#define MyAppExeName "AtingSpectrographClient.exe"
+#define MyAppExeName "@PROJECT_NAME@.exe"
+#define MyProjectRoot "@CMAKE_CURRENT_SOURCE_DIR@"
 
 [Setup]
 AppId={{E8B7A2F9-3C4D-5E6F-7A8B-9C0D1E2F3A4B}
@@ -14,7 +15,7 @@ AppSupportURL={#MyAppURL}
 AppUpdatesURL={#MyAppURL}
 DefaultDirName={autopf}\{#MyAppName}
 DisableProgramGroupPage=yes
-OutputDir=installer
+OutputDir={#MyProjectRoot}\installer
 OutputBaseFilename=AtingSpectrographClient_Setup_v{#MyAppVersion}
 Compression=lzma2
 SolidCompression=yes
@@ -32,7 +33,7 @@ Name: "english"; MessagesFile: "compiler:Default.isl"
 Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{cm:AdditionalIcons}"; Flags: unchecked
 
 [Files]
-Source: "build\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+Source: "{#MyProjectRoot}\build\Release\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
 
 [Icons]
 Name: "{autoprograms}\{#MyAppName}"; Filename: "{app}\{#MyAppExeName}"

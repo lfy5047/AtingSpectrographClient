@@ -1,4 +1,28 @@
 ﻿# AI 任务日志
+## 2026-06-09 软件版本号管理
+
+- 目标：为客户端建立统一的软件版本号管理，避免运行时、安装包和 exe 元数据各自维护版本号。
+- 文件变更：
+  - `CMakeLists.txt`
+  - `cmake/AppVersion.h.in`
+  - `cmake/AtingSpectrographClient.rc.in`
+  - `cmake/setup.iss.in`
+  - `src/main.cpp`
+  - `src/Ui/MainWindow.cpp`
+  - `tests/AppVersionTest.cpp`
+  - `package.bat`
+  - `setup.iss`
+- 实现要点：
+  - 顶层 `project(AtingSpectrographClient VERSION 0.1.0 ...)` 作为版本号单一入口。
+  - CMake 生成 `AppVersion.h`，供 `QApplication` 版本信息和主窗口标题使用。
+  - CMake 生成 Windows `.rc` 资源，写入 exe 的 FileVersion/ProductVersion。
+  - CMake 生成 `build\setup.iss`，`package.bat` 使用该脚本打包，安装包版本和文件名跟随 CMake 版本。
+- 验证：
+  - 已先新增 `AppVersionTest` 并观察旧实现下因缺少 `AppVersion.h` 构建失败。
+  - 已运行 `.\make.bat`，Debug 构建通过，Windows `.rc` 资源被编译进主程序。
+  - 已运行 `ctest --test-dir build -C Debug --output-on-failure`，2 个测试通过。
+  - 已检查 `build\generated\AppVersion.h`、`build\setup.iss` 和 `build\Debug\AtingSpectrographClient.exe` 元数据，版本均为 `0.1.0`。
+
 ## 2026-06-09 spectral_preview 流通道接入
 
 - 目标：按新版 UDP v3 协议接入服务端 `spectral_preview` 流通道，并作为独立 JPEG 预览页显示。

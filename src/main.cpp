@@ -1,5 +1,6 @@
 #include <QApplication>
 #include <QFile>
+#include "AppVersion.h"
 #include "Ui/MainWindow.h"
 #include "Client/stream/StreamFrame.h"
 #include "plog/Initializers/RollingFileInitializer.h"
@@ -14,8 +15,9 @@ int main(int argc, char* argv[])
 
     QApplication app(argc, argv);
     qRegisterMetaType<StreamFrame>("StreamFrame");
-    app.setOrganizationName("AtingSpectrograph");
-    app.setApplicationName("AtingSpectrographClient");
+    app.setOrganizationName(AppVersion::organizationName());
+    app.setApplicationName(AppVersion::applicationName());
+    app.setApplicationVersion(AppVersion::version());
 
     QFont font(QString::fromUtf8("微软雅黑"), 10);
     app.setFont(font);

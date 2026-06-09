@@ -1,5 +1,6 @@
 #include "MainWindow.h"
 
+#include "AppVersion.h"
 #include "DeviceClient.h"
 #include "DeviceUiCoordinator.h"
 #include "MainWindowChrome.h"
@@ -14,7 +15,7 @@
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
 {
-    setWindowTitle(QString::fromUtf8("AtingSpectrograph Client — Spectra Pro"));
+    setWindowTitle(AppVersion::windowTitle());
     resize(1480, 880);
     setMinimumSize(1000, 600);
 

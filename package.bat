@@ -1,4 +1,4 @@
-@echo off
+﻿@echo off
 setlocal enabledelayedexpansion
 
 :: ============================================================
@@ -14,7 +14,7 @@ call config.bat
 set SCRIPT_DIR=%~dp0
 set WINDEPLOYQT=%CMAKE_PREFIX_PATH:"=%\bin\windeployqt.exe
 set ISS_EXE=C:\Program Files\Inno Setup 7\ISCC.exe
-set ISS_SCRIPT=%PROJECT_ROOT%\setup.iss
+set ISS_SCRIPT=%BUILD_DIR%\setup.iss
 set BUILD_TYPE=Release
 
 echo.
@@ -72,6 +72,20 @@ if !errorlevel! neq 0 (
 if not exist "%ISS_EXE%" (
     echo 错误: 找不到 Inno Setup 编译器 "%ISS_EXE%"
     exit /b 1
+)
+
+if not exist "%ISS_SCRIPT%" (
+    echo 找不到生成的 Inno Setup 脚本，先运行 CMake 配置...
+    %CMAKE_PATH% -G "Ninja Multi-Config" ^
+        -DCMAKE_BUILD_TYPE=%BUILD_TYPE% ^
+        -S "%PROJECT_ROOT%" ^
+        -B "%BUILD_DIR%" ^
+        -DCMAKE_PREFIX_PATH=%CMAKE_PREFIX_PATH% ^
+        -DCMAKE_EXPORT_COMPILE_COMMANDS=True
+    if !errorlevel! neq 0 (
+        echo CMake 配置失败，无法生成打包脚本!
+        exit /b !errorlevel!
+    )
 )
 
 if not exist "%ISS_SCRIPT%" (

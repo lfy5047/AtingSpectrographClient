@@ -1,0 +1,43 @@
+#pragma once
+
+#include <QString>
+
+namespace AppVersion {
+
+inline const char* organizationName()
+{
+    return "AtingSpectrograph";
+}
+
+inline const char* applicationName()
+{
+    return "@PROJECT_NAME@";
+}
+
+inline const char* version()
+{
+    return "@PROJECT_VERSION@";
+}
+
+inline int versionMajor()
+{
+    return @PROJECT_VERSION_MAJOR@;
+}
+
+inline int versionMinor()
+{
+    return @PROJECT_VERSION_MINOR@;
+}
+
+inline int versionPatch()
+{
+    return @PROJECT_VERSION_PATCH@;
+}
+
+inline QString windowTitle()
+{
+    return QString::fromUtf8("AtingSpectrograph Client - Spectra Pro v%1")
+        .arg(QString::fromLatin1(version()));
+}
+
+} // namespace AppVersion

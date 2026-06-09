@@ -39,8 +39,15 @@ AtingSpectrographClient 是一个 Windows 桌面端光谱仪/成像设备控制�
 - `install.bat`：运行 `cmake --install` 到 `build\Release`。
 - `run.bat`：先构建/必要时安装，然后结束同名进程并运行 exe。
 - `clear.bat`：清理脚本，使用前先确认删除范围。
+- `package.bat`：使用 CMake 生成的 `build\setup.iss` 打包，安装包版本跟随顶层 CMake 项目版本。
 
-当前未发现自动化测试入口。业务代码变更建议至少运行 `.\make.bat`；纯文档变更通常不需要构建。
+自动化测试通过 CTest 运行，常用命令为 `ctest --test-dir build -C Debug --output-on-failure`。业务代码变更建议至少运行 `.\make.bat`；纯文档变更通常不需要构建。
+
+## 版本管理
+
+- 软件版本号的单一入口是顶层 `CMakeLists.txt` 的 `project(AtingSpectrographClient VERSION x.y.z ...)`。
+- CMake 配置阶段会生成 `AppVersion.h`、Windows `.rc` 资源和 `build\setup.iss`。
+- 运行时 `QApplication::applicationVersion()`、主窗口标题、exe FileVersion/ProductVersion、安装包 `AppVersion` 和安装包文件名都应从该版本派生。
 
 ## 关键目录
 
