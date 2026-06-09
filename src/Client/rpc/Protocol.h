@@ -23,11 +23,13 @@ enum StreamChannel : uint8_t {
     Preview8       = 2,
     SliceStitch16  = 3,
     RegionStitch16 = 4,
+    SpectralPreview = 5,
 };
 
 enum PixelFormat : uint16_t {
     Mono8  = 1,
     Mono16 = 2,
+    Jpeg   = 3,
 };
 
 enum StreamFlag : uint16_t {

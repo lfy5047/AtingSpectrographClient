@@ -14,7 +14,7 @@ using namespace cli::proto;
 namespace {
 const qint64 kDropLogIntervalMs = 1000;
 const uint8_t kMinStreamChannel = 1;
-const uint8_t kMaxStreamChannel = 4;
+const uint8_t kMaxStreamChannel = 5;
 const uint8_t kMinSupportedStreamVersion = 2;
 }
 

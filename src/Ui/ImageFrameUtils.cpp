@@ -37,6 +37,13 @@ QImage makeDisplayImage(int width, int height, int pixfmt, const QByteArray& dat
                       width, height, width, QImage::Format_Grayscale8).copy();
     }
 
+    if (pixfmt == Jpeg) {
+        QImage image;
+        if (!image.loadFromData(data, "JPG")) return QImage();
+        if (image.width() != width || image.height() != height) return QImage();
+        return image;
+    }
+
     const int pixels = width * height;
     if (data.size() < pixels * 2) return QImage();
 

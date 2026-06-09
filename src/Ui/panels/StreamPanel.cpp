@@ -18,6 +18,7 @@ StreamPanel::StreamPanel(DeviceClient* dev, QWidget* parent)
     chkPreview8_       = new QCheckBox("Preview8", this);
     chkSliceStitch16_  = new QCheckBox("SliceStitch16", this);
     chkRegionStitch16_ = new QCheckBox("RegionStitch16", this);
+    chkSpectralPreview_ = new QCheckBox("SpectralPreview", this);
     chkPreview8_->setVisible(false);
     chkRegionStitch16_->setVisible(false);
 
@@ -25,6 +26,7 @@ StreamPanel::StreamPanel(DeviceClient* dev, QWidget* parent)
     vb->addWidget(chkPreview8_);
     vb->addWidget(chkSliceStitch16_);
     vb->addWidget(chkRegionStitch16_);
+    vb->addWidget(chkSpectralPreview_);
 
     auto* btnRow = new QHBoxLayout();
     applyBtn_ = new QPushButton(QString::fromUtf8("应用订阅"), this); // 应用订阅
@@ -66,6 +68,7 @@ QStringList StreamPanel::selectedChannels() const
     if (chkPreview8_->isChecked())       chs << "preview8";
     if (chkSliceStitch16_->isChecked())  chs << "slice_stitch16";
     if (chkRegionStitch16_->isChecked()) chs << "region_stitch16";
+    if (chkSpectralPreview_->isChecked()) chs << "spectral_preview";
     return chs;
 }
 

@@ -1,4 +1,28 @@
 ﻿# AI 任务日志
+## 2026-06-09 spectral_preview 流通道接入
+
+- 目标：按新版 UDP v3 协议接入服务端 `spectral_preview` 流通道，并作为独立 JPEG 预览页显示。
+- 文件变更：
+  - `CMakeLists.txt`
+  - `tests/ImageFrameUtilsTest.cpp`
+  - `src/Client/rpc/Protocol.h`
+  - `src/Client/stream/StreamClient.cpp`
+  - `src/Ui/ImageFrameUtils.cpp`
+  - `src/Ui/DeviceUiCoordinator.cpp`
+  - `src/Ui/MainWindowPanelRegistry.cpp`
+  - `src/Ui/widgets/ViewerAreaWidget.*`
+  - `src/Ui/panels/StreamPanel.*`
+  - `src/Ui/panels/DashboardPanel.cpp`
+- 实现要点：
+  - 新增 `SpectralPreview = 5` 和 `Jpeg = 3` 协议枚举，允许 UDP 通道 1~5。
+  - `ImageFrameUtils` 对 JPEG payload 使用 Qt 图像解码，并校验解码尺寸与流头一致。
+  - Stream 面板新增 `SpectralPreview` 订阅勾选项，订阅名为 `spectral_preview`。
+  - Viewer 新增独立 `SpectralPreview` 页，服务端 JPEG 预览不进入客户端本地 Spectral 扫描重建流程。
+- 验证：
+  - 已先新增 `ImageFrameUtilsTest` 并观察 JPEG 解码测试在旧实现下失败。
+  - 已运行 `.\make.bat`，Debug 构建通过。
+  - 已运行 `ctest --test-dir build -C Debug -R ImageFrameUtilsTest --output-on-failure`，新增测试通过。
+
 ## 2026-05-29 远程录制数据回放改造
 
 - 目标：移除本地 `.asrec` 录制/回放入口，改为通过服务端 `record.*` 查询、下载并播放 raw/tif 历史数据。

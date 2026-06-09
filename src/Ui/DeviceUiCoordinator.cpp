@@ -27,6 +27,7 @@ int viewerChannelForStreamChannel(int channel)
 
     if (channel == Raw16) return ViewerAreaWidget::Raw16View;
     if (channel == SliceStitch16) return ViewerAreaWidget::SliceStitch16View;
+    if (channel == SpectralPreview) return ViewerAreaWidget::SpectralPreviewView;
     return -1;
 }
 } // namespace
@@ -98,6 +99,8 @@ void DeviceUiCoordinator::refreshStreamStats()
         fpsChannel = SliceStitch16;
     } else if (currentChannel == ViewerAreaWidget::SpectralView) {
         fpsChannel = registry_->spectral()->sourceChannel();
+    } else if (currentChannel == ViewerAreaWidget::SpectralPreviewView) {
+        fpsChannel = SpectralPreview;
     }
 
     const double selectedFps = fpsChannel > 0 ? device_->stream()->fps(fpsChannel) : device_->stream()->fps();

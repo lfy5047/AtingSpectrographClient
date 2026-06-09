@@ -20,7 +20,9 @@ public:
         Raw16View = 0,
         SliceStitch16View = 1,
         SpectralView = 2,
-        PlaybackView = 3,
+        SpectralPreviewView = 3,
+        PlaybackView = 4,
+        ChannelCount = 5,
     };
 
     explicit ViewerAreaWidget(QWidget* parent = nullptr);
@@ -58,11 +60,13 @@ private:
     QPushButton* chTabRaw16_ = nullptr;
     QPushButton* chTabSlice_ = nullptr;
     QPushButton* chTabSpectral_ = nullptr;
+    QPushButton* chTabSpectralPreview_ = nullptr;
     QPushButton* chTabPlayback_ = nullptr;
     QStackedWidget* viewerStack_ = nullptr;
     ImageView* imageViewRaw_ = nullptr;
     ImageView* imageViewSlice_ = nullptr;
     ImageView* imageViewSpectral_ = nullptr;
+    ImageView* imageViewSpectralPreview_ = nullptr;
     ImageView* imageViewPlayback_ = nullptr;
 
     QWidget* zoomBar_ = nullptr;
@@ -73,7 +77,8 @@ private:
     QProgressBar* spectralProgressBar_ = nullptr;
 
     int currentChannel_ = Raw16View;
-    std::array<QPoint, 4> cursorImagePos_ = {
+    std::array<QPoint, ChannelCount> cursorImagePos_ = {
+        QPoint(-1, -1),
         QPoint(-1, -1),
         QPoint(-1, -1),
         QPoint(-1, -1),

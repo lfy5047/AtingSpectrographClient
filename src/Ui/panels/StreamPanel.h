@@ -32,6 +32,7 @@ private:
     QCheckBox* chkPreview8_       = nullptr;
     QCheckBox* chkSliceStitch16_  = nullptr;
     QCheckBox* chkRegionStitch16_ = nullptr;
+    QCheckBox* chkSpectralPreview_ = nullptr;
 
     QPushButton* applyBtn_   = nullptr;
     QPushButton* unsubBtn_   = nullptr;

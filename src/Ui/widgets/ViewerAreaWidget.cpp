@@ -39,8 +39,9 @@ void ViewerAreaWidget::setupUi()
     chTabRaw16_ = new QPushButton("Raw16", channelTabBar_);
     chTabSlice_ = new QPushButton("SliceStitch16", channelTabBar_);
     chTabSpectral_ = new QPushButton("Spectral", channelTabBar_);
+    chTabSpectralPreview_ = new QPushButton("SpectralPreview", channelTabBar_);
     chTabPlayback_ = new QPushButton("Playback", channelTabBar_);
-    const QList<QPushButton*> tabs = {chTabRaw16_, chTabSlice_, chTabSpectral_, chTabPlayback_};
+    const QList<QPushButton*> tabs = {chTabRaw16_, chTabSlice_, chTabSpectral_, chTabSpectralPreview_, chTabPlayback_};
     for (auto* tab : tabs) {
         tab->setObjectName("channelTab");
         tab->setFixedHeight(28);
@@ -55,16 +56,19 @@ void ViewerAreaWidget::setupUi()
     imageViewRaw_ = new ImageView(viewerStack_);
     imageViewSlice_ = new ImageView(viewerStack_);
     imageViewSpectral_ = new ImageView(viewerStack_);
+    imageViewSpectralPreview_ = new ImageView(viewerStack_);
     imageViewPlayback_ = new ImageView(viewerStack_);
     viewerStack_->addWidget(imageViewRaw_);
     viewerStack_->addWidget(imageViewSlice_);
     viewerStack_->addWidget(imageViewSpectral_);
+    viewerStack_->addWidget(imageViewSpectralPreview_);
     viewerStack_->addWidget(imageViewPlayback_);
     viewerLayout->addWidget(viewerStack_, 1);
 
     connect(chTabRaw16_, &QPushButton::clicked, this, [this]() { setCurrentChannel(Raw16View); });
     connect(chTabSlice_, &QPushButton::clicked, this, [this]() { setCurrentChannel(SliceStitch16View); });
     connect(chTabSpectral_, &QPushButton::clicked, this, [this]() { setCurrentChannel(SpectralView); });
+    connect(chTabSpectralPreview_, &QPushButton::clicked, this, [this]() { setCurrentChannel(SpectralPreviewView); });
     connect(chTabPlayback_, &QPushButton::clicked, this, [this]() { setCurrentChannel(PlaybackView); });
 
     zoomBar_ = new QWidget(this);
@@ -125,6 +129,9 @@ void ViewerAreaWidget::setupUi()
     connect(imageViewSpectral_, &ImageView::cursorImagePosChanged, this, [this](const QPoint& pos) {
         cursorImagePos_[SpectralView] = pos;
     });
+    connect(imageViewSpectralPreview_, &ImageView::cursorImagePosChanged, this, [this](const QPoint& pos) {
+        cursorImagePos_[SpectralPreviewView] = pos;
+    });
     connect(imageViewPlayback_, &ImageView::cursorImagePosChanged, this, [this](const QPoint& pos) {
         cursorImagePos_[PlaybackView] = pos;
         refreshImageStatsOverlay();
@@ -167,6 +174,7 @@ ImageView* ViewerAreaWidget::imageView(int channel) const
     case Raw16View: return imageViewRaw_;
     case SliceStitch16View: return imageViewSlice_;
     case SpectralView: return imageViewSpectral_;
+    case SpectralPreviewView: return imageViewSpectralPreview_;
     case PlaybackView: return imageViewPlayback_;
     default: return nullptr;
     }
@@ -266,6 +274,8 @@ void ViewerAreaWidget::updateChannelTabStyle()
     chTabSlice_->style()->polish(chTabSlice_);
     chTabSpectral_->setProperty("active", currentChannel_ == SpectralView);
     chTabSpectral_->style()->polish(chTabSpectral_);
+    chTabSpectralPreview_->setProperty("active", currentChannel_ == SpectralPreviewView);
+    chTabSpectralPreview_->style()->polish(chTabSpectralPreview_);
     chTabPlayback_->setProperty("active", currentChannel_ == PlaybackView);
     chTabPlayback_->style()->polish(chTabPlayback_);
 }

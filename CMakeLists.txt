@@ -13,9 +13,10 @@ add_definitions(-DNEW_ALGORITHM)
 include(libs/libsdefine.cmake)
 
 # Qt
-find_package(Qt5 COMPONENTS Widgets PrintSupport Network REQUIRED)
+find_package(Qt5 COMPONENTS Widgets PrintSupport Network Test REQUIRED)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
+enable_testing()
 
 file(GLOB_RECURSE CLIENT_SRCS
     src/main.cpp
@@ -45,6 +46,22 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     Qt5::Network
     ${LIB_LIST}
 )
+
+add_executable(ImageFrameUtilsTest
+    tests/ImageFrameUtilsTest.cpp
+    src/Ui/ImageFrameUtils.cpp
+)
+target_include_directories(ImageFrameUtilsTest PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Client/rpc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Ui
+)
+target_link_libraries(ImageFrameUtilsTest PRIVATE
+    Qt5::Test
+    Qt5::Gui
+)
+add_test(NAME ImageFrameUtilsTest COMMAND ImageFrameUtilsTest)
 
 if(WIN32 AND EXISTS "${LIBTIFF_DLL}")
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD

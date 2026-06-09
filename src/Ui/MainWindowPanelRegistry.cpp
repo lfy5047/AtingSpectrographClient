@@ -132,6 +132,9 @@ int MainWindowPanelRegistry::preferredStreamViewerChannel() const
     if (viewer->hasChannelImage(ViewerAreaWidget::SliceStitch16View)) {
         return ViewerAreaWidget::SliceStitch16View;
     }
+    if (viewer->hasChannelImage(ViewerAreaWidget::SpectralPreviewView)) {
+        return ViewerAreaWidget::SpectralPreviewView;
+    }
     return ViewerAreaWidget::Raw16View;
 }
 
