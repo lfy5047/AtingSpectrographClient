@@ -1,5 +1,6 @@
 <RCC>
     <qresource prefix="/">
+        <file>icons/app_icon.png</file>
         <file>style/industrial.qss</file>
     </qresource>
 </RCC>

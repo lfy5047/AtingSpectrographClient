@@ -1,4 +1,23 @@
 ﻿# AI 任务日志
+## 2026-06-09 软件图标接入
+
+- 目标：为客户端增加合适的软件图标，并同时覆盖 Qt 运行时窗口图标和 Windows exe 图标资源。
+- 文件变更：
+  - `resources/icons/app_icon.png`
+  - `resources/icons/app_icon.ico`
+  - `resources/resources.qrc`
+  - `cmake/AtingSpectrographClient.rc.in`
+  - `src/main.cpp`
+  - `docs/superpowers/specs/2026-06-09-app-icon-design.md`
+  - `docs/superpowers/plans/2026-06-09-app-icon.md`
+- 实现要点：
+  - 使用 Image 2 生成“仪器光路”方向图标：深色光谱仪/相机设备、中心镜头和斜向彩色光谱束。
+  - 将源图保存为 Qt 资源 `:/icons/app_icon.png`，并在 `QApplication` 初始化时设置为应用窗口图标。
+  - 生成多尺寸 `app_icon.ico`，并通过 CMake 配置生成的 Windows `.rc` 嵌入 exe 图标。
+- 验证：
+  - 已运行 `.\make.bat`，Debug 构建通过，Qt qrc 和 Windows rc 图标资源均参与构建。
+  - 构建仅保留既有 qcustomplot/Qt 相关 MSVC STL deprecation warning。
+
 ## 2026-06-09 软件版本号管理
 
 - 目标：为客户端建立统一的软件版本号管理，避免运行时、安装包和 exe 元数据各自维护版本号。

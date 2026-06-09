@@ -1,5 +1,6 @@
 #include <QApplication>
 #include <QFile>
+#include <QIcon>
 #include "AppVersion.h"
 #include "Ui/MainWindow.h"
 #include "Client/stream/StreamFrame.h"
@@ -18,6 +19,7 @@ int main(int argc, char* argv[])
     app.setOrganizationName(AppVersion::organizationName());
     app.setApplicationName(AppVersion::applicationName());
     app.setApplicationVersion(AppVersion::version());
+    app.setWindowIcon(QIcon(":/icons/app_icon.png"));
 
     QFont font(QString::fromUtf8("微软雅黑"), 10);
     app.setFont(font);
