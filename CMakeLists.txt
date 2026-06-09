@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.10)
-project(AtingSpectrographClient VERSION 0.1.1 LANGUAGES CXX)
+project(AtingSpectrographClient LANGUAGES CXX)
 
 set(CMAKE_CXX_STANDARD 11)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -11,6 +11,7 @@ endif()
 add_definitions(-DNEW_ALGORITHM)
 
 include(libs/libsdefine.cmake)
+include(cmake/GitVersion.cmake)
 
 # Qt
 find_package(Qt5 COMPONENTS Widgets PrintSupport Network Test REQUIRED)
@@ -18,7 +19,6 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 enable_testing()
 
-set(APP_VERSION_TWEAK 0)
 set(GENERATED_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 configure_file(
     "${CMAKE_CURRENT_SOURCE_DIR}/cmake/AppVersion.h.in"

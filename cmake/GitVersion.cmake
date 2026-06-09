@@ -1,0 +1,36 @@
+find_package(Git QUIET)
+
+set(APP_VERSION_MAJOR 0)
+set(APP_VERSION_MINOR 0)
+set(APP_VERSION_PATCH 0)
+set(APP_VERSION_TWEAK 0)
+set(APP_VERSION_BASE "0.0.0")
+set(APP_VERSION_DISPLAY "0.0.0")
+set(APP_VERSION_GIT_DESCRIBE "")
+
+if(GIT_FOUND)
+    execute_process(
+        COMMAND "${GIT_EXECUTABLE}" describe --tags --dirty --always --long
+        WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+        RESULT_VARIABLE APP_GIT_DESCRIBE_RESULT
+        OUTPUT_VARIABLE APP_GIT_DESCRIBE_OUTPUT
+        OUTPUT_STRIP_TRAILING_WHITESPACE
+        ERROR_QUIET
+    )
+
+    if(APP_GIT_DESCRIBE_RESULT EQUAL 0 AND NOT APP_GIT_DESCRIBE_OUTPUT STREQUAL "")
+        string(REGEX REPLACE "^[vV]" "" APP_VERSION_GIT_DESCRIBE "${APP_GIT_DESCRIBE_OUTPUT}")
+
+        if(APP_VERSION_GIT_DESCRIBE MATCHES "^([0-9]+)\\.([0-9]+)\\.([0-9]+)-([0-9]+)-(g[0-9a-f]+)(-dirty)?$")
+            set(APP_VERSION_MAJOR "${CMAKE_MATCH_1}")
+            set(APP_VERSION_MINOR "${CMAKE_MATCH_2}")
+            set(APP_VERSION_PATCH "${CMAKE_MATCH_3}")
+            set(APP_VERSION_BASE "${APP_VERSION_MAJOR}.${APP_VERSION_MINOR}.${APP_VERSION_PATCH}")
+            set(APP_VERSION_DISPLAY "${APP_VERSION_BASE}")
+        elseif(APP_VERSION_GIT_DESCRIBE MATCHES "^([0-9a-f]+)(-dirty)?$")
+            set(APP_VERSION_DISPLAY "${APP_VERSION_BASE}")
+        endif()
+    endif()
+endif()
+
+message(STATUS "App version: ${APP_VERSION_DISPLAY} (${APP_VERSION_GIT_DESCRIBE})")

@@ -169,7 +169,7 @@ Service 类继承或使用 `RpcServiceBase`，把业务 API 封装为命令名�
 - 调整远程录制数据接口：优先改 `RecordService.*` 和 `RemoteFileDownloader.*`，再同步 `RecordPlaybackPanel.*`。
 - 调整远程回放 UI：改 `RecordPlaybackPanel.*`，必要时同步 `DeviceUiCoordinator` 的 Playback `QImage` 渲染连接。
 - 调整 UI 视觉：优先改 `resources/style/industrial.qss`；结构性布局改 `MainWindowChrome`、`ViewerAreaWidget` 或具体 panel/widget。
-- 调整软件版本号：只改顶层 `CMakeLists.txt` 的 `project(... VERSION x.y.z ...)`；运行时版本头、Windows 资源版本和安装包脚本由 CMake 生成。
+- 调整软件发布版本：创建 Git tag（推荐 `vX.Y.Z`）；`cmake/GitVersion.cmake` 会派生运行时版本头、Windows 资源版本和安装包脚本。
 - 修改构建环境：优先改 `config.bat`；依赖目录和 include/link 规则在 `libs/libsdefine.cmake` 与顶层 `CMakeLists.txt`。
 
 ## 当前状态观察

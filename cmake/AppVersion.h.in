@@ -16,22 +16,27 @@ inline const char* applicationName()
 
 inline const char* version()
 {
-    return "@PROJECT_VERSION@";
+    return "@APP_VERSION_DISPLAY@";
+}
+
+inline const char* baseVersion()
+{
+    return "@APP_VERSION_BASE@";
 }
 
 inline int versionMajor()
 {
-    return @PROJECT_VERSION_MAJOR@;
+    return @APP_VERSION_MAJOR@;
 }
 
 inline int versionMinor()
 {
-    return @PROJECT_VERSION_MINOR@;
+    return @APP_VERSION_MINOR@;
 }
 
 inline int versionPatch()
 {
-    return @PROJECT_VERSION_PATCH@;
+    return @APP_VERSION_PATCH@;
 }
 
 inline QString windowTitle()

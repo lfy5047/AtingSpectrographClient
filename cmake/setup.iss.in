@@ -1,5 +1,5 @@
 #define MyAppName "@PROJECT_NAME@"
-#define MyAppVersion "@PROJECT_VERSION@"
+#define MyAppVersion "@APP_VERSION_DISPLAY@"
 #define MyAppPublisher "Ating"
 #define MyAppURL "https://www.ating-tech.com"
 #define MyAppExeName "@PROJECT_NAME@.exe"

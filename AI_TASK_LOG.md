@@ -42,6 +42,32 @@
   - 已运行 `ctest --test-dir build -C Debug --output-on-failure`，2 个测试通过。
   - 已检查 `build\generated\AppVersion.h`、`build\setup.iss` 和 `build\Debug\AtingSpectrographClient.exe` 元数据，版本均为 `0.1.0`。
 
+## 2026-06-09 Git tag 版本源调整
+
+- 目标：将软件发布版本唯一来源从 CMake 手写版本改为 Git tag。
+- 文件变更：
+  - `CMakeLists.txt`
+  - `cmake/GitVersion.cmake`
+  - `cmake/AppVersion.h.in`
+  - `cmake/AtingSpectrographClient.rc.in`
+  - `cmake/setup.iss.in`
+  - `package.bat`
+  - `tests/AppVersionTest.cpp`
+  - `PROJECT_CONTEXT.md`
+  - `ARCHITECTURE.md`
+  - `AI_TASK_LOG.md`
+- 实现要点：
+  - `project(AtingSpectrographClient ...)` 不再写 `VERSION`。
+  - CMake 通过 `git describe --tags --dirty --always --long` 派生 `APP_VERSION_DISPLAY` 和 `APP_VERSION_BASE`。
+  - 显示版本始终只使用最近发布 tag 的 `X.Y.Z`，不追加提交距离、hash 或 dirty 状态。
+  - Windows `FILEVERSION` 使用数字四段，显示字符串和安装包版本只使用基础版本号。
+  - `package.bat` 打包前刷新 CMake 配置，避免复用旧 `build\setup.iss`。
+- 验证：
+  - 已先修改 `AppVersionTest`，观察旧实现下因缺少 `AppVersion::baseVersion()` 构建失败。
+  - 已运行 `.\make.bat`，Debug 构建通过，CMake 输出当前显示版本 `0.1.1`。
+  - 已运行 `ctest --test-dir build -C Debug --output-on-failure`，2 个测试通过。
+  - 已检查 `build\generated\AppVersion.h`、`build\setup.iss` 和 `build\Debug\AtingSpectrographClient.exe` 元数据，用户可见版本均为 `0.1.1`。
+
 ## 2026-06-09 spectral_preview 流通道接入
 
 - 目标：按新版 UDP v3 协议接入服务端 `spectral_preview` 流通道，并作为独立 JPEG 预览页显示。
