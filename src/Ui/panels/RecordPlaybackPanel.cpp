@@ -1,5 +1,6 @@
 ﻿#include "RecordPlaybackPanel.h"
 
+#include "DeleteVerification.h"
 #include "DeviceClient.h"
 #include "ImageFrameUtils.h"
 #include "Protocol.h"
@@ -22,6 +23,7 @@
 #include <QGroupBox>
 #include <QHeaderView>
 #include <QHBoxLayout>
+#include <QInputDialog>
 #include <QLabel>
 #include <QMetaObject>
 #include <QMetaType>
@@ -214,6 +216,7 @@ RecordPlaybackPanel::RecordPlaybackPanel(DeviceClient* device, QWidget* parent)
             if (!connected) {
                 cancelDownloadOnly();
                 queryBusy_ = false;
+                deleteBusy_ = false;
                 clearRecords();
                 setStatus(QString::fromUtf8("连接已断开，当前本地回放仍可使用"), false);
             } else {
@@ -350,9 +353,12 @@ void RecordPlaybackPanel::setupUi()
     selectAllBtn_ = new QPushButton(QString::fromUtf8("全选"), recordsDialog_);
     invertSelectionBtn_ = new QPushButton(QString::fromUtf8("反选"), recordsDialog_);
     clearSelectionBtn_ = new QPushButton(QString::fromUtf8("清除选择"), recordsDialog_);
+    deleteSelectedBtn_ = new QPushButton(QString::fromUtf8("删除远端记录"), recordsDialog_);
+    deleteSelectedBtn_->setProperty("danger", true);
     selectionRow->addWidget(selectAllBtn_);
     selectionRow->addWidget(invertSelectionBtn_);
     selectionRow->addWidget(clearSelectionBtn_);
+    selectionRow->addWidget(deleteSelectedBtn_);
     selectionRow->addStretch(1);
     recordsDialogLayout->addLayout(selectionRow);
 
@@ -621,6 +627,7 @@ void RecordPlaybackPanel::setupUi()
     connect(selectAllBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::selectAllRecords);
     connect(invertSelectionBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::invertRecordSelection);
     connect(clearSelectionBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::clearRecordSelection);
+    connect(deleteSelectedBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::deleteSelectedRecords);
     connect(recordsTable_, &QTableWidget::itemSelectionChanged,
             this, &RecordPlaybackPanel::updateUiEnabled);
     connect(recordsTable_, &QTableWidget::itemDoubleClicked,
@@ -764,7 +771,7 @@ void RecordPlaybackPanel::setStatus(const QString& text, bool isError)
 
 void RecordPlaybackPanel::updateUiEnabled()
 {
-    const bool busy = downloadBusy_ || queryBusy_;
+    const bool busy = downloadBusy_ || queryBusy_ || deleteBusy_;
     const bool hasConnection = connected_ && device_ && device_->isConnected();
     const bool hasFrames = !frameRefs_.isEmpty();
     const bool playing = playbackRequested_ || (playbackTimer_ && playbackTimer_->isActive());
@@ -789,6 +796,7 @@ void RecordPlaybackPanel::updateUiEnabled()
     selectAllBtn_->setEnabled(!busy && recordsTable_->rowCount() > 0);
     invertSelectionBtn_->setEnabled(!busy && recordsTable_->rowCount() > 0);
     clearSelectionBtn_->setEnabled(!busy && hasSelection);
+    if (deleteSelectedBtn_) deleteSelectedBtn_->setEnabled(hasConnection && !busy && hasSelection);
 
     prevBtn_->setEnabled(hasFrames && !tifRenderBusy_);
     nextBtn_->setEnabled(hasFrames && !tifRenderBusy_);
@@ -920,6 +928,7 @@ void RecordPlaybackPanel::saveSettings() const
 void RecordPlaybackPanel::cancelRemoteWork()
 {
     cancelDownloadOnly();
+    deleteBusy_ = false;
     queryBusy_ = false;
     if (playbackTimer_) playbackTimer_->stop();
     setPlaybackSequenceCleared();
@@ -992,7 +1001,7 @@ bool RecordPlaybackPanel::selectedRecordsType(const QVector<RecordItem>& items, 
     for (const RecordItem& item : items) {
         if (item.type != firstType) {
             if (err) {
-                *err = QString::fromUtf8("选中了 raw 和 tif 两种类型记录，请只选择同一类型后再下载");
+                *err = QString::fromUtf8("选中了 raw 和 tif 两种类型记录，请只选择同一类型后再操作");
             }
             return false;
         }
@@ -1168,7 +1177,7 @@ void RecordPlaybackPanel::updateRetentionTotalLabel()
         retentionMinutesSpin_->setEnabled(false);
         retentionSecondsSpin_->setEnabled(false);
     } else {
-        const bool busy = downloadBusy_ || queryBusy_;
+        const bool busy = downloadBusy_ || queryBusy_ || deleteBusy_;
         retentionHoursSpin_->setEnabled(!busy);
         retentionMinutesSpin_->setEnabled(!busy);
         retentionSecondsSpin_->setEnabled(!busy);
@@ -1309,10 +1318,104 @@ bool RecordPlaybackPanel::removeCacheRecords(const QSet<QString>& keepKeys, bool
     return true;
 }
 
+bool RecordPlaybackPanel::removeCacheRecordsByKey(const QSet<QString>& removeKeys,
+                                                  CacheSummary* removed, QString* err)
+{
+    if (removed) *removed = CacheSummary();
+    if (removeKeys.isEmpty()) return true;
+    QDir root(cacheRoot());
+    if (!root.exists()) return true;
+    const QString rootPath = QFileInfo(root.absolutePath()).absoluteFilePath();
+    const QFileInfoList typeDirs = root.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
+    for (const QFileInfo& typeInfo : typeDirs) {
+        QDir typeDir(typeInfo.absoluteFilePath());
+        const QFileInfoList recordDirs = typeDir.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot);
+        for (const QFileInfo& recordInfo : recordDirs) {
+            const QString key = cacheKey(typeInfo.fileName(), recordInfo.fileName());
+            if (!removeKeys.contains(key)) continue;
+            const QString recordPath = recordInfo.absoluteFilePath();
+            if (!QFileInfo(recordPath).absoluteFilePath().startsWith(rootPath)) {
+                if (err) *err = QString::fromUtf8("缓存路径异常: %1").arg(recordPath);
+                return false;
+            }
+            QDir recordDir(recordPath);
+            CacheSummary local;
+            local.recordCount = 1;
+            const QFileInfoList files = recordDir.entryInfoList(QDir::Files);
+            local.fileCount = files.size();
+            for (const QFileInfo& file : files) {
+                local.totalBytes += static_cast<quint64>(qMax<qint64>(0, file.size()));
+            }
+            if (!recordDir.removeRecursively()) {
+                if (err) *err = QString::fromUtf8("无法删除缓存目录: %1").arg(recordPath);
+                return false;
+            }
+            if (removed) {
+                removed->recordCount += local.recordCount;
+                removed->fileCount += local.fileCount;
+                removed->totalBytes += local.totalBytes;
+            }
+        }
+        root.rmdir(typeInfo.fileName());
+    }
+    return true;
+}
+
 bool RecordPlaybackPanel::prepareForCacheMutation(QString* err)
 {
     if (!cancelTifRenderAndWait(2000, err)) return false;
     return true;
+}
+
+bool RecordPlaybackPanel::applyDeletedRecords(const QVector<RecordItem>& deletedItems,
+                                              CacheSummary* removedCache, QString* err)
+{
+    if (removedCache) *removedCache = CacheSummary();
+    QSet<QString> deleteKeys;
+    for (const RecordItem& item : deletedItems) {
+        deleteKeys.insert(cacheKey(item.type, item.recordId));
+    }
+
+    bool localOk = true;
+    bool touchesPlayback = false;
+    for (const RecordItem& item : playbackRecordItems_) {
+        if (deleteKeys.contains(cacheKey(item.type, item.recordId))) {
+            touchesPlayback = true;
+            break;
+        }
+    }
+
+    if (touchesPlayback) {
+        if (!prepareForCacheMutation(err)) {
+            localOk = false;
+        } else {
+            pausePlayback();
+            QVector<RecordItem> next;
+            for (const RecordItem& item : playbackRecordItems_) {
+                if (!deleteKeys.contains(cacheKey(item.type, item.recordId))) next.append(item);
+            }
+            setPlaybackSequence(next, false);
+        }
+    }
+
+    if (localOk && !removeCacheRecordsByKey(deleteKeys, removedCache, err)) {
+        localOk = false;
+    }
+
+    QVector<RecordItem> remaining;
+    for (const RecordItem& item : records_) {
+        if (!deleteKeys.contains(cacheKey(item.type, item.recordId))) remaining.append(item);
+    }
+    records_ = remaining;
+    {
+        QSignalBlocker blocker(recordsTable_);
+        recordsTable_->setRowCount(0);
+        for (const RecordItem& item : records_) addRecordRow(item);
+    }
+    updateRecordCacheStatuses();
+    refreshCacheInfo();
+    updateUiEnabled();
+    return localOk;
 }
 
 void RecordPlaybackPanel::refreshRetention()
@@ -2749,6 +2852,106 @@ void RecordPlaybackPanel::clearRecordSelection()
 {
     if (recordSelectionLocked_) return;
     recordsTable_->clearSelection();
+}
+
+void RecordPlaybackPanel::deleteSelectedRecords()
+{
+    if (deleteBusy_ || downloadBusy_ || queryBusy_) return;
+    if (!device_ || !device_->record() || !connected_) {
+        setStatus(QString::fromUtf8("删除远端记录失败：未连接服务端"), true);
+        return;
+    }
+
+    const QVector<RecordItem> selected = selectedRecords();
+    if (selected.isEmpty()) return;
+
+    QString selectedType;
+    QString typeErr;
+    if (!selectedRecordsType(selected, &selectedType, &typeErr)) {
+        setStatus(typeErr, true);
+        return;
+    }
+
+    quint64 totalBytes = 0;
+    bool touchesPlayback = false;
+    QSet<QString> selectedKeys;
+    for (const RecordItem& item : selected) {
+        selectedKeys.insert(cacheKey(item.type, item.recordId));
+        for (const RecordFile& f : item.files) totalBytes += f.sizeBytes;
+    }
+    for (const RecordItem& item : playbackRecordItems_) {
+        if (selectedKeys.contains(cacheKey(item.type, item.recordId))) {
+            touchesPlayback = true;
+            break;
+        }
+    }
+
+    QString msg = QString::fromUtf8("将删除服务端 %1 条 %2 记录（约 %3）。本地已缓存的同名记录也会清理。")
+        .arg(selected.size())
+        .arg(selectedType)
+        .arg(formatBytes(totalBytes));
+    if (touchesPlayback) {
+        msg += QString::fromUtf8("\n其中部分记录正在播放序列中，删除成功后会从播放序列移除。");
+    }
+    const QString code = generateDeleteVerificationCode();
+    const QString prompt = msg + QString::fromUtf8("\n\n验证码：%1\n请输入验证码以确认删除。").arg(code);
+    bool accepted = false;
+    const QString input = QInputDialog::getText(
+        this,
+        QString::fromUtf8("删除远端记录"),
+        prompt,
+        QLineEdit::Normal,
+        QString(),
+        &accepted);
+    if (!accepted) {
+        return;
+    }
+    if (!deleteVerificationCodeMatches(code, input)) {
+        setStatus(QString::fromUtf8("删除远端记录已取消：验证码不正确"), true);
+        return;
+    }
+
+    QStringList ids;
+    for (const RecordItem& item : selected) ids << item.recordId;
+
+    deleteBusy_ = true;
+    setRecordSelectionLocked(true);
+    setStatus(QString::fromUtf8("正在删除远端记录..."), false);
+    updateUiEnabled();
+
+    device_->record()->removeRecords(this, selectedType, ids,
+        [this, selected](bool ok, const nlohmann::json& data, const QString& rpcErr) {
+        deleteBusy_ = false;
+        setRecordSelectionLocked(false);
+        if (!connected_) {
+            updateUiEnabled();
+            return;
+        }
+        if (!ok) {
+            const QString message = rpcErr.trimmed().isEmpty()
+                ? QString::fromUtf8("删除远端记录失败：服务端未返回错误信息")
+                : QString::fromUtf8("删除远端记录失败：%1").arg(rpcErr);
+            setStatus(message, true);
+            updateUiEnabled();
+            return;
+        }
+
+        CacheSummary removedCache;
+        QString localErr;
+        const bool localOk = applyDeletedRecords(selected, &removedCache, &localErr);
+        const quint64 deletedCount = jsonU64(data, "deleted_count", static_cast<quint64>(selected.size()));
+        QString message = QString::fromUtf8("已删除服务端 %1 条记录").arg(deletedCount);
+        if (removedCache.recordCount > 0) {
+            message += QString::fromUtf8("，并清理本地缓存 %1 条/%2")
+                .arg(removedCache.recordCount)
+                .arg(formatBytes(removedCache.totalBytes));
+        }
+        if (!localOk) {
+            message += QString::fromUtf8("；本地状态同步不完整：%1").arg(localErr);
+        }
+        setStatus(message, !localOk);
+        updateUiEnabled();
+    });
 }
 
 void RecordPlaybackPanel::appendSelectedToPlaybackSequence()

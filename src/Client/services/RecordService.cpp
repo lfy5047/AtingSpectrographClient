@@ -38,3 +38,16 @@ void RecordService::fetch(QObject* context, const QString& type, const QStringLi
         if (cb) cb(r.ok, r.data, r.msg);
     }, RpcTimeout::Slow);
 }
+
+void RecordService::removeRecords(QObject* context, const QString& type, const QStringList& recordIds,
+                                  JsonCallback cb) const
+{
+    nlohmann::json items = nlohmann::json::array();
+    for (const QString& id : recordIds) {
+        items.push_back(id.toStdString());
+    }
+    request(RpcCommand::Record::Delete, {{"type", type.toStdString()}, {"items", items}},
+            context, [cb](const RpcResult& r) {
+        if (cb) cb(r.ok, r.data, r.msg);
+    }, RpcTimeout::Slow);
+}

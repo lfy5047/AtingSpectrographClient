@@ -18,4 +18,6 @@ public:
                     quint64 lastSeconds, JsonCallback cb) const;
     void fetch(QObject* context, const QString& type, const QStringList& recordIds,
                JsonCallback cb) const;
+    void removeRecords(QObject* context, const QString& type, const QStringList& recordIds,
+                       JsonCallback cb) const;
 };

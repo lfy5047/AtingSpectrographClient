@@ -105,5 +105,6 @@ static const char* const GetRetention = "record.get_retention";
 static const char* const SetRetention = "record.set_retention";
 static const char* const ListRecent = "record.list_recent";
 static const char* const Fetch = "record.fetch";
+static const char* const Delete = "record.delete";
 }
 }

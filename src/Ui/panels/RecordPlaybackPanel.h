@@ -68,6 +68,7 @@ private slots:
     void selectAllRecords();
     void invertRecordSelection();
     void clearRecordSelection();
+    void deleteSelectedRecords();
     void scheduleTifRerender();
     void cancelTifRender();
     void clearSkippedBadFrames();
@@ -183,7 +184,9 @@ private:
     ChannelImageStats imageStatsFromDisplayImage(const QImage& image) const;
     CacheSummary summarizeCache(const QSet<QString>& keepKeys = QSet<QString>(), bool onlyRemovable = false) const;
     bool removeCacheRecords(const QSet<QString>& keepKeys, bool removeAll, CacheSummary* removed, QString* err);
+    bool removeCacheRecordsByKey(const QSet<QString>& removeKeys, CacheSummary* removed, QString* err);
     bool prepareForCacheMutation(QString* err);
+    bool applyDeletedRecords(const QVector<RecordItem>& deletedItems, CacheSummary* removedCache, QString* err);
     QSet<QString> playbackCacheKeys() const;
     void updatePlaybackSequenceTable();
     QVector<RecordItem> selectedPlaybackRecords() const;
@@ -233,6 +236,7 @@ private:
     QThread* downloaderThread_ = nullptr;
     bool downloadBusy_ = false;
     bool queryBusy_ = false;
+    bool deleteBusy_ = false;
     bool recordSelectionLocked_ = false;
     bool loadingSettings_ = false;
     QString host_;
@@ -259,6 +263,7 @@ private:
     QPushButton* selectAllBtn_ = nullptr;
     QPushButton* invertSelectionBtn_ = nullptr;
     QPushButton* clearSelectionBtn_ = nullptr;
+    QPushButton* deleteSelectedBtn_ = nullptr;
     QTableWidget* recordsTable_ = nullptr;
 
     QPushButton* downloadBtn_ = nullptr;

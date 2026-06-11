@@ -99,6 +99,41 @@ target_link_libraries(AppVersionTest PRIVATE
 )
 add_test(NAME AppVersionTest COMMAND AppVersionTest)
 
+add_executable(RecordServiceTest
+    tests/RecordServiceTest.cpp
+    src/Client/rpc/ControlClient.cpp
+    src/Client/services/RecordService.cpp
+)
+target_include_directories(RecordServiceTest PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Client
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Client/core
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Client/rpc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Client/services
+    ${CMAKE_CURRENT_SOURCE_DIR}/Common/include
+)
+target_link_libraries(RecordServiceTest PRIVATE
+    Qt5::Test
+    Qt5::Network
+)
+add_test(NAME RecordServiceTest COMMAND RecordServiceTest)
+
+add_executable(DeleteVerificationTest
+    tests/DeleteVerificationTest.cpp
+    src/Ui/DeleteVerification.cpp
+)
+target_include_directories(DeleteVerificationTest PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Ui
+)
+target_link_libraries(DeleteVerificationTest PRIVATE
+    Qt5::Test
+    Qt5::Core
+)
+add_test(NAME DeleteVerificationTest COMMAND DeleteVerificationTest)
+
 add_executable(ThemeManagerTest
     tests/ThemeManagerTest.cpp
     src/Ui/ThemeManager.cpp
