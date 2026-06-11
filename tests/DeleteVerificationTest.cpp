@@ -9,6 +9,7 @@ private slots:
     void formatsCodeAsFourDigits();
     void generatedCodeIsFourDigits();
     void matchesTrimmedInputOnly();
+    void providesWrongCodeMessage();
 };
 
 void DeleteVerificationTest::formatsCodeAsFourDigits()
@@ -37,6 +38,11 @@ void DeleteVerificationTest::matchesTrimmedInputOnly()
     QVERIFY(!deleteVerificationCodeMatches(QStringLiteral("1234"), QStringLiteral("123")));
     QVERIFY(!deleteVerificationCodeMatches(QStringLiteral("1234"), QStringLiteral("12345")));
     QVERIFY(!deleteVerificationCodeMatches(QStringLiteral("1234"), QStringLiteral("abcd")));
+}
+
+void DeleteVerificationTest::providesWrongCodeMessage()
+{
+    QCOMPARE(deleteVerificationWrongCodeMessage(), QString::fromUtf8("验证码输入错误"));
 }
 
 QTEST_MAIN(DeleteVerificationTest)

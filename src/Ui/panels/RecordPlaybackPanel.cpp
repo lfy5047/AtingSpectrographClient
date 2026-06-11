@@ -2907,7 +2907,18 @@ void RecordPlaybackPanel::deleteSelectedRecords()
         return;
     }
     if (!deleteVerificationCodeMatches(code, input)) {
-        setStatus(QString::fromUtf8("删除远端记录已取消：验证码不正确"), true);
+        const QString message = deleteVerificationWrongCodeMessage();
+        setStatus(message, true);
+        QMessageBox::warning(this, QString::fromUtf8("删除远端记录"), message);
+        return;
+    }
+
+    const QString confirmMessage = QString::fromUtf8("验证码验证成功。\n\n%1\n\n确定要删除这些服务端记录吗？").arg(msg);
+    if (QMessageBox::question(this,
+                              QString::fromUtf8("确认删除远端记录"),
+                              confirmMessage,
+                              QMessageBox::Yes | QMessageBox::No,
+                              QMessageBox::No) != QMessageBox::Yes) {
         return;
     }
 
@@ -2932,6 +2943,7 @@ void RecordPlaybackPanel::deleteSelectedRecords()
                 ? QString::fromUtf8("删除远端记录失败：服务端未返回错误信息")
                 : QString::fromUtf8("删除远端记录失败：%1").arg(rpcErr);
             setStatus(message, true);
+            QMessageBox::warning(this, QString::fromUtf8("删除远端记录"), message);
             updateUiEnabled();
             return;
         }
@@ -2950,6 +2962,11 @@ void RecordPlaybackPanel::deleteSelectedRecords()
             message += QString::fromUtf8("；本地状态同步不完整：%1").arg(localErr);
         }
         setStatus(message, !localOk);
+        if (localOk) {
+            QMessageBox::information(this, QString::fromUtf8("删除远端记录"), message);
+        } else {
+            QMessageBox::warning(this, QString::fromUtf8("删除远端记录"), message);
+        }
         updateUiEnabled();
     });
 }

@@ -16,3 +16,8 @@ bool deleteVerificationCodeMatches(const QString& expected, const QString& input
 {
     return input.trimmed() == expected;
 }
+
+QString deleteVerificationWrongCodeMessage()
+{
+    return QString::fromUtf8("验证码输入错误");
+}
