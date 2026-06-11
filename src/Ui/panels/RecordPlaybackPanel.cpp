@@ -1403,6 +1403,7 @@ void RecordPlaybackPanel::queryRecords()
     updateUiEnabled();
     device_->record()->listRecent(this, type, count, seconds,
         [this](bool ok, const nlohmann::json& data, const QString& err) {
+        // qDebug() << "listRecent callback:" << data.dump().c_str();
         queryBusy_ = false;
         if (!connected_) {
             updateUiEnabled();
@@ -1415,7 +1416,8 @@ void RecordPlaybackPanel::queryRecords()
         }
         QVector<RecordItem> items;
         QString parseErr;
-        if (!parseRecordList(data, &items, &parseErr)) {
+        int skipped = 0;
+        if (!parseRecordList(data, &items, &parseErr, &skipped)) {
             setStatus(parseErr, true);
             updateUiEnabled();
             return;
@@ -1426,9 +1428,15 @@ void RecordPlaybackPanel::queryRecords()
             addRecordRow(item);
         }
         updateRecordCacheStatuses();
-        setStatus(records_.isEmpty()
+        QString statusText = records_.isEmpty()
             ? QString::fromUtf8("未查询到记录")
-            : QString::fromUtf8("查询到 %1 条记录").arg(records_.size()), false);
+            : QString::fromUtf8("查询到 %1 条记录").arg(records_.size());
+        if (skipped > 0) {
+            statusText = records_.isEmpty()
+                ? QString::fromUtf8("未查询到可用记录，已忽略 %1 条文件信息无效的记录").arg(skipped)
+                : QString::fromUtf8("%1，已忽略 %2 条文件信息无效的记录").arg(statusText).arg(skipped);
+        }
+        setStatus(statusText, false);
         updateUiEnabled();
     });
 }
@@ -1440,33 +1448,46 @@ void RecordPlaybackPanel::clearRecords()
     updateUiEnabled();
 }
 
-bool RecordPlaybackPanel::parseRecordList(const nlohmann::json& data, QVector<RecordItem>* out, QString* err) const
+bool RecordPlaybackPanel::parseRecordList(const nlohmann::json& data, QVector<RecordItem>* out, QString* err, int* skipped) const
 {
     if (!out) return false;
     out->clear();
+    if (skipped) *skipped = 0;
     if (!data.contains("items") || !data["items"].is_array()) {
         if (err) *err = QString::fromUtf8("record.list_recent 响应缺少 items");
         return false;
     }
     for (const auto& j : data["items"]) {
+        auto skipItem = [skipped]() {
+            if (skipped) ++(*skipped);
+        };
         RecordItem item;
         item.recordId = jsonString(j, "record_id");
         item.type = jsonString(j, "type");
         item.timestampNs = jsonU64(j, "timestamp_ns", 0);
-        if (!parseRecordId(item.recordId, &item.recordIdValue, err)) return false;
-        if (!j.contains("files") || !j["files"].is_array()) {
-            if (err) *err = QString::fromUtf8("记录 %1 缺少 files").arg(item.recordId);
-            return false;
+        QString itemErr;
+        if (!parseRecordId(item.recordId, &item.recordIdValue, &itemErr)) {
+            skipItem();
+            continue;
         }
+        if (!j.contains("files") || !j["files"].is_array()) {
+            skipItem();
+            continue;
+        }
+        bool validFiles = true;
         for (const auto& f : j["files"]) {
             RecordFile rf;
             rf.name = jsonString(f, "name");
             rf.sizeBytes = jsonU64(f, "size_bytes", 0);
             if (rf.name.isEmpty() || rf.sizeBytes == 0) {
-                if (err) *err = QString::fromUtf8("记录 %1 文件信息无效").arg(item.recordId);
-                return false;
+                validFiles = false;
+                break;
             }
             item.files.append(rf);
+        }
+        if (!validFiles || item.files.isEmpty()) {
+            skipItem();
+            continue;
         }
         out->append(item);
     }

@@ -162,7 +162,7 @@ private:
     void addRecordRow(const RecordItem& item);
     QVector<RecordItem> selectedRecords() const;
     bool selectedRecordsType(const QVector<RecordItem>& items, QString* type, QString* err) const;
-    bool parseRecordList(const nlohmann::json& data, QVector<RecordItem>* out, QString* err) const;
+    bool parseRecordList(const nlohmann::json& data, QVector<RecordItem>* out, QString* err, int* skipped = nullptr) const;
     bool parseRecordId(const QString& id, quint64* out, QString* err) const;
     QString cacheRoot() const;
     QString recordCacheDir(const QString& type, const QString& recordId) const;
