@@ -1,4 +1,36 @@
 ﻿# AI 任务日志
+## 2026-06-11 户外亮色主题与主题切换
+
+- 目标：为户外环境增加更清晰的亮色主题，并允许用户在软件顶部栏切换深色/户外亮色主题。
+- 文件变更：
+  - `src/Ui/ThemeManager.*`
+  - `src/main.cpp`
+  - `src/Ui/MainWindow.cpp`
+  - `src/Ui/widgets/TopBarWidget.*`
+  - `resources/style/industrial.qss`
+  - `resources/style/outdoor_light.qss`
+  - `resources/resources.qrc`
+  - `tests/ThemeManagerTest.cpp`
+  - `CMakeLists.txt`
+  - `PROJECT_CONTEXT.md`
+  - `ARCHITECTURE.md`
+  - `AI_TASK_LOG.md`
+- 实现要点：
+  - 新增 `ThemeManager`，集中维护主题 ID、显示名、QSS 资源路径、加载逻辑和 `QSettings` 的 `ui/theme` 偏好。
+  - 启动时恢复已保存主题；顶部栏右侧新增主题下拉框，切换后立即应用并保存。
+  - 保留原 `industrial.qss` 深色主题，新增 `outdoor_light.qss` 户外亮色主题；图像显示控件仍保持深色绘制背景，避免影响图像观察。
+  - 补齐亮色主题对 `QDialog`、远程记录弹窗、侧栏空白区和光谱曲线窗口的覆盖；光谱曲线 QCustomPlot 改为根据当前主题绘制。
+  - 补齐 viewer 容器和 `ImageView` 的主题感知绘制；户外主题下等待数据区域改为亮色背景。
+  - 补齐主窗口 central/main content 容器背景，避免顶部栏和 Tab 间隙透出黑底；户外主题下图像统计 overlay 改为亮色半透明。
+- 验证：
+  - 已先新增 `ThemeManagerTest` 并观察旧实现下因缺少 `ThemeManager.h` 构建失败。
+  - 已新增主题资源打包测试，并观察测试目标未包含 qrc 时失败。
+  - 已新增户外主题覆盖测试和当前主题状态测试，并观察旧实现下因缺少 `ThemeManager::currentTheme()` 构建失败。
+  - 已新增 `ImageViewThemeTest`，并观察旧实现下户外主题仍渲染深色背景导致测试失败。
+  - 已新增顶部栏/viewer 间隙渲染检查和主容器/统计 overlay 覆盖检查，覆盖截图中残留黑底位置。
+  - 已运行 `.\make.bat d` 和 `.\make.bat`，Debug 构建通过。
+  - 已运行 `ctest --test-dir build -C Debug --output-on-failure`，3 个测试通过。
+
 ## 2026-06-09 软件图标接入
 
 - 目标：为客户端增加合适的软件图标，并同时覆盖 Qt 运行时窗口图标和 Windows exe 图标资源。

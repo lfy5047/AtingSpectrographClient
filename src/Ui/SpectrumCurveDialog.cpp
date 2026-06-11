@@ -1,8 +1,10 @@
 #include "SpectrumCurveDialog.h"
 
+#include "ThemeManager.h"
 #include "widgets/qcustomplot.h"
 
 #include <QCloseEvent>
+#include <QEvent>
 #include <QLabel>
 #include <QSettings>
 #include <QTimer>
@@ -21,10 +23,6 @@ SpectrumCurveDialog::SpectrumCurveDialog(QWidget* parent)
     setObjectName("spectrumCurveDialog");
     resize(980, 620);
     setMinimumSize(720, 420);
-    setStyleSheet(
-        "QDialog#spectrumCurveDialog{background-color:#12171D;}"
-        "QLabel#spectrumCurveStatus{color:#7D8590;font-weight:bold;}"
-        "QCustomPlot#spectrumCurvePlot{background-color:#12171D;border:1px solid #21262E;}");
 
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(12, 12, 12, 12);
@@ -123,6 +121,14 @@ void SpectrumCurveDialog::setCurveData(const QVector<QVector<double>>& xList,
     plot_->replot(QCustomPlot::rpQueuedReplot);
 }
 
+void SpectrumCurveDialog::changeEvent(QEvent* event)
+{
+    QDialog::changeEvent(event);
+    if (event && event->type() == QEvent::StyleChange) {
+        applyPlotTheme();
+    }
+}
+
 void SpectrumCurveDialog::closeEvent(QCloseEvent* event)
 {
     saveGeometrySetting();
@@ -157,15 +163,20 @@ void SpectrumCurveDialog::saveGeometrySetting() const
 
 void SpectrumCurveDialog::applyPlotTheme()
 {
-    plot_->setBackground(QBrush(QColor(0x12, 0x17, 0x1D)));
-    plot_->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom | QCP::iSelectPlottables);
-    plot_->legend->setBrush(QBrush(QColor(0x16, 0x1B, 0x23, 230)));
-    plot_->legend->setBorderPen(QPen(QColor(0x21, 0x26, 0x2E)));
-    plot_->legend->setTextColor(QColor(0xE6, 0xED, 0xF3));
+    const bool outdoor = ThemeManager::currentTheme() == ThemeManager::Theme::OutdoorLight;
+    const QColor plotBg = outdoor ? QColor(0xFF, 0xFF, 0xFF) : QColor(0x12, 0x17, 0x1D);
+    const QColor legendBg = outdoor ? QColor(0xFF, 0xFF, 0xFF, 235) : QColor(0x16, 0x1B, 0x23, 230);
+    const QColor borderColor = outdoor ? QColor(0xC9, 0xD4, 0xE2) : QColor(0x21, 0x26, 0x2E);
+    const QColor axisColor = outdoor ? QColor(0x4B, 0x55, 0x63) : QColor(0x7D, 0x85, 0x90);
+    const QColor labelColor = outdoor ? QColor(0x11, 0x18, 0x27) : QColor(0xE6, 0xED, 0xF3);
+    const QColor gridColor = outdoor ? QColor(0xD8, 0xE0, 0xEA) : QColor(0x21, 0x26, 0x2E);
 
-    const QColor axisColor(0x7D, 0x85, 0x90);
-    const QColor labelColor(0xE6, 0xED, 0xF3);
-    const QColor gridColor(0x21, 0x26, 0x2E);
+    plot_->setBackground(QBrush(plotBg));
+    plot_->setInteractions(QCP::iRangeDrag | QCP::iRangeZoom | QCP::iSelectPlottables);
+    plot_->legend->setBrush(QBrush(legendBg));
+    plot_->legend->setBorderPen(QPen(borderColor));
+    plot_->legend->setTextColor(labelColor);
+
     for (QCPAxis* axis : {plot_->xAxis, plot_->yAxis}) {
         axis->setBasePen(QPen(axisColor));
         axis->setTickPen(QPen(axisColor));
@@ -177,4 +188,5 @@ void SpectrumCurveDialog::applyPlotTheme()
     }
     plot_->xAxis->setLabel(QString::fromUtf8("波长"));
     plot_->yAxis->setLabel("DN");
+    plot_->replot(QCustomPlot::rpQueuedReplot);
 }

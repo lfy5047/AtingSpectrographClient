@@ -6,9 +6,12 @@
 #include "MainWindowChrome.h"
 #include "MainWindowPanelRegistry.h"
 #include "SpectrumAnalysisCoordinator.h"
+#include "ThemeManager.h"
 #include "WindowSettingsStore.h"
 #include "widgets/SidebarWidget.h"
+#include "widgets/TopBarWidget.h"
 
+#include <QApplication>
 #include <QCloseEvent>
 #include <QStatusBar>
 
@@ -32,6 +35,11 @@ MainWindow::MainWindow(QWidget* parent)
 
     connect(chrome_->sidebar(), &SidebarWidget::panelSelected,
             panelRegistry_, &MainWindowPanelRegistry::selectPanel);
+    chrome_->topBar()->setTheme(ThemeManager::loadSavedTheme());
+    connect(chrome_->topBar(), &TopBarWidget::themeChanged,
+            this, [](ThemeManager::Theme theme) {
+                if (qApp) ThemeManager::applyTheme(*qApp, theme);
+            });
 
     const int restoredPanel = WindowSettingsStore::restore(
         this, chrome_->mainSplitter(), chrome_->sidebar());

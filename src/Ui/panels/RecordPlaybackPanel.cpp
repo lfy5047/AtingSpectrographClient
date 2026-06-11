@@ -301,6 +301,7 @@ void RecordPlaybackPanel::setupUi()
     root->addWidget(queryGroup);
 
     recordsDialog_ = new QDialog(this);
+    recordsDialog_->setObjectName("recordsDialog");
     recordsDialog_->setWindowTitle(QString::fromUtf8("远程数据记录"));
     recordsDialog_->resize(1100, 620);
     auto* recordsDialogLayout = new QVBoxLayout(recordsDialog_);

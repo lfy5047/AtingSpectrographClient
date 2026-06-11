@@ -52,11 +52,12 @@ AtingSpectrographClient 是一个 Windows 桌面端光谱仪/成像设备控制�
 
 ## 关键目录
 
-- `src/main.cpp`：应用入口，初始化 plog、`QApplication`、全局字体和 `industrial.qss`。
+- `src/main.cpp`：应用入口，初始化 plog、`QApplication`、全局字体和应用主题。
 - `src/Ui/MainWindow.*`：主窗口组合根，只负责创建顶层协作者、恢复窗口状态和关闭生命周期。
 - `src/Ui/MainWindowChrome.*`：主窗口静态骨架，创建侧边栏、顶部栏、图像区、右侧 Panel 容器和底部日志。
 - `src/Ui/MainWindowPanelRegistry.*`：右侧业务 Panel 的创建、注册、切换、标题点击和 Panel index 管理。
 - `src/Ui/DeviceUiCoordinator.*`：设备信号与 UI 的绑定层，负责连接状态、帧分发、录制回放、Spectral 刷新、stream stats、raw log 和 uptime。
+- `src/Ui/ThemeManager.*`：应用级主题目录、QSS 加载和 `QSettings` 主题偏好保存。
 - `src/Ui/WindowSettingsStore.*`：窗口 geometry、splitter、当前 Panel、侧边栏折叠状态和 Panel index 迁移。
 - `src/Ui/ImageFrameUtils.*`：Mono8/Mono16 图像显示转换和 Mono16 图像统计。
 - `src/Ui/SpectralScanController.*`：Live/Playback Spectral 扫描缓存、进度状态和渲染入口。
@@ -68,7 +69,7 @@ AtingSpectrographClient 是一个 Windows 桌面端光谱仪/成像设备控制�
 - `src/Client/services/`：面向 UI 的业务 API 封装，把按钮行为转换为 RPC 命令。
 - `src/Client/stream/`：UDP 图像流接收、分片重组、`StreamFrame` 元数据透传、FPS/丢帧统计。
 - `src/Client/recording/`：远程文件 TCP 下载器，以及保留的旧 `.asrec` 录制/回放实现文件；当前 UI 已断开旧 `.asrec` 路径。
-- `resources/`：Qt 资源文件和 `resources/style/industrial.qss` 主题。
+- `resources/`：Qt 资源文件和 `resources/style/industrial.qss`、`resources/style/outdoor_light.qss` 主题。
 - `Common/`：通用工具库源码；当前顶层 CMake 只包含 `Common/include`，没有链接 `Common` 子库。
 - `libs/public/`：随仓库提交的第三方依赖，默认不要全量扫描。
 
@@ -101,7 +102,7 @@ AtingSpectrographClient 是一个 Windows 桌面端光谱仪/成像设备控制�
 
 ## 主运行流程
 
-1. `main()` 初始化日志、Qt 应用信息、全局字体和 `:/style/industrial.qss`。
+1. `main()` 初始化日志、Qt 应用信息、全局字体，并通过 `ThemeManager` 恢复已保存的应用主题。
 2. `MainWindow` 创建 `DeviceClient`、`MainWindowChrome`、`MainWindowPanelRegistry`、`SpectrumAnalysisCoordinator` 和 `DeviceUiCoordinator`，再由 `WindowSettingsStore` 恢复窗口状态。
 3. `ConnectionPanel` 调用 `DeviceClient::connectTo()`，由 `ControlClient` 建立 TCP 连接。
 4. TCP 连接成功后，`DeviceUiCoordinator` 使用连接面板中的 UDP 端口绑定 `StreamClient`，并查询系统版本。
@@ -151,13 +152,13 @@ RPC 命令名集中在 `src/Client/rpc/RpcCommands.h`，当前分组包括：
 
 ## 配置与持久化
 
-- UI 状态通过 `WindowSettingsStore` 和 `QSettings` 保存：窗口 geometry、splitter、当前 Panel、侧边栏折叠状态等。
+- UI 状态通过 `WindowSettingsStore` 和 `QSettings` 保存：窗口 geometry、splitter、当前 Panel、侧边栏折叠状态等；应用主题由 `ThemeManager` 使用 `ui/theme` 保存。
 - 光谱分析使用 `spectrumAnalysis/` 前缀保存参数、采样线、曲线窗口 geometry。
 - 远程录制数据缓存默认写入 `recordings/remote_cache/<type>/<record_id>/`；成功缓存可复用，失败/取消/断连会删除本次不完整缓存。
 - 应用组织与名称：`AtingSpectrograph` / `AtingSpectrographClient`。
 - 运行时日志写入 `log/log.txt`，最大 1 MiB，保留 10 个滚动文件。
 - 客户端不再写入本地 `.asrec` 录制文件。
-- Qt 资源入口：`resources/resources.qrc`，当前主要打包 `resources/style/industrial.qss`。
+- Qt 资源入口：`resources/resources.qrc`，当前打包应用图标、深色主题 `resources/style/industrial.qss` 和户外亮色主题 `resources/style/outdoor_light.qss`。
 
 ## 当前状态观察
 

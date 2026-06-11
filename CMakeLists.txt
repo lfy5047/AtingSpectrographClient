@@ -99,6 +99,43 @@ target_link_libraries(AppVersionTest PRIVATE
 )
 add_test(NAME AppVersionTest COMMAND AppVersionTest)
 
+add_executable(ThemeManagerTest
+    tests/ThemeManagerTest.cpp
+    src/Ui/ThemeManager.cpp
+    ${RESOURCES}
+)
+target_include_directories(ThemeManagerTest PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Ui
+)
+target_link_libraries(ThemeManagerTest PRIVATE
+    Qt5::Test
+    Qt5::Widgets
+)
+add_test(NAME ThemeManagerTest COMMAND ThemeManagerTest)
+
+add_executable(ImageViewThemeTest
+    tests/ImageViewThemeTest.cpp
+    src/Ui/ImageFrameUtils.cpp
+    src/Ui/widgets/TopBarWidget.cpp
+    src/Ui/widgets/ViewerAreaWidget.cpp
+    src/Ui/widgets/ImageView.cpp
+    src/Ui/ThemeManager.cpp
+    ${RESOURCES}
+)
+target_include_directories(ImageViewThemeTest PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}
+    ${CMAKE_CURRENT_SOURCE_DIR}/src
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Client/rpc
+    ${CMAKE_CURRENT_SOURCE_DIR}/src/Ui
+)
+target_link_libraries(ImageViewThemeTest PRIVATE
+    Qt5::Test
+    Qt5::Widgets
+)
+add_test(NAME ImageViewThemeTest COMMAND ImageViewThemeTest)
+
 if(WIN32 AND EXISTS "${LIBTIFF_DLL}")
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different

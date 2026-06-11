@@ -32,6 +32,7 @@ signals:
     void analysisLineDeleteRequested(int index);
 
 protected:
+    void changeEvent(QEvent*) override;
     void paintEvent(QPaintEvent*) override;
     void wheelEvent(QWheelEvent*) override;
     void mousePressEvent(QMouseEvent*) override;
@@ -51,6 +52,7 @@ private:
     void beginPan(const QPoint& pos);
     void syncCursorFromWidgetPos(const QPoint& widgetPos);
     void syncCursorFromGlobalPos();
+    bool outdoorThemeActive() const;
 
     enum class InteractionMode {
         Normal,

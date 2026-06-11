@@ -76,6 +76,7 @@ void SidebarWidget::setupUi()
     root->addWidget(logoArea_);
 
     navArea_ = new QWidget(this);
+    navArea_->setObjectName("sidebarNav");
     auto* navLayout = new QVBoxLayout(navArea_);
     navLayout->setContentsMargins(4, 4, 4, 4);
     navLayout->setSpacing(0);

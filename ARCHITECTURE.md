@@ -2,7 +2,7 @@
 
 ## 启动路径
 
-1. `src/main.cpp` 初始化 plog、Qt 应用、全局字体和 `:/style/industrial.qss`。
+1. `src/main.cpp` 初始化 plog、Qt 应用、全局字体，并通过 `ThemeManager` 加载已保存的应用主题。
 2. 创建 `MainWindow` 并进入 `QApplication::exec()`。
 3. `MainWindow` 构造 `DeviceClient`、`MainWindowChrome`、`MainWindowPanelRegistry`、`SpectrumAnalysisCoordinator` 和 `DeviceUiCoordinator`。
 4. `WindowSettingsStore` 恢复窗口 geometry、splitter、当前 Panel 和侧边栏折叠状态，`DeviceUiCoordinator` 启动 uptime、Spectral 渲染和进度刷新定时器。
@@ -16,6 +16,7 @@
 - `MainWindowChrome` 创建主窗口静态 UI 骨架：侧边栏、顶部栏、主 splitter、`ViewerAreaWidget`、右侧 Panel stack 和底部日志。
 - `MainWindowPanelRegistry` 创建并注册右侧业务 Panel，集中维护 Panel index、标题、系统日志 toggle 和光谱分析 Panel 激活。
 - `DeviceUiCoordinator` 连接设备层与 UI 层，负责连接状态、UDP bind、帧分发、录制回放、Spectral 刷新、stream stats、raw log 和 uptime。
+- `ThemeManager` 维护应用主题目录，集中加载深色/户外亮色 QSS，并保存 `ui/theme` 用户偏好。
 - `ViewerAreaWidget` 管理 Raw16、SliceStitch16、Spectral、Playback 四个图像页，以及图像统计 overlay 和 Spectral progress overlay。
 - `ImageFrameUtils` 提供 Mono8/Mono16 显示图转换与 Mono16 统计计算。
 - `SpectralScanController` 管理 Live/Playback 的 Raw16/SliceStitch16 光谱扫描缓存、进度状态和渲染入口。
@@ -156,6 +157,7 @@ Service 类继承或使用 `RpcServiceBase`，把业务 API 封装为命令名�
 - raw 缓存必须包含同名 `.raw + .json`；tif 缓存为 BigTIFF `.tif`。
 - 成功缓存会被复用；失败、取消、断连和关闭窗口会删除本次不完整缓存。
 - 光谱分析参数、采样线和曲线窗口 geometry 使用 `QSettings` 的 `spectrumAnalysis/` 前缀。
+- 应用主题使用 `QSettings` 的 `ui/theme` 保存；启动时恢复，顶部栏右侧可即时切换。
 - 运行日志由 plog 写入 `log/log.txt`。
 - 用户界面状态由 `QSettings` 保存到平台默认位置。
 
@@ -168,7 +170,7 @@ Service 类继承或使用 `RpcServiceBase`，把业务 API 封装为命令名�
 - 调整光谱分析：优先看 `src/Ui/SpectrumAnalysisCoordinator.*`、`src/Ui/panels/SpectrumAnalysisPanel.*`、`src/Ui/SpectrumCurveDialog.*`、`src/Ui/widgets/ImageView.*`。
 - 调整远程录制数据接口：优先改 `RecordService.*` 和 `RemoteFileDownloader.*`，再同步 `RecordPlaybackPanel.*`。
 - 调整远程回放 UI：改 `RecordPlaybackPanel.*`，必要时同步 `DeviceUiCoordinator` 的 Playback `QImage` 渲染连接。
-- 调整 UI 视觉：优先改 `resources/style/industrial.qss`；结构性布局改 `MainWindowChrome`、`ViewerAreaWidget` 或具体 panel/widget。
+- 调整 UI 视觉：优先改 `resources/style/industrial.qss` 或 `resources/style/outdoor_light.qss`；主题目录和加载逻辑改 `src/Ui/ThemeManager.*`；结构性布局改 `MainWindowChrome`、`ViewerAreaWidget` 或具体 panel/widget。
 - 调整软件发布版本：创建 Git tag（推荐 `vX.Y.Z`）；`cmake/GitVersion.cmake` 会派生运行时版本头、Windows 资源版本和安装包脚本。
 - 修改构建环境：优先改 `config.bat`；依赖目录和 include/link 规则在 `libs/libsdefine.cmake` 与顶层 `CMakeLists.txt`。
 

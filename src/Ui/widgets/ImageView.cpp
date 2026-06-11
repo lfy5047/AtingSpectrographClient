@@ -1,5 +1,7 @@
 #include "ImageView.h"
 
+#include "ThemeManager.h"
+
 #include <QCursor>
 #include <QMouseEvent>
 #include <QPainter>
@@ -11,8 +13,8 @@
 
 ImageView::ImageView(QWidget* parent) : QWidget(parent)
 {
+    setObjectName("imageView");
     setMinimumSize(320, 240);
-    setStyleSheet("background-color: #0A0E14;");
     setMouseTracking(true);
 }
 
@@ -218,15 +220,30 @@ void ImageView::syncCursorFromGlobalPos()
     syncCursorFromWidgetPos(mapFromGlobal(QCursor::pos()));
 }
 
+bool ImageView::outdoorThemeActive() const
+{
+    return ThemeManager::currentTheme() == ThemeManager::Theme::OutdoorLight;
+}
+
+void ImageView::changeEvent(QEvent* e)
+{
+    QWidget::changeEvent(e);
+    if (e && e->type() == QEvent::StyleChange) {
+        update();
+    }
+}
+
 void ImageView::paintEvent(QPaintEvent*)
 {
     QPainter p(this);
     p.setRenderHint(QPainter::SmoothPixmapTransform);
-    p.fillRect(rect(), QColor(0x1A, 0x1E, 0x24));
+    const bool outdoor = outdoorThemeActive();
+    const QColor backgroundColor = outdoor ? QColor(0xF3, 0xF6, 0xFA) : QColor(0x1A, 0x1E, 0x24);
+    p.fillRect(rect(), backgroundColor);
 
     if (noSignal_ || image_.isNull()) {
-        QColor ringColor(0x4C, 0x8E, 0xF7, 40);
-        QColor textColor(0x54, 0x5D, 0x68);
+        QColor ringColor = outdoor ? QColor(0x0B, 0x68, 0xD8, 34) : QColor(0x4C, 0x8E, 0xF7, 40);
+        QColor textColor = outdoor ? QColor(0x4B, 0x55, 0x63) : QColor(0x54, 0x5D, 0x68);
 
         p.setPen(Qt::NoPen);
         p.setBrush(ringColor);
@@ -252,7 +269,7 @@ void ImageView::paintEvent(QPaintEvent*)
     p.drawImage(imageRectF, image_);
     drawAnalysisOverlay(p, imageRectF);
 
-    p.setPen(QColor(0x7D, 0x85, 0x90));
+    p.setPen(outdoor ? QColor(0x4B, 0x55, 0x63) : QColor(0x7D, 0x85, 0x90));
     QFont f("Consolas", 9);
     p.setFont(f);
     const QString info = QString("%1x%2  |  %3%")

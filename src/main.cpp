@@ -1,8 +1,8 @@
 #include <QApplication>
-#include <QFile>
 #include <QIcon>
 #include "AppVersion.h"
 #include "Ui/MainWindow.h"
+#include "Ui/ThemeManager.h"
 #include "Client/stream/StreamFrame.h"
 #include "plog/Initializers/RollingFileInitializer.h"
 #include "plog/Appenders/ColorConsoleAppender.h"
@@ -24,9 +24,7 @@ int main(int argc, char* argv[])
     QFont font(QString::fromUtf8("微软雅黑"), 10);
     app.setFont(font);
 
-    QFile qss(":/style/industrial.qss");
-    if (qss.open(QFile::ReadOnly | QFile::Text))
-        app.setStyleSheet(QString::fromUtf8(qss.readAll()));
+    ThemeManager::applySavedTheme(app);
 
     MainWindow w;
     w.show();

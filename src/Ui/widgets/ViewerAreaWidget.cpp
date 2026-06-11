@@ -18,6 +18,7 @@ ViewerAreaWidget::ViewerAreaWidget(QWidget* parent)
     : QWidget(parent)
 {
     setObjectName("viewerContainer");
+    setAttribute(Qt::WA_StyledBackground, true);
     setupUi();
     installEventFilter(this);
 }
@@ -53,6 +54,7 @@ void ViewerAreaWidget::setupUi()
     viewerLayout->addSpacing(10);
 
     viewerStack_ = new QStackedWidget(this);
+    viewerStack_->setObjectName("viewerStack");
     imageViewRaw_ = new ImageView(viewerStack_);
     imageViewSlice_ = new ImageView(viewerStack_);
     imageViewSpectral_ = new ImageView(viewerStack_);

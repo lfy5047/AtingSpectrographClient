@@ -1,5 +1,6 @@
 #include "TopBarWidget.h"
 #include <QVariant>
+#include <QComboBox>
 #include <QHBoxLayout>
 #include <QVBoxLayout>
 #include <QPainter>
@@ -69,7 +70,7 @@ MetricCard::MetricCard(int iconType, const QString& label, QWidget* parent)
     : QFrame(parent), iconType_(iconType)
 {
     setObjectName("metricCard");
-    setMinimumWidth(100);
+    setMinimumWidth(86);
 
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(12, 8, 12, 8);
@@ -128,6 +129,7 @@ TopBarWidget::TopBarWidget(QWidget* parent)
     : QWidget(parent)
 {
     setObjectName("topbar");
+    setAttribute(Qt::WA_StyledBackground, true);
     setFixedHeight(110);
 
     auto* lay = new QHBoxLayout(this);
@@ -143,18 +145,61 @@ TopBarWidget::TopBarWidget(QWidget* parent)
 
     fpsCard_->setSub("Raw16 / Slice");
 
+    themeCard_ = new QFrame(this);
+    themeCard_->setObjectName("themeCard");
+    themeCard_->setMinimumWidth(126);
+    themeCard_->setMaximumWidth(150);
+    auto* themeLayout = new QVBoxLayout(themeCard_);
+    themeLayout->setContentsMargins(12, 8, 12, 8);
+    themeLayout->setSpacing(6);
+
+    auto* themeLabel = new QLabel(QString::fromUtf8("主题"), themeCard_);
+    themeLabel->setObjectName("metricLabel");
+    themeLayout->addWidget(themeLabel);
+
+    themeCombo_ = new QComboBox(themeCard_);
+    themeCombo_->setObjectName("themeCombo");
+    themeCombo_->setCursor(Qt::PointingHandCursor);
+    const QVector<ThemeManager::ThemeInfo> themes = ThemeManager::availableThemes();
+    for (const ThemeManager::ThemeInfo& info : themes) {
+        themeCombo_->addItem(info.displayName, info.id);
+    }
+    themeLayout->addWidget(themeCombo_);
+    connect(themeCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
+            this, [this](int index) {
+                if (updatingThemeCombo_ || index < 0) return;
+                const QString id = themeCombo_->itemData(index).toString();
+                emit themeChanged(ThemeManager::themeFromId(id));
+            });
+
     lay->addWidget(connCard_, 1);
     lay->addWidget(fpsCard_, 1);
     lay->addWidget(frameCard_, 1);
     lay->addWidget(dropCard_, 1);
     lay->addWidget(angleCard_, 1);
     lay->addWidget(ipCard_, 1);
+    lay->addWidget(themeCard_);
 
     setConnected(false);
     setFps(0);
     setFrames(0);
     setDropped(0);
     setMirrorAngle(-1);
+}
+
+void TopBarWidget::setTheme(ThemeManager::Theme theme)
+{
+    if (!themeCombo_) return;
+
+    const QString selectedId = ThemeManager::id(theme);
+    updatingThemeCombo_ = true;
+    for (int i = 0; i < themeCombo_->count(); ++i) {
+        if (themeCombo_->itemData(i).toString() == selectedId) {
+            themeCombo_->setCurrentIndex(i);
+            break;
+        }
+    }
+    updatingThemeCombo_ = false;
 }
 
 void TopBarWidget::setConnected(bool connected, const QString& ip)

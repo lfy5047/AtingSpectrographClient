@@ -22,6 +22,7 @@ MainWindowChrome::MainWindowChrome(MainWindow* window)
 void MainWindowChrome::setupUi()
 {
     auto* central = new QWidget(window_);
+    central->setObjectName("mainCentral");
     window_->setCentralWidget(central);
     auto* root = new QHBoxLayout(central);
     root->setContentsMargins(0, 0, 0, 0);
@@ -30,7 +31,9 @@ void MainWindowChrome::setupUi()
     sidebar_ = new SidebarWidget(window_);
     root->addWidget(sidebar_);
 
-    auto* rightSide = new QVBoxLayout();
+    auto* rightSideWidget = new QWidget(window_);
+    rightSideWidget->setObjectName("mainContent");
+    auto* rightSide = new QVBoxLayout(rightSideWidget);
     rightSide->setContentsMargins(0, 0, 0, 0);
     rightSide->setSpacing(0);
 
@@ -67,5 +70,5 @@ void MainWindowChrome::setupUi()
     logPanel_->setFixedHeight(36);
     rightSide->addWidget(logPanel_);
 
-    root->addLayout(rightSide, 1);
+    root->addWidget(rightSideWidget, 1);
 }
