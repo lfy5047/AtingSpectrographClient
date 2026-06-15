@@ -2443,7 +2443,7 @@ void RecordPlaybackPanel::submitTifRenderRequest(quint64 globalIndex, SeekTrigge
 
     if (tifRenderHintLbl_) tifRenderHintLbl_->setText(QString::fromUtf8("正在渲染 TIF..."));
     setStatus(QString::fromUtf8("正在渲染 TIF..."), false);
-    tifRenderTimeoutTimer_->start(qMax(2000, intervalSpin_->value() * 2));
+    tifRenderTimeoutTimer_->start(qMax(60000, intervalSpin_->value() * 2));
     QMetaObject::invokeMethod(tifRenderWorker_, "render", Qt::QueuedConnection,
                               Q_ARG(TifRenderRequest, request));
     updateUiEnabled();
