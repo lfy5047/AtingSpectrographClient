@@ -5,6 +5,8 @@
 #include <QGroupBox>
 #include <QFormLayout>
 #include <QMessageBox>
+#include <QSignalBlocker>
+#include <QSpinBox>
 
 CollectPanel::CollectPanel(DeviceClient* dev, QWidget* parent)
     : QWidget(parent), dev_(dev)
@@ -18,6 +20,22 @@ CollectPanel::CollectPanel(DeviceClient* dev, QWidget* parent)
     statusLabel_ = new QLabel(QString::fromUtf8("未知"), this);
     statusLabel_->setProperty("readout", true);
     fl->addRow(QString::fromUtf8("状态"), statusLabel_);
+
+    oversampleFactorSpin_ = new QSpinBox(this);
+    oversampleFactorSpin_->setRange(1, 1024);
+    oversampleFactorSpin_->setValue(1);
+    applyOversamplingBtn_ = new QPushButton(QString::fromUtf8("应用"), this);
+    auto* oversamplingRow = new QHBoxLayout();
+    oversamplingRow->addWidget(oversampleFactorSpin_, 1);
+    oversamplingRow->addWidget(applyOversamplingBtn_);
+    fl->addRow(QString::fromUtf8("超采样倍率"), oversamplingRow);
+
+    effectiveSSpeedLabel_ = new QLabel(QString::fromUtf8("-"), this);
+    effectiveSSpeedLabel_->setProperty("readout", true);
+    effectiveFSpeedLabel_ = new QLabel(QString::fromUtf8("-"), this);
+    effectiveFSpeedLabel_->setProperty("readout", true);
+    fl->addRow(QString::fromUtf8("有效 S 速度"), effectiveSSpeedLabel_);
+    fl->addRow(QString::fromUtf8("有效 F 速度"), effectiveFSpeedLabel_);
 
     auto* row = new QHBoxLayout();
     startBtn_ = new QPushButton(QString::fromUtf8("开始"), this);
@@ -41,6 +59,7 @@ CollectPanel::CollectPanel(DeviceClient* dev, QWidget* parent)
     connect(startBtn_, &QPushButton::clicked, this, [this, cb]() { dev_->collect()->start(this, cb); });
     connect(stopBtn_, &QPushButton::clicked, this, [this, cb]() { dev_->collect()->stop(this, cb); });
     connect(refreshBtn_, &QPushButton::clicked, this, &CollectPanel::refreshStatus);
+    connect(applyOversamplingBtn_, &QPushButton::clicked, this, &CollectPanel::applyOversampling);
 
     connect(dev, &DeviceClient::connectionChanged, this, [this](bool c, const QString&) {
         if (c) refreshStatus();
@@ -49,12 +68,44 @@ CollectPanel::CollectPanel(DeviceClient* dev, QWidget* parent)
 
 void CollectPanel::refreshStatus()
 {
-    dev_->collect()->status(this, [this](bool ok, bool collecting, const QString&) {
-        if (ok)
-            statusLabel_->setText(collecting
-                ? QString::fromUtf8("采集中")
-                : QString::fromUtf8("已停止"));
-        else
+    dev_->collect()->getOversampling(this, [this](bool ok, const CollectOversamplingInfo& info, const QString&) {
+        if (ok) {
+            updateOversamplingUi(info);
+        } else {
             statusLabel_->setText(QString::fromUtf8("未知"));
+            effectiveSSpeedLabel_->setText(QString::fromUtf8("-"));
+            effectiveFSpeedLabel_->setText(QString::fromUtf8("-"));
+        }
     });
+}
+
+void CollectPanel::applyOversampling()
+{
+    const int factor = oversampleFactorSpin_->value();
+    applyOversamplingBtn_->setEnabled(false);
+    dev_->collect()->setOversampling(this, factor,
+        [this](bool ok, const CollectOversamplingInfo& info, const QString& err) {
+            if (ok) {
+                updateOversamplingUi(info);
+            } else {
+                QMessageBox::warning(this, "Collect", err);
+                applyOversamplingBtn_->setEnabled(true);
+                refreshStatus();
+            }
+        });
+}
+
+void CollectPanel::updateOversamplingUi(const CollectOversamplingInfo& info)
+{
+    statusLabel_->setText(info.collecting
+        ? QString::fromUtf8("采集中")
+        : QString::fromUtf8("已停止"));
+    {
+        const QSignalBlocker blocker(oversampleFactorSpin_);
+        oversampleFactorSpin_->setValue(info.oversampleFactor);
+    }
+    effectiveSSpeedLabel_->setText(QString::number(info.effectiveSSpeed));
+    effectiveFSpeedLabel_->setText(QString::number(info.effectiveFSpeed));
+    oversampleFactorSpin_->setEnabled(!info.collecting);
+    applyOversamplingBtn_->setEnabled(!info.collecting);
 }

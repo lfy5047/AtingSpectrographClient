@@ -12,4 +12,6 @@ public:
     void start(QObject* context, Callback cb) const;
     void stop(QObject* context, Callback cb) const;
     void status(QObject* context, CollectStatusCallback cb) const;
+    void getOversampling(QObject* context, CollectOversamplingCallback cb) const;
+    void setOversampling(QObject* context, int oversampleFactor, CollectOversamplingCallback cb) const;
 };

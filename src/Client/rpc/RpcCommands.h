@@ -98,6 +98,8 @@ namespace Collect {
 static const char* const Start = "collect.start";
 static const char* const Stop = "collect.stop";
 static const char* const Status = "collect.status";
+static const char* const GetOversampling = "collect.get_oversampling";
+static const char* const SetOversampling = "collect.set_oversampling";
 }
 
 namespace Record {

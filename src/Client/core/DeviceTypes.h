@@ -14,6 +14,15 @@ using MirrorAngleCallback = std::function<void(bool ok, double angle, bool movin
 using ResolutionCallback = std::function<void(bool ok, int w, int h, const QString& err)>;
 using CollectStatusCallback = std::function<void(bool ok, bool collecting, const QString& err)>;
 
+struct CollectOversamplingInfo {
+    int oversampleFactor = 1;
+    int effectiveSSpeed = 0;
+    int effectiveFSpeed = 0;
+    bool collecting = false;
+};
+
+using CollectOversamplingCallback = std::function<void(bool ok, const CollectOversamplingInfo& info, const QString& err)>;
+
 struct CameraDeviceOption {
     QString name;
     QString mac;

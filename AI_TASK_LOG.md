@@ -1,4 +1,26 @@
 ﻿# AI 任务日志
+## 2026-06-15 采集超采样接口接入
+
+- 目标：按服务端新增的 `collect.get_oversampling` / `collect.set_oversampling` 接口，在客户端采集面板支持超采样倍率查询和设置。
+- 文件变更：
+  - `src/Client/rpc/RpcCommands.h`
+  - `src/Client/core/DeviceTypes.h`
+  - `src/Client/services/CollectService.*`
+  - `src/Ui/panels/CollectPanel.*`
+  - `tests/CollectServiceTest.cpp`
+  - `tests/CMakeLists.txt`
+  - `AI_TASK_LOG.md`
+- 实现要点：
+  - 新增 `CollectOversamplingInfo` 和 `CollectOversamplingCallback`，封装超采样倍率、服务端换算后的 S/F 有效速度和采集状态。
+  - `CollectService` 新增超采样查询/设置 RPC，设置参数为 `oversample_factor`，返回值按服务端 `data` 解析。
+  - 采集面板新增“超采样倍率”输入、应用按钮和有效速度只读显示；采集中按服务端状态禁用倍率修改。
+  - 客户端不保存超采样倍率到本地 `QSettings`，以服务端 `conf.json` 返回值为准。
+- 验证：
+  - 已先新增 `CollectServiceTest` 并观察旧实现下因缺少 `CollectService::setOversampling/getOversampling` 构建失败。
+  - 已运行 `.\make.bat d`，Debug 构建通过。
+  - 已运行 `ctest --test-dir build -C Debug -R CollectServiceTest --output-on-failure`，新增测试通过。
+  - 已运行 `.\make.bat` 和 `ctest --test-dir build -C Debug --output-on-failure`，主程序构建和 7 个测试通过。
+
 ## 2026-06-11 户外亮色主题与主题切换
 
 - 目标：为户外环境增加更清晰的亮色主题，并允许用户在软件顶部栏切换深色/户外亮色主题。

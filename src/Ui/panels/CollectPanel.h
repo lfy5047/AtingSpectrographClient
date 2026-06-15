@@ -5,6 +5,8 @@
 #include <QLabel>
 
 class DeviceClient;
+class QSpinBox;
+struct CollectOversamplingInfo;
 
 class CollectPanel : public QWidget {
     Q_OBJECT
@@ -13,10 +15,17 @@ public:
 
 private slots:
     void refreshStatus();
+    void applyOversampling();
 
 private:
+    void updateOversamplingUi(const CollectOversamplingInfo& info);
+
     DeviceClient* dev_;
     QLabel*      statusLabel_;
+    QLabel*      effectiveSSpeedLabel_;
+    QLabel*      effectiveFSpeedLabel_;
+    QSpinBox*    oversampleFactorSpin_;
+    QPushButton* applyOversamplingBtn_;
     QPushButton* startBtn_;
     QPushButton* stopBtn_;
     QPushButton* refreshBtn_;

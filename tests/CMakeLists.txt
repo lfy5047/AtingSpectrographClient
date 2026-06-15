@@ -53,6 +53,26 @@ target_link_libraries(RecordServiceTest PRIVATE
 )
 add_test(NAME RecordServiceTest COMMAND RecordServiceTest)
 
+add_executable(CollectServiceTest
+    CollectServiceTest.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/rpc/ControlClient.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/CollectService.cpp
+)
+target_include_directories(CollectServiceTest PRIVATE
+    ${PROJECT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/src/Client
+    ${PROJECT_SOURCE_DIR}/src/Client/core
+    ${PROJECT_SOURCE_DIR}/src/Client/rpc
+    ${PROJECT_SOURCE_DIR}/src/Client/services
+    ${PROJECT_SOURCE_DIR}/Common/include
+)
+target_link_libraries(CollectServiceTest PRIVATE
+    Qt5::Test
+    Qt5::Network
+)
+add_test(NAME CollectServiceTest COMMAND CollectServiceTest)
+
 add_executable(DeleteVerificationTest
     DeleteVerificationTest.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/DeleteVerification.cpp
