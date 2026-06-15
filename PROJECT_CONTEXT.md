@@ -175,4 +175,3 @@ RPC 命令名集中在 `src/Client/rpc/RpcCommands.h`，当前分组包括：
 - 默认避免扫描 `libs/public/**`、`build/**`、`.cache/**`、`.git/**`。
 - 修改业务逻辑后优先运行 `.\make.bat`；只改文档时可不构建。
 - 不要回滚用户已有未提交改动。
-- 后续 AI 修改项目后，更新 `AI_TASK_LOG.md` 的最新条目。
