@@ -6,6 +6,7 @@
 #include <QWidget>
 #include <QVector>
 
+#include "Client/recording/LocalRecordScanner.h"
 #include "Client/recording/RemoteFileDownloader.h"
 #include "ImageFrameUtils.h"
 #include "nlohmann/json.hpp"
@@ -17,6 +18,7 @@ class QDialog;
 class QGroupBox;
 class QKeyEvent;
 class QLabel;
+class QLineEdit;
 class QTableWidgetItem;
 class QPushButton;
 class QVariant;
@@ -77,6 +79,12 @@ private slots:
     void clearPlaybackSequence();
     void appendSelectedToPlaybackSequence();
     void showRecordDetails(QTableWidgetItem* item);
+    void showLocalRecordsDialog();
+    void chooseLocalRecordRoot();
+    void scanLocalRecords();
+    void playSelectedLocalRecords();
+    void appendSelectedLocalRecords();
+    void showLocalRecordDetails(QTableWidgetItem* item);
 
 private:
     struct RecordFile {
@@ -85,6 +93,7 @@ private:
     };
 
     struct RecordItem {
+        QString rootPath;
         QString recordId;
         QString type;
         quint64 recordIdValue = 0;
@@ -93,6 +102,7 @@ private:
     };
 
     struct PlaybackEntry {
+        QString rootPath;
         QString type;
         QString recordId;
         quint64 recordIdValue = 0;
@@ -161,12 +171,19 @@ private:
     void cancelDownloadOnly();
     void clearRecords();
     void addRecordRow(const RecordItem& item);
+    void addRecordRowToTable(QTableWidget* table, const RecordItem& item);
     QVector<RecordItem> selectedRecords() const;
+    QVector<RecordItem> selectedLocalRecords() const;
+    QVector<RecordItem> selectedRecordsFromTable(QTableWidget* table, const QVector<RecordItem>& source) const;
     bool selectedRecordsType(const QVector<RecordItem>& items, QString* type, QString* err) const;
     bool parseRecordList(const nlohmann::json& data, QVector<RecordItem>* out, QString* err, int* skipped = nullptr) const;
     bool parseRecordId(const QString& id, quint64* out, QString* err) const;
     QString cacheRoot() const;
     QString recordCacheDir(const QString& type, const QString& recordId) const;
+    QString effectiveRecordRoot(const RecordItem& item) const;
+    QString recordCacheDir(const RecordItem& item) const;
+    QString recordIdentityKey(const RecordItem& item) const;
+    QString playbackEntryIdentityKey(const PlaybackEntry& entry) const;
     bool isRecordCached(const RecordItem& item, QString* err) const;
     CacheState cacheState(const RecordItem& item) const;
     QString cacheStateText(CacheState state) const;
@@ -192,6 +209,7 @@ private:
     QVector<RecordItem> selectedPlaybackRecords() const;
     QVector<RecordItem> currentPlaybackRecordItems() const;
     void setPlaybackSequence(const QVector<RecordItem>& items, bool append);
+    RecordItem recordFromLocalRecord(const LocalRecordScanner::Record& record) const;
     bool buildPlaybackSequence(const QVector<RecordItem>& items, QString* err);
     bool loadRawEntry(const RecordItem& item, PlaybackEntry* out, QString* err) const;
     bool loadTifEntry(const RecordItem& item, PlaybackEntry* out, QString* err) const;
@@ -270,6 +288,17 @@ private:
     QLabel* downloadInfoLbl_ = nullptr;
     QPushButton* appendDownloadBtn_ = nullptr;
 
+    QPushButton* openLocalRecordsDialogBtn_ = nullptr;
+    QDialog* localRecordsDialog_ = nullptr;
+    QComboBox* localTypeCombo_ = nullptr;
+    QLineEdit* localRootEdit_ = nullptr;
+    QPushButton* localBrowseBtn_ = nullptr;
+    QPushButton* localScanBtn_ = nullptr;
+    QTableWidget* localRecordsTable_ = nullptr;
+    QPushButton* localPlayBtn_ = nullptr;
+    QPushButton* localAppendBtn_ = nullptr;
+    QLabel* localRecordsInfoLbl_ = nullptr;
+
     QGroupBox* renderGroup_ = nullptr;
     QComboBox* renderModeCombo_ = nullptr;
     QSpinBox* singleBandSpin_ = nullptr;
@@ -334,6 +363,7 @@ private:
     QThread* tifRenderThread_ = nullptr;
 
     QVector<RecordItem> records_;
+    QVector<RecordItem> localRecords_;
     QVector<RecordItem> downloadedSelection_;
     QVector<RecordItem> playbackRecordItems_;
     QVector<RecordItem> pendingDownloadSelection_;

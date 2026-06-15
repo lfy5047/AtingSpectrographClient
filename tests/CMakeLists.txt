@@ -53,6 +53,22 @@ target_link_libraries(RecordServiceTest PRIVATE
 )
 add_test(NAME RecordServiceTest COMMAND RecordServiceTest)
 
+add_executable(LocalRecordScannerTest
+    LocalRecordScannerTest.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/recording/LocalRecordScanner.cpp
+)
+target_include_directories(LocalRecordScannerTest PRIVATE
+    ${PROJECT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/src/Client
+    ${PROJECT_SOURCE_DIR}/libs/public
+)
+target_link_libraries(LocalRecordScannerTest PRIVATE
+    Qt5::Test
+    Qt5::Core
+)
+add_test(NAME LocalRecordScannerTest COMMAND LocalRecordScannerTest)
+
 add_executable(CollectServiceTest
     CollectServiceTest.cpp
     ${PROJECT_SOURCE_DIR}/src/Client/rpc/ControlClient.cpp

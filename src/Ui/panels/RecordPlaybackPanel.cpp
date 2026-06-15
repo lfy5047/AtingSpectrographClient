@@ -303,6 +303,71 @@ void RecordPlaybackPanel::setupUi()
     queryLayout->addWidget(openRecordsDialogBtn_);
     root->addWidget(queryGroup);
 
+    auto* localGroup = new QGroupBox(QString::fromUtf8("本地记录"), this);
+    auto* localLayout = new QVBoxLayout(localGroup);
+    openLocalRecordsDialogBtn_ = new QPushButton(QString::fromUtf8("打开本地记录"), this);
+    localLayout->addWidget(openLocalRecordsDialogBtn_);
+    root->addWidget(localGroup);
+
+    localRecordsDialog_ = new QDialog(this);
+    localRecordsDialog_->setObjectName("localRecordsDialog");
+    localRecordsDialog_->setWindowTitle(QString::fromUtf8("本地数据记录"));
+    localRecordsDialog_->resize(1100, 620);
+    auto* localRecordsDialogLayout = new QVBoxLayout(localRecordsDialog_);
+
+    localTypeCombo_ = new QComboBox(localRecordsDialog_);
+    localTypeCombo_->addItem("raw", "raw");
+    localTypeCombo_->addItem("tif", "tif");
+    localTypeCombo_->setFixedWidth(130);
+    localRootEdit_ = new QLineEdit(localRecordsDialog_);
+    localRootEdit_->setReadOnly(true);
+    localBrowseBtn_ = new QPushButton(QString::fromUtf8("选择目录"), localRecordsDialog_);
+    localScanBtn_ = new QPushButton(QString::fromUtf8("查询本地"), localRecordsDialog_);
+    auto* localQueryRow = new QHBoxLayout();
+    localQueryRow->addWidget(new QLabel(QString::fromUtf8("类型"), localRecordsDialog_));
+    localQueryRow->addWidget(localTypeCombo_);
+    localQueryRow->addSpacing(12);
+    localQueryRow->addWidget(new QLabel(QString::fromUtf8("目录"), localRecordsDialog_));
+    localQueryRow->addWidget(localRootEdit_, 1);
+    localQueryRow->addWidget(localBrowseBtn_);
+    localQueryRow->addWidget(localScanBtn_);
+    localRecordsDialogLayout->addLayout(localQueryRow);
+
+    localRecordsTable_ = new QTableWidget(localRecordsDialog_);
+    localRecordsTable_->setColumnCount(6);
+    localRecordsTable_->setHorizontalHeaderLabels(QStringList()
+        << "record_id" << "type" << "timestamp" << QString::fromUtf8("来源")
+        << QString::fromUtf8("文件") << QString::fromUtf8("大小"));
+    localRecordsTable_->setSelectionBehavior(QAbstractItemView::SelectRows);
+    localRecordsTable_->setSelectionMode(QAbstractItemView::ExtendedSelection);
+    localRecordsTable_->setEditTriggers(QAbstractItemView::NoEditTriggers);
+    localRecordsTable_->setContextMenuPolicy(Qt::CustomContextMenu);
+    localRecordsTable_->verticalHeader()->setVisible(false);
+    localRecordsTable_->setAlternatingRowColors(true);
+    localRecordsTable_->setShowGrid(false);
+    localRecordsTable_->setMinimumSize(960, 420);
+    localRecordsTable_->setStyleSheet(
+        "QTableWidget::item:selected { background-color: #2F6FED; color: white; }"
+        "QTableWidget::item:selected:!active { background-color: #2F6FED; color: white; }");
+    localRecordsTable_->horizontalHeader()->setSectionResizeMode(0, QHeaderView::ResizeToContents);
+    localRecordsTable_->horizontalHeader()->setSectionResizeMode(1, QHeaderView::ResizeToContents);
+    localRecordsTable_->horizontalHeader()->setSectionResizeMode(2, QHeaderView::ResizeToContents);
+    localRecordsTable_->horizontalHeader()->setSectionResizeMode(3, QHeaderView::ResizeToContents);
+    localRecordsTable_->horizontalHeader()->setSectionResizeMode(4, QHeaderView::Stretch);
+    localRecordsTable_->horizontalHeader()->setSectionResizeMode(5, QHeaderView::ResizeToContents);
+    localRecordsDialogLayout->addWidget(localRecordsTable_);
+
+    auto* localPlayRow = new QHBoxLayout();
+    localPlayBtn_ = new QPushButton(QString::fromUtf8("加入播放"), localRecordsDialog_);
+    localPlayBtn_->setProperty("primary", true);
+    localAppendBtn_ = new QPushButton(QString::fromUtf8("追加到播放"), localRecordsDialog_);
+    localRecordsInfoLbl_ = new QLabel("-", localRecordsDialog_);
+    localRecordsInfoLbl_->setWordWrap(true);
+    localPlayRow->addWidget(localPlayBtn_);
+    localPlayRow->addWidget(localAppendBtn_);
+    localPlayRow->addWidget(localRecordsInfoLbl_, 1);
+    localRecordsDialogLayout->addLayout(localPlayRow);
+
     recordsDialog_ = new QDialog(this);
     recordsDialog_->setObjectName("recordsDialog");
     recordsDialog_->setWindowTitle(QString::fromUtf8("远程数据记录"));
@@ -622,6 +687,26 @@ void RecordPlaybackPanel::setupUi()
         saveSettings();
     });
     connect(openRecordsDialogBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::showRecordsDialog);
+    connect(openLocalRecordsDialogBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::showLocalRecordsDialog);
+    connect(localBrowseBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::chooseLocalRecordRoot);
+    connect(localScanBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::scanLocalRecords);
+    connect(localPlayBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::playSelectedLocalRecords);
+    connect(localAppendBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::appendSelectedLocalRecords);
+    connect(localTypeCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) {
+        saveSettings();
+    });
+    connect(localRecordsTable_, &QTableWidget::itemSelectionChanged,
+            this, &RecordPlaybackPanel::updateUiEnabled);
+    connect(localRecordsTable_, &QTableWidget::itemDoubleClicked,
+            this, &RecordPlaybackPanel::showLocalRecordDetails);
+    connect(localRecordsTable_, &QTableWidget::customContextMenuRequested, this, [this](const QPoint& pos) {
+        QTableWidgetItem* item = localRecordsTable_->itemAt(pos);
+        if (!item) return;
+        QMenu menu(localRecordsTable_);
+        QAction* details = menu.addAction(QString::fromUtf8("查看详情"));
+        QAction* chosen = menu.exec(localRecordsTable_->viewport()->mapToGlobal(pos));
+        if (chosen == details) showLocalRecordDetails(item);
+    });
     connect(downloadBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::downloadSelected);
     connect(appendDownloadBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::appendSelectedToPlaybackSequence);
     connect(selectAllBtn_, &QPushButton::clicked, this, &RecordPlaybackPanel::selectAllRecords);
@@ -776,6 +861,7 @@ void RecordPlaybackPanel::updateUiEnabled()
     const bool hasFrames = !frameRefs_.isEmpty();
     const bool playing = playbackRequested_ || (playbackTimer_ && playbackTimer_->isActive());
     const bool hasSelection = !selectedRecords().isEmpty();
+    const bool hasLocalSelection = !selectedLocalRecords().isEmpty();
 
     retentionRefreshBtn_->setEnabled(hasConnection && !busy);
     retentionApplyBtn_->setEnabled(hasConnection && !busy);
@@ -797,6 +883,12 @@ void RecordPlaybackPanel::updateUiEnabled()
     invertSelectionBtn_->setEnabled(!busy && recordsTable_->rowCount() > 0);
     clearSelectionBtn_->setEnabled(!busy && hasSelection);
     if (deleteSelectedBtn_) deleteSelectedBtn_->setEnabled(hasConnection && !busy && hasSelection);
+    if (openLocalRecordsDialogBtn_) openLocalRecordsDialogBtn_->setEnabled(true);
+    if (localTypeCombo_) localTypeCombo_->setEnabled(!busy);
+    if (localBrowseBtn_) localBrowseBtn_->setEnabled(!busy);
+    if (localScanBtn_) localScanBtn_->setEnabled(!busy && localRootEdit_ && !localRootEdit_->text().trimmed().isEmpty());
+    if (localPlayBtn_) localPlayBtn_->setEnabled(!busy && hasLocalSelection);
+    if (localAppendBtn_) localAppendBtn_->setEnabled(!busy && hasLocalSelection);
 
     prevBtn_->setEnabled(hasFrames && !tifRenderBusy_);
     nextBtn_->setEnabled(hasFrames && !tifRenderBusy_);
@@ -841,6 +933,8 @@ void RecordPlaybackPanel::loadSettings()
     setComboByData(queryModeCombo_, s.value(p + "query/mode", "count"), 0);
     countSpin_->setValue(s.value(p + "query/count", 10).toInt());
     secondsSpin_->setValue(s.value(p + "query/seconds", 60).toInt());
+    setComboByData(localTypeCombo_, s.value(p + "local/type", "raw"), 0);
+    localRootEdit_->setText(s.value(p + "local/root", QDir(cacheRoot()).absolutePath()).toString());
 
     setComboByData(renderModeCombo_, s.value(p + "tif/mode", static_cast<int>(TifRenderMode::SingleBand)), 0);
     pendingTifBandSettings_ = {
@@ -884,6 +978,8 @@ void RecordPlaybackPanel::saveSettings() const
     s.setValue(p + "query/mode", queryModeCombo_->currentData());
     s.setValue(p + "query/count", countSpin_->value());
     s.setValue(p + "query/seconds", secondsSpin_->value());
+    s.setValue(p + "local/type", localTypeCombo_->currentData());
+    s.setValue(p + "local/root", localRootEdit_->text());
 
     s.setValue(p + "tif/mode", renderModeCombo_->currentData());
     const QVector<int> tifBandValues = pendingTifBandSettingsValid_ && pendingTifBandSettings_.size() == 12
@@ -976,6 +1072,29 @@ void RecordPlaybackPanel::showRecordsDialog()
     recordsDialog_->activateWindow();
 }
 
+void RecordPlaybackPanel::showLocalRecordsDialog()
+{
+    if (!localRecordsDialog_) return;
+    localRecordsDialog_->show();
+    localRecordsDialog_->raise();
+    localRecordsDialog_->activateWindow();
+}
+
+void RecordPlaybackPanel::chooseLocalRecordRoot()
+{
+    const QString current = localRootEdit_ && !localRootEdit_->text().trimmed().isEmpty()
+        ? localRootEdit_->text().trimmed()
+        : QDir(cacheRoot()).absolutePath();
+    const QString dir = QFileDialog::getExistingDirectory(
+        this,
+        QString::fromUtf8("选择本地记录目录"),
+        current);
+    if (dir.isEmpty()) return;
+    localRootEdit_->setText(QDir(dir).absolutePath());
+    saveSettings();
+    scanLocalRecords();
+}
+
 void RecordPlaybackPanel::setRecordSelectionLocked(bool locked)
 {
     if (!recordsTable_ || recordSelectionLocked_ == locked) return;
@@ -1012,7 +1131,7 @@ bool RecordPlaybackPanel::selectedRecordsType(const QVector<RecordItem>& items, 
 
 RecordPlaybackPanel::CacheState RecordPlaybackPanel::cacheState(const RecordItem& item) const
 {
-    const QString dir = recordCacheDir(item.type, item.recordId);
+    const QString dir = recordCacheDir(item);
     bool anyExists = false;
     bool allValid = true;
     for (const RecordFile& f : item.files) {
@@ -1055,7 +1174,7 @@ QIcon RecordPlaybackPanel::cacheStateIcon(CacheState state) const
 
 QString RecordPlaybackPanel::manifestPath(const RecordItem& item) const
 {
-    return QDir(recordCacheDir(item.type, item.recordId)).filePath("manifest.json");
+    return QDir(recordCacheDir(item)).filePath("manifest.json");
 }
 
 bool RecordPlaybackPanel::readCacheManifest(const RecordItem& item, nlohmann::json* manifest) const
@@ -1086,7 +1205,7 @@ bool RecordPlaybackPanel::manifestFilesMatch(const RecordItem& item, const nlohm
 
 bool RecordPlaybackPanel::writeCacheManifest(const RecordItem& item, QString* err) const
 {
-    QDir dir(recordCacheDir(item.type, item.recordId));
+    QDir dir(recordCacheDir(item));
     if (!dir.exists() && !QDir().mkpath(dir.absolutePath())) {
         if (err) *err = QString::fromUtf8("无法创建缓存目录: %1").arg(dir.absolutePath());
         return false;
@@ -1127,7 +1246,7 @@ void RecordPlaybackPanel::updateRecordCacheStatuses()
         const CacheState state = cacheState(item);
         tableItem->setText(cacheStateText(state));
         tableItem->setIcon(cacheStateIcon(state));
-        tableItem->setToolTip(QDir(recordCacheDir(item.type, item.recordId)).absolutePath());
+        tableItem->setToolTip(QDir(recordCacheDir(item)).absolutePath());
     }
     updateDownloadButtonText();
 }
@@ -1247,7 +1366,11 @@ QSet<QString> RecordPlaybackPanel::playbackCacheKeys() const
 {
     QSet<QString> keys;
     for (const PlaybackEntry& entry : playbackEntries_) {
-        keys.insert(cacheKey(entry.type, entry.recordId));
+        const QString defaultRoot = QDir(cacheRoot()).absolutePath();
+        const QString root = entry.rootPath.trimmed().isEmpty()
+            ? defaultRoot
+            : QDir(entry.rootPath).absolutePath();
+        if (root == defaultRoot) keys.insert(cacheKey(entry.type, entry.recordId));
     }
     return keys;
 }
@@ -1372,14 +1495,16 @@ bool RecordPlaybackPanel::applyDeletedRecords(const QVector<RecordItem>& deleted
 {
     if (removedCache) *removedCache = CacheSummary();
     QSet<QString> deleteKeys;
+    QSet<QString> deleteIdentityKeys;
     for (const RecordItem& item : deletedItems) {
         deleteKeys.insert(cacheKey(item.type, item.recordId));
+        deleteIdentityKeys.insert(recordIdentityKey(item));
     }
 
     bool localOk = true;
     bool touchesPlayback = false;
     for (const RecordItem& item : playbackRecordItems_) {
-        if (deleteKeys.contains(cacheKey(item.type, item.recordId))) {
+        if (deleteIdentityKeys.contains(recordIdentityKey(item))) {
             touchesPlayback = true;
             break;
         }
@@ -1392,7 +1517,7 @@ bool RecordPlaybackPanel::applyDeletedRecords(const QVector<RecordItem>& deleted
             pausePlayback();
             QVector<RecordItem> next;
             for (const RecordItem& item : playbackRecordItems_) {
-                if (!deleteKeys.contains(cacheKey(item.type, item.recordId))) next.append(item);
+                if (!deleteIdentityKeys.contains(recordIdentityKey(item))) next.append(item);
             }
             setPlaybackSequence(next, false);
         }
@@ -1404,7 +1529,7 @@ bool RecordPlaybackPanel::applyDeletedRecords(const QVector<RecordItem>& deleted
 
     QVector<RecordItem> remaining;
     for (const RecordItem& item : records_) {
-        if (!deleteKeys.contains(cacheKey(item.type, item.recordId))) remaining.append(item);
+        if (!deleteIdentityKeys.contains(recordIdentityKey(item))) remaining.append(item);
     }
     records_ = remaining;
     {
@@ -1551,6 +1676,68 @@ void RecordPlaybackPanel::clearRecords()
     updateUiEnabled();
 }
 
+RecordPlaybackPanel::RecordItem RecordPlaybackPanel::recordFromLocalRecord(const LocalRecordScanner::Record& record) const
+{
+    RecordItem item;
+    item.rootPath = record.rootPath;
+    item.recordId = record.recordId;
+    item.type = record.type;
+    item.recordIdValue = record.recordIdValue;
+    item.timestampNs = record.timestampNs;
+    for (const LocalRecordScanner::File& f : record.files) {
+        RecordFile file;
+        file.name = f.name;
+        file.sizeBytes = f.sizeBytes;
+        item.files.append(file);
+    }
+    return item;
+}
+
+void RecordPlaybackPanel::scanLocalRecords()
+{
+    if (!localRootEdit_ || !localRecordsTable_ || !localTypeCombo_) return;
+    const QString rootPath = localRootEdit_->text().trimmed();
+    if (rootPath.isEmpty()) {
+        setStatus(QString::fromUtf8("请选择本地记录目录"), true);
+        return;
+    }
+
+    QString err;
+    const QString type = localTypeCombo_->currentData().toString();
+    const QVector<LocalRecordScanner::Record> scanned = LocalRecordScanner::scan(rootPath, type, &err);
+    if (!err.isEmpty()) {
+        localRecords_.clear();
+        localRecordsTable_->setRowCount(0);
+        if (localRecordsInfoLbl_) localRecordsInfoLbl_->setText(err);
+        setStatus(err, true);
+        updateUiEnabled();
+        return;
+    }
+
+    localRecords_.clear();
+    localRecordsTable_->setRowCount(0);
+    for (const LocalRecordScanner::Record& record : scanned) {
+        const RecordItem item = recordFromLocalRecord(record);
+        localRecords_.append(item);
+        addRecordRowToTable(localRecordsTable_, item);
+        const int row = localRecordsTable_->rowCount() - 1;
+        QTableWidgetItem* sourceItem = localRecordsTable_->item(row, 3);
+        if (!sourceItem) {
+            sourceItem = new QTableWidgetItem();
+            localRecordsTable_->setItem(row, 3, sourceItem);
+        }
+        sourceItem->setText(QDir(effectiveRecordRoot(item)).absolutePath());
+        sourceItem->setToolTip(QDir(recordCacheDir(item)).absolutePath());
+    }
+    const QString text = localRecords_.isEmpty()
+        ? QString::fromUtf8("未查询到可播放本地记录")
+        : QString::fromUtf8("查询到 %1 条本地记录").arg(localRecords_.size());
+    if (localRecordsInfoLbl_) localRecordsInfoLbl_->setText(text);
+    setStatus(text, false);
+    saveSettings();
+    updateUiEnabled();
+}
+
 bool RecordPlaybackPanel::parseRecordList(const nlohmann::json& data, QVector<RecordItem>* out, QString* err, int* skipped) const
 {
     if (!out) return false;
@@ -1611,28 +1798,55 @@ bool RecordPlaybackPanel::parseRecordId(const QString& id, quint64* out, QString
 
 void RecordPlaybackPanel::addRecordRow(const RecordItem& item)
 {
-    const int row = recordsTable_->rowCount();
-    recordsTable_->insertRow(row);
-    recordsTable_->setItem(row, 0, new QTableWidgetItem(item.recordId));
-    recordsTable_->setItem(row, 1, new QTableWidgetItem(item.type));
+    addRecordRowToTable(recordsTable_, item);
+    const int row = recordsTable_->rowCount() - 1;
+    recordsTable_->setItem(row, 3, new QTableWidgetItem());
+}
+
+void RecordPlaybackPanel::addRecordRowToTable(QTableWidget* table, const RecordItem& item)
+{
+    if (!table) return;
+    const int row = table->rowCount();
+    table->insertRow(row);
+    table->setItem(row, 0, new QTableWidgetItem(item.recordId));
+    table->setItem(row, 1, new QTableWidgetItem(item.type));
     auto* tsItem = new QTableWidgetItem(formatRecordTimestamp(item.timestampNs));
     tsItem->setToolTip(QString("timestamp_ns=%1").arg(item.timestampNs));
-    recordsTable_->setItem(row, 2, tsItem);
-    recordsTable_->setItem(row, 3, new QTableWidgetItem());
-    recordsTable_->setItem(row, 4, new QTableWidgetItem(filesText(item)));
+    table->setItem(row, 2, tsItem);
+    table->setItem(row, 3, new QTableWidgetItem());
+    table->setItem(row, 4, new QTableWidgetItem(filesText(item)));
     quint64 size = 0;
     for (const RecordFile& f : item.files) size += f.sizeBytes;
-    recordsTable_->setItem(row, 5, new QTableWidgetItem(formatBytes(size)));
+    table->setItem(row, 5, new QTableWidgetItem(formatBytes(size)));
 }
 
 QVector<RecordPlaybackPanel::RecordItem> RecordPlaybackPanel::selectedRecords() const
 {
+    return selectedRecordsFromTable(recordsTable_, records_);
+}
+
+QVector<RecordPlaybackPanel::RecordItem> RecordPlaybackPanel::selectedLocalRecords() const
+{
+    return selectedRecordsFromTable(localRecordsTable_, localRecords_);
+}
+
+QVector<RecordPlaybackPanel::RecordItem> RecordPlaybackPanel::selectedRecordsFromTable(
+    QTableWidget* table, const QVector<RecordItem>& source) const
+{
     QVector<RecordItem> result;
     QSet<int> rows;
-    for (QTableWidgetItem* item : recordsTable_->selectedItems()) rows.insert(item->row());
+    if (!table) return result;
+    if (table->selectionModel()) {
+        for (const QModelIndex& index : table->selectionModel()->selectedRows()) {
+            rows.insert(index.row());
+        }
+    }
+    if (rows.isEmpty()) {
+        for (QTableWidgetItem* item : table->selectedItems()) rows.insert(item->row());
+    }
     const QList<int> rowList = rows.values();
     for (int row : rowList) {
-        if (row >= 0 && row < records_.size()) result.append(records_[row]);
+        if (row >= 0 && row < source.size()) result.append(source[row]);
     }
     std::sort(result.begin(), result.end(), [](const RecordItem& a, const RecordItem& b) {
         return a.recordIdValue < b.recordIdValue;
@@ -1799,6 +2013,36 @@ QString RecordPlaybackPanel::recordCacheDir(const QString& type, const QString& 
     return QDir(cacheRoot()).filePath(type + "/" + recordId);
 }
 
+QString RecordPlaybackPanel::effectiveRecordRoot(const RecordItem& item) const
+{
+    return item.rootPath.trimmed().isEmpty()
+        ? QDir(cacheRoot()).absolutePath()
+        : QDir(item.rootPath).absolutePath();
+}
+
+QString RecordPlaybackPanel::recordCacheDir(const RecordItem& item) const
+{
+    return QDir(effectiveRecordRoot(item)).filePath(item.type + "/" + item.recordId);
+}
+
+QString RecordPlaybackPanel::recordIdentityKey(const RecordItem& item) const
+{
+    const QString defaultRoot = QDir(cacheRoot()).absolutePath();
+    const QString root = effectiveRecordRoot(item);
+    const QString key = cacheKey(item.type, item.recordId);
+    return root == defaultRoot ? key : root + "|" + key;
+}
+
+QString RecordPlaybackPanel::playbackEntryIdentityKey(const PlaybackEntry& entry) const
+{
+    const QString defaultRoot = QDir(cacheRoot()).absolutePath();
+    const QString root = entry.rootPath.trimmed().isEmpty()
+        ? defaultRoot
+        : QDir(entry.rootPath).absolutePath();
+    const QString key = cacheKey(entry.type, entry.recordId);
+    return root == defaultRoot ? key : root + "|" + key;
+}
+
 bool RecordPlaybackPanel::isRecordCached(const RecordItem& item, QString*) const
 {
     const CacheState state = cacheState(item);
@@ -1815,9 +2059,9 @@ void RecordPlaybackPanel::setPlaybackSequence(const QVector<RecordItem>& items, 
     QVector<RecordItem> next = append ? playbackRecordItems_ : QVector<RecordItem>();
     int skipped = 0;
     QSet<QString> seen;
-    for (const RecordItem& item : next) seen.insert(cacheKey(item.type, item.recordId));
+    for (const RecordItem& item : next) seen.insert(recordIdentityKey(item));
     for (const RecordItem& item : items) {
-        const QString key = cacheKey(item.type, item.recordId);
+        const QString key = recordIdentityKey(item);
         if (seen.contains(key)) {
             ++skipped;
             continue;
@@ -1877,7 +2121,7 @@ void RecordPlaybackPanel::updatePlaybackSequenceTable()
             }
         }
         playbackSequenceTable_->setItem(row, 2, new QTableWidgetItem(countText));
-        playbackSequenceTable_->setItem(row, 3, new QTableWidgetItem(QDir(recordCacheDir(item.type, item.recordId)).absolutePath()));
+        playbackSequenceTable_->setItem(row, 3, new QTableWidgetItem(QDir(recordCacheDir(item)).absolutePath()));
         quint64 size = 0;
         for (const RecordFile& f : item.files) size += f.sizeBytes;
         playbackSequenceTable_->setItem(row, 4, new QTableWidgetItem(formatBytes(size)));
@@ -1933,7 +2177,7 @@ bool RecordPlaybackPanel::loadRawEntry(const RecordItem& item, PlaybackEntry* ou
         return false;
     }
 
-    const QString dir = recordCacheDir(item.type, item.recordId);
+    const QString dir = recordCacheDir(item);
     const QString rawPath = QDir(dir).filePath(rawName);
     const QString jsonPath = QDir(dir).filePath(jsonName);
     QFile jf(jsonPath);
@@ -1982,6 +2226,7 @@ bool RecordPlaybackPanel::loadRawEntry(const RecordItem& item, PlaybackEntry* ou
     }
 
     PlaybackEntry e;
+    e.rootPath = effectiveRecordRoot(item);
     e.type = "raw";
     e.recordId = item.recordId;
     e.recordIdValue = item.recordIdValue;
@@ -2013,10 +2258,11 @@ bool RecordPlaybackPanel::loadTifEntry(const RecordItem& item, PlaybackEntry* ou
         return false;
     }
     PlaybackEntry e;
+    e.rootPath = effectiveRecordRoot(item);
     e.type = "tif";
     e.recordId = item.recordId;
     e.recordIdValue = item.recordIdValue;
-    e.tifPath = QDir(recordCacheDir(item.type, item.recordId)).filePath(tifName);
+    e.tifPath = QDir(recordCacheDir(item)).filePath(tifName);
     e.frameCount = 1;
     if (!validateTif(e.tifPath, &e, err)) return false;
     *out = e;
@@ -2876,11 +3122,11 @@ void RecordPlaybackPanel::deleteSelectedRecords()
     bool touchesPlayback = false;
     QSet<QString> selectedKeys;
     for (const RecordItem& item : selected) {
-        selectedKeys.insert(cacheKey(item.type, item.recordId));
+        selectedKeys.insert(recordIdentityKey(item));
         for (const RecordFile& f : item.files) totalBytes += f.sizeBytes;
     }
     for (const RecordItem& item : playbackRecordItems_) {
-        if (selectedKeys.contains(cacheKey(item.type, item.recordId))) {
+        if (selectedKeys.contains(recordIdentityKey(item))) {
             touchesPlayback = true;
             break;
         }
@@ -2977,6 +3223,38 @@ void RecordPlaybackPanel::appendSelectedToPlaybackSequence()
     downloadSelected();
 }
 
+void RecordPlaybackPanel::playSelectedLocalRecords()
+{
+    const QVector<RecordItem> selected = selectedLocalRecords();
+    if (selected.isEmpty()) return;
+    QString type;
+    QString err;
+    if (!selectedRecordsType(selected, &type, &err)) {
+        setStatus(err, true);
+        return;
+    }
+    setPlaybackSequence(selected, false);
+    if (!frameRefs_.isEmpty()) {
+        setStatus(QString::fromUtf8("本地记录已加入播放序列"), false);
+    }
+}
+
+void RecordPlaybackPanel::appendSelectedLocalRecords()
+{
+    const QVector<RecordItem> selected = selectedLocalRecords();
+    if (selected.isEmpty()) return;
+    QString type;
+    QString err;
+    if (!selectedRecordsType(selected, &type, &err)) {
+        setStatus(err, true);
+        return;
+    }
+    setPlaybackSequence(selected, true);
+    if (!frameRefs_.isEmpty()) {
+        setStatus(QString::fromUtf8("本地记录已追加到播放序列"), false);
+    }
+}
+
 void RecordPlaybackPanel::togglePlaybackSequenceVisible(bool checked)
 {
     if (playbackSequenceTable_) playbackSequenceTable_->setVisible(checked);
@@ -2991,11 +3269,11 @@ void RecordPlaybackPanel::removeSelectedPlaybackRecords()
     const QVector<RecordItem> selected = selectedPlaybackRecords();
     if (selected.isEmpty()) return;
     QSet<QString> removeKeys;
-    for (const RecordItem& item : selected) removeKeys.insert(cacheKey(item.type, item.recordId));
+    for (const RecordItem& item : selected) removeKeys.insert(recordIdentityKey(item));
     if (tifRenderBusy_ && activeTifRenderFrame_ < static_cast<quint64>(frameRefs_.size())) {
         const FrameRef ref = frameRefs_[static_cast<int>(activeTifRenderFrame_)];
         const PlaybackEntry& entry = playbackEntries_[ref.entryIndex];
-        if (removeKeys.contains(cacheKey(entry.type, entry.recordId))) {
+        if (removeKeys.contains(playbackEntryIdentityKey(entry))) {
             QString err;
             if (!cancelTifRenderAndWait(2000, &err)) {
                 setStatus(err, true);
@@ -3005,7 +3283,7 @@ void RecordPlaybackPanel::removeSelectedPlaybackRecords()
     }
     QVector<RecordItem> next;
     for (const RecordItem& item : playbackRecordItems_) {
-        if (!removeKeys.contains(cacheKey(item.type, item.recordId))) next.append(item);
+        if (!removeKeys.contains(recordIdentityKey(item))) next.append(item);
     }
     setPlaybackSequence(next, false);
 }
@@ -3047,7 +3325,7 @@ void RecordPlaybackPanel::showRecordDetails(QTableWidgetItem* item)
     for (const RecordFile& f : record.files) size += f.sizeBytes;
     addText(QString::fromUtf8("总大小"), formatBytes(size));
     addText(QString::fromUtf8("缓存状态"), cacheStateText(cacheState(record)));
-    addText(QString::fromUtf8("缓存目录"), QDir(recordCacheDir(record.type, record.recordId)).absolutePath());
+    addText(QString::fromUtf8("缓存目录"), QDir(recordCacheDir(record)).absolutePath());
     PlaybackEntry entry;
     QString err;
     if (isRecordCached(record, nullptr)) {
@@ -3064,12 +3342,63 @@ void RecordPlaybackPanel::showRecordDetails(QTableWidgetItem* item)
     buttons->addWidget(copyBtn);
     buttons->addStretch(1);
     form->addRow(buttons);
-    const QString cachePath = QDir(recordCacheDir(record.type, record.recordId)).absolutePath();
+    const QString cachePath = QDir(recordCacheDir(record)).absolutePath();
     connect(openBtn, &QPushButton::clicked, &dlg, [cachePath]() {
         QDesktopServices::openUrl(QUrl::fromLocalFile(cachePath));
     });
     connect(copyBtn, &QPushButton::clicked, &dlg, [cachePath]() {
         QGuiApplication::clipboard()->setText(cachePath);
+    });
+    dlg.exec();
+}
+
+void RecordPlaybackPanel::showLocalRecordDetails(QTableWidgetItem* item)
+{
+    if (!item) return;
+    const int row = item->row();
+    if (row < 0 || row >= localRecords_.size()) return;
+    const RecordItem& record = localRecords_[row];
+    QDialog dlg(this);
+    dlg.setWindowTitle(QString::fromUtf8("本地记录详情"));
+    auto* form = new QFormLayout(&dlg);
+    auto addText = [form, &dlg](const QString& label, const QString& value) {
+        auto* lbl = new QLabel(value, &dlg);
+        lbl->setTextInteractionFlags(Qt::TextSelectableByMouse);
+        lbl->setWordWrap(true);
+        form->addRow(label, lbl);
+    };
+    addText("record_id", record.recordId);
+    addText("type", record.type);
+    addText(QString::fromUtf8("来源根目录"), QDir(effectiveRecordRoot(record)).absolutePath());
+    addText(QString::fromUtf8("记录目录"), QDir(recordCacheDir(record)).absolutePath());
+    addText("timestamp", formatRecordTimestamp(record.timestampNs));
+    addText("timestamp_ns", QString::number(record.timestampNs));
+    addText(QString::fromUtf8("文件"), filesText(record));
+    quint64 size = 0;
+    for (const RecordFile& f : record.files) size += f.sizeBytes;
+    addText(QString::fromUtf8("总大小"), formatBytes(size));
+    PlaybackEntry entry;
+    QString err;
+    if (record.type == "raw" && loadRawEntry(record, &entry, &err)) {
+        addText(QString::fromUtf8("raw 尺寸/帧数"), QString("%1x%2 / %3").arg(entry.width).arg(entry.height).arg(entry.frameCount));
+    } else if (record.type == "tif" && loadTifEntry(record, &entry, &err)) {
+        addText(QString::fromUtf8("tif 尺寸/page"), QString("%1x%2 / %3").arg(entry.tifWidth).arg(entry.tifHeight).arg(entry.pageCount));
+    } else if (!err.isEmpty()) {
+        addText(QString::fromUtf8("校验结果"), err);
+    }
+    auto* buttons = new QHBoxLayout();
+    auto* openBtn = new QPushButton(QString::fromUtf8("打开记录目录"), &dlg);
+    auto* copyBtn = new QPushButton(QString::fromUtf8("复制记录路径"), &dlg);
+    buttons->addWidget(openBtn);
+    buttons->addWidget(copyBtn);
+    buttons->addStretch(1);
+    form->addRow(buttons);
+    const QString recordPath = QDir(recordCacheDir(record)).absolutePath();
+    connect(openBtn, &QPushButton::clicked, &dlg, [recordPath]() {
+        QDesktopServices::openUrl(QUrl::fromLocalFile(recordPath));
+    });
+    connect(copyBtn, &QPushButton::clicked, &dlg, [recordPath]() {
+        QGuiApplication::clipboard()->setText(recordPath);
     });
     dlg.exec();
 }
