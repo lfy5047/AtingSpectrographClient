@@ -14,7 +14,7 @@ include(libs/libsdefine.cmake)
 include(cmake/GitVersion.cmake)
 
 # Qt
-find_package(Qt5 COMPONENTS Widgets PrintSupport Network Test REQUIRED)
+find_package(Qt5 COMPONENTS Widgets PrintSupport Network REQUIRED)
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 enable_testing()
@@ -69,107 +69,7 @@ target_link_libraries(${PROJECT_NAME} PRIVATE
     ${LIB_LIST}
 )
 
-add_executable(ImageFrameUtilsTest
-    tests/ImageFrameUtilsTest.cpp
-    src/Ui/ImageFrameUtils.cpp
-)
-target_include_directories(ImageFrameUtilsTest PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Client/rpc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Ui
-)
-target_link_libraries(ImageFrameUtilsTest PRIVATE
-    Qt5::Test
-    Qt5::Gui
-)
-add_test(NAME ImageFrameUtilsTest COMMAND ImageFrameUtilsTest)
-
-add_executable(AppVersionTest
-    tests/AppVersionTest.cpp
-)
-target_include_directories(AppVersionTest PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${GENERATED_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-)
-target_link_libraries(AppVersionTest PRIVATE
-    Qt5::Test
-    Qt5::Core
-)
-add_test(NAME AppVersionTest COMMAND AppVersionTest)
-
-add_executable(RecordServiceTest
-    tests/RecordServiceTest.cpp
-    src/Client/rpc/ControlClient.cpp
-    src/Client/services/RecordService.cpp
-)
-target_include_directories(RecordServiceTest PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Client
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Client/core
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Client/rpc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Client/services
-    ${CMAKE_CURRENT_SOURCE_DIR}/Common/include
-)
-target_link_libraries(RecordServiceTest PRIVATE
-    Qt5::Test
-    Qt5::Network
-)
-add_test(NAME RecordServiceTest COMMAND RecordServiceTest)
-
-add_executable(DeleteVerificationTest
-    tests/DeleteVerificationTest.cpp
-    src/Ui/DeleteVerification.cpp
-)
-target_include_directories(DeleteVerificationTest PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Ui
-)
-target_link_libraries(DeleteVerificationTest PRIVATE
-    Qt5::Test
-    Qt5::Core
-)
-add_test(NAME DeleteVerificationTest COMMAND DeleteVerificationTest)
-
-add_executable(ThemeManagerTest
-    tests/ThemeManagerTest.cpp
-    src/Ui/ThemeManager.cpp
-    ${RESOURCES}
-)
-target_include_directories(ThemeManagerTest PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Ui
-)
-target_link_libraries(ThemeManagerTest PRIVATE
-    Qt5::Test
-    Qt5::Widgets
-)
-add_test(NAME ThemeManagerTest COMMAND ThemeManagerTest)
-
-add_executable(ImageViewThemeTest
-    tests/ImageViewThemeTest.cpp
-    src/Ui/ImageFrameUtils.cpp
-    src/Ui/widgets/TopBarWidget.cpp
-    src/Ui/widgets/ViewerAreaWidget.cpp
-    src/Ui/widgets/ImageView.cpp
-    src/Ui/ThemeManager.cpp
-    ${RESOURCES}
-)
-target_include_directories(ImageViewThemeTest PRIVATE
-    ${CMAKE_CURRENT_SOURCE_DIR}
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Client/rpc
-    ${CMAKE_CURRENT_SOURCE_DIR}/src/Ui
-)
-target_link_libraries(ImageViewThemeTest PRIVATE
-    Qt5::Test
-    Qt5::Widgets
-)
-add_test(NAME ImageViewThemeTest COMMAND ImageViewThemeTest)
+add_subdirectory(tests)
 
 if(WIN32 AND EXISTS "${LIBTIFF_DLL}")
     add_custom_command(TARGET ${PROJECT_NAME} POST_BUILD
