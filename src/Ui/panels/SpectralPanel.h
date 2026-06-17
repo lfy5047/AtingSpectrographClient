@@ -35,6 +35,10 @@ private slots:
     void updateModeVisibility();
 
 private:
+    void loadSettings();
+    void saveSettings() const;
+    void applySavedBandSettings();
+
     QComboBox* sourceModeCombo_ = nullptr;
     QComboBox* sourceCombo_ = nullptr;
     QComboBox* modeCombo_ = nullptr;

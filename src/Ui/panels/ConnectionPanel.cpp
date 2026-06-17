@@ -5,6 +5,7 @@
 #include <QGroupBox>
 #include <QFormLayout>
 #include <QDateTime>
+#include <QSettings>
 #include <QStyle>
 
 ConnectionPanel::ConnectionPanel(DeviceClient* dev, QWidget* parent)
@@ -20,10 +21,13 @@ ConnectionPanel::ConnectionPanel(DeviceClient* dev, QWidget* parent)
         form->setSpacing(6);
 
         hostEdit_ = new QLineEdit("192.168.10.128", this);
+        hostEdit_->setObjectName(QStringLiteral("connectionHostEdit"));
         tcpPortSpin_ = new QSpinBox(this);
+        tcpPortSpin_->setObjectName(QStringLiteral("connectionTcpPortSpin"));
         tcpPortSpin_->setRange(1, 65535);
         tcpPortSpin_->setValue(9000);
         udpPortSpin_ = new QSpinBox(this);
+        udpPortSpin_->setObjectName(QStringLiteral("connectionUdpPortSpin"));
         udpPortSpin_->setRange(1, 65535);
         udpPortSpin_->setValue(1400);
 
@@ -65,7 +69,12 @@ ConnectionPanel::ConnectionPanel(DeviceClient* dev, QWidget* parent)
 
     root->addStretch();
 
+    loadSettings();
+
     // signals
+    connect(hostEdit_, &QLineEdit::textChanged, this, [this]() { saveSettings(); });
+    connect(tcpPortSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) { saveSettings(); });
+    connect(udpPortSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) { saveSettings(); });
     connect(connectBtn_, &QPushButton::clicked, this, &ConnectionPanel::onConnectClicked);
     connect(disconnectBtn_, &QPushButton::clicked, this, [this]() {
         dev_->disconnect();
@@ -77,6 +86,24 @@ ConnectionPanel::ConnectionPanel(DeviceClient* dev, QWidget* parent)
 QString ConnectionPanel::host() const { return hostEdit_->text().trimmed(); }
 quint16 ConnectionPanel::tcpPort() const { return static_cast<quint16>(tcpPortSpin_->value()); }
 quint16 ConnectionPanel::udpPort() const { return static_cast<quint16>(udpPortSpin_->value()); }
+
+void ConnectionPanel::loadSettings()
+{
+    QSettings s;
+    const QString p = QStringLiteral("panels/connection/");
+    hostEdit_->setText(s.value(p + QStringLiteral("host"), hostEdit_->text()).toString());
+    tcpPortSpin_->setValue(s.value(p + QStringLiteral("tcpPort"), tcpPortSpin_->value()).toInt());
+    udpPortSpin_->setValue(s.value(p + QStringLiteral("udpPort"), udpPortSpin_->value()).toInt());
+}
+
+void ConnectionPanel::saveSettings() const
+{
+    QSettings s;
+    const QString p = QStringLiteral("panels/connection/");
+    s.setValue(p + QStringLiteral("host"), hostEdit_->text().trimmed());
+    s.setValue(p + QStringLiteral("tcpPort"), tcpPortSpin_->value());
+    s.setValue(p + QStringLiteral("udpPort"), udpPortSpin_->value());
+}
 
 void ConnectionPanel::onConnectClicked()
 {

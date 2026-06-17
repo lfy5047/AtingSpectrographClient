@@ -5,6 +5,7 @@
 #include <QGroupBox>
 #include <QFormLayout>
 #include <QMessageBox>
+#include <QSettings>
 #include <QStyle>
 
 MirrorPanel::MirrorPanel(DeviceClient* dev, QWidget* parent)
@@ -31,6 +32,7 @@ MirrorPanel::MirrorPanel(DeviceClient* dev, QWidget* parent)
     auto* tgGrp = new QGroupBox(QString::fromUtf8("目标角度"), this);
     auto* tgForm = new QFormLayout(tgGrp);
     targetSpin_ = new QDoubleSpinBox(this);
+    targetSpin_->setObjectName(QStringLiteral("mirrorTargetSpin"));
     targetSpin_->setRange(-9999.0, 9999.0);
     targetSpin_->setDecimals(3);
     tgForm->addRow(QString::fromUtf8("角度"), targetSpin_);
@@ -52,8 +54,8 @@ MirrorPanel::MirrorPanel(DeviceClient* dev, QWidget* parent)
     // speed
     auto* spGrp = new QGroupBox(QString::fromUtf8("速度"), this);
     auto* spForm = new QFormLayout(spGrp);
-    sSpeedSpin_ = new QSpinBox(this); sSpeedSpin_->setRange(1, 50000); sSpeedSpin_->setValue(400);
-    fSpeedSpin_ = new QSpinBox(this); fSpeedSpin_->setRange(1, 50000); fSpeedSpin_->setValue(400);
+    sSpeedSpin_ = new QSpinBox(this); sSpeedSpin_->setObjectName(QStringLiteral("mirrorSSpeedSpin")); sSpeedSpin_->setRange(1, 50000); sSpeedSpin_->setValue(400);
+    fSpeedSpin_ = new QSpinBox(this); fSpeedSpin_->setObjectName(QStringLiteral("mirrorFSpeedSpin")); fSpeedSpin_->setRange(1, 50000); fSpeedSpin_->setValue(400);
     applySpeedBtn_ = new QPushButton(QString::fromUtf8("应用"), this);
     spForm->addRow("S Speed", sSpeedSpin_);
     spForm->addRow("F Speed", fSpeedSpin_);
@@ -71,6 +73,7 @@ MirrorPanel::MirrorPanel(DeviceClient* dev, QWidget* parent)
     // preset
     auto* preRow = new QHBoxLayout();
     presetCombo_ = new QComboBox(this);
+    presetCombo_->setObjectName(QStringLiteral("mirrorPresetCombo"));
     for (int i = 0; i < 10; ++i)
         presetCombo_->addItem(QString("Preset %1").arg(i), i);
     gotoPresetBtn_ = new QPushButton("Go", this);
@@ -84,7 +87,13 @@ MirrorPanel::MirrorPanel(DeviceClient* dev, QWidget* parent)
     root->addWidget(queryBtn_);
     root->addStretch();
 
+    loadSettings();
+
     // connections
+    connect(targetSpin_, QOverload<double>::of(&QDoubleSpinBox::valueChanged), this, [this](double) { saveSettings(); });
+    connect(sSpeedSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) { saveSettings(); });
+    connect(fSpeedSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) { saveSettings(); });
+    connect(presetCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) { saveSettings(); });
     connect(setTargetBtn_, &QPushButton::clicked, this, [this, simpleCb]() {
         dev_->mirror()->setTarget(this, targetSpin_->value(), simpleCb);
     });
@@ -120,6 +129,28 @@ MirrorPanel::MirrorPanel(DeviceClient* dev, QWidget* parent)
         movingLabel_->setProperty("moving", moving ? "true" : "false");
         movingLabel_->style()->polish(movingLabel_);
     });
+}
+
+void MirrorPanel::loadSettings()
+{
+    QSettings s;
+    const QString p = QStringLiteral("panels/mirror/");
+    targetSpin_->setValue(s.value(p + QStringLiteral("targetAngle"), targetSpin_->value()).toDouble());
+    sSpeedSpin_->setValue(s.value(p + QStringLiteral("sSpeed"), sSpeedSpin_->value()).toInt());
+    fSpeedSpin_->setValue(s.value(p + QStringLiteral("fSpeed"), fSpeedSpin_->value()).toInt());
+    const int preset = s.value(p + QStringLiteral("preset"), presetCombo_->currentData()).toInt();
+    const int index = presetCombo_->findData(preset);
+    presetCombo_->setCurrentIndex(index >= 0 ? index : 0);
+}
+
+void MirrorPanel::saveSettings() const
+{
+    QSettings s;
+    const QString p = QStringLiteral("panels/mirror/");
+    s.setValue(p + QStringLiteral("targetAngle"), targetSpin_->value());
+    s.setValue(p + QStringLiteral("sSpeed"), sSpeedSpin_->value());
+    s.setValue(p + QStringLiteral("fSpeed"), fSpeedSpin_->value());
+    s.setValue(p + QStringLiteral("preset"), presetCombo_->currentData());
 }
 
 void MirrorPanel::onQueryAngle()

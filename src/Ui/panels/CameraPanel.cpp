@@ -5,6 +5,7 @@
 #include <QGroupBox>
 #include <QFormLayout>
 #include <QMessageBox>
+#include <QSettings>
 #include <QSizePolicy>
 
 CameraPanel::CameraPanel(DeviceClient* dev, QWidget* parent)
@@ -23,6 +24,7 @@ CameraPanel::CameraPanel(DeviceClient* dev, QWidget* parent)
 
     auto* devRow = new QHBoxLayout();
     deviceCombo_ = new QComboBox(this);
+    deviceCombo_->setObjectName(QStringLiteral("cameraDeviceCombo"));
     deviceCombo_->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
     deviceRefreshBtn_ = new QPushButton(QString::fromUtf8("刷新"), this);
     devRow->addWidget(deviceCombo_, 1);
@@ -38,8 +40,10 @@ CameraPanel::CameraPanel(DeviceClient* dev, QWidget* parent)
     resForm->addRow(QString::fromUtf8("当前"), curResLabel_);
 
     widthSpin_ = new QSpinBox(this);
+    widthSpin_->setObjectName(QStringLiteral("cameraWidthSpin"));
     widthSpin_->setRange(1, 4096); widthSpin_->setSingleStep(8); widthSpin_->setValue(1280);
     heightSpin_ = new QSpinBox(this);
+    heightSpin_->setObjectName(QStringLiteral("cameraHeightSpin"));
     heightSpin_->setRange(1, 4096); heightSpin_->setSingleStep(8); heightSpin_->setValue(1024);
 
     resForm->addRow(QString::fromUtf8("宽"), widthSpin_);
@@ -67,6 +71,8 @@ CameraPanel::CameraPanel(DeviceClient* dev, QWidget* parent)
 
     root->addStretch();
 
+    loadSettings();
+
     connect(applyBtn_, &QPushButton::clicked, this, &CameraPanel::onApplyResolution);
     connect(refreshBtn_, &QPushButton::clicked, this, &CameraPanel::refreshResolution);
     connect(startBtn_, &QPushButton::clicked, this, [this, simpleCb]() { dev_->camera()->startStream(this, simpleCb); });
@@ -74,6 +80,8 @@ CameraPanel::CameraPanel(DeviceClient* dev, QWidget* parent)
     connect(deviceRefreshBtn_, &QPushButton::clicked, this, &CameraPanel::refreshDevices);
     connect(deviceCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, &CameraPanel::onDeviceChanged);
+    connect(widthSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) { saveSettings(); });
+    connect(heightSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) { saveSettings(); });
 
     connect(dev, &DeviceClient::connectionChanged, this, [this](bool c, const QString&) {
         if (c) {
@@ -86,6 +94,24 @@ CameraPanel::CameraPanel(DeviceClient* dev, QWidget* parent)
     });
 
     reloadDeviceUi();
+}
+
+void CameraPanel::loadSettings()
+{
+    QSettings s;
+    const QString p = QStringLiteral("panels/camera/");
+    widthSpin_->setValue(s.value(p + QStringLiteral("width"), widthSpin_->value()).toInt());
+    heightSpin_->setValue(s.value(p + QStringLiteral("height"), heightSpin_->value()).toInt());
+    deviceSelectedMac_ = s.value(p + QStringLiteral("selectedMac"), deviceSelectedMac_).toString();
+}
+
+void CameraPanel::saveSettings() const
+{
+    QSettings s;
+    const QString p = QStringLiteral("panels/camera/");
+    s.setValue(p + QStringLiteral("width"), widthSpin_->value());
+    s.setValue(p + QStringLiteral("height"), heightSpin_->value());
+    s.setValue(p + QStringLiteral("selectedMac"), deviceSelectedMac_);
 }
 
 void CameraPanel::refreshResolution()
@@ -159,6 +185,8 @@ void CameraPanel::onDeviceChanged(int index)
     if (index < 0) return;
 
     const QString mac = deviceCombo_->itemData(index).toString();
+    deviceSelectedMac_ = mac;
+    saveSettings();
 
     deviceRefreshing_ = true;
     deviceCombo_->setEnabled(false);

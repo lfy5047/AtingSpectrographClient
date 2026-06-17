@@ -27,6 +27,10 @@ private:
     void setupMaintenance(class QVBoxLayout* root);
     void setupBadPixel(class QVBoxLayout* root);
 
+    void loadSettings();
+    void saveSettings() const;
+    void connectSettingSignals();
+
     void setActionStatus(const QString& text);
     void updateReadoutLabel(QLabel* label, const QString& title, bool ok, const nlohmann::json& data,
                             const QString& err, const QString& unit = QString());

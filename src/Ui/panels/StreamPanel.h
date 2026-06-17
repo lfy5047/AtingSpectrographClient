@@ -26,6 +26,9 @@ private slots:
     void refreshStatus();
 
 private:
+    void loadSettings();
+    void saveSettings() const;
+
     DeviceClient* dev_;
 
     QCheckBox* chkRaw16_          = nullptr;

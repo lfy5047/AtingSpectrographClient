@@ -21,6 +21,8 @@ private slots:
     void applyGateConfig();
 
 private:
+    void loadSettings();
+    void saveSettings() const;
     void updateOversamplingUi(const CollectOversamplingInfo& info);
     void updateGateConfigUi(const CollectGateConfig& config);
 

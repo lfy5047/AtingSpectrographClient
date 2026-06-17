@@ -20,6 +20,8 @@ private slots:
     void onDeviceChanged(int index);
 
 private:
+    void loadSettings();
+    void saveSettings() const;
     void reloadDeviceUi();
     void applySelectedMac(const QString& mac);
 

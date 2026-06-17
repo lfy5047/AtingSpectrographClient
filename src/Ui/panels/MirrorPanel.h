@@ -18,6 +18,9 @@ private slots:
     void onQueryAngle();
 
 private:
+    void loadSettings();
+    void saveSettings() const;
+
     DeviceClient* dev_;
 
     QLabel*          angleLabel_;

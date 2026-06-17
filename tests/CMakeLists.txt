@@ -140,3 +140,44 @@ target_link_libraries(ImageViewThemeTest PRIVATE
     Qt5::Widgets
 )
 add_test(NAME ImageViewThemeTest COMMAND ImageViewThemeTest)
+
+add_executable(PanelSettingsTest
+    PanelSettingsTest.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/core/DeviceClient.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/rpc/ControlClient.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/stream/FrameAssembler.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/stream/StreamClient.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/CameraService.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/CollectService.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/IrService.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/MirrorService.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/RecordService.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/StreamControlService.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/SystemService.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/panels/CameraPanel.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/panels/CollectPanel.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/panels/ConnectionPanel.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/panels/IrPanel.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/panels/MirrorPanel.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/panels/SpectralPanel.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/panels/StreamPanel.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/PanelSettings.cpp
+)
+target_include_directories(PanelSettingsTest PRIVATE
+    ${PROJECT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/src/Client
+    ${PROJECT_SOURCE_DIR}/src/Client/core
+    ${PROJECT_SOURCE_DIR}/src/Client/rpc
+    ${PROJECT_SOURCE_DIR}/src/Client/services
+    ${PROJECT_SOURCE_DIR}/src/Client/stream
+    ${PROJECT_SOURCE_DIR}/src/Ui
+    ${PROJECT_SOURCE_DIR}/src/Ui/panels
+    ${PROJECT_SOURCE_DIR}/Common/include
+)
+target_link_libraries(PanelSettingsTest PRIVATE
+    Qt5::Test
+    Qt5::Widgets
+    Qt5::Network
+)
+add_test(NAME PanelSettingsTest COMMAND PanelSettingsTest)

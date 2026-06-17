@@ -5,8 +5,11 @@
 #include <QGridLayout>
 #include <QFormLayout>
 #include <QMessageBox>
+#include <QSettings>
 #include <QSizePolicy>
 #include <string>
+
+#include "PanelSettings.h"
 
 namespace {
 
@@ -93,6 +96,9 @@ IrPanel::IrPanel(DeviceClient* dev, QWidget* parent)
     setupMaintenance(root);
     setupBadPixel(root);
 
+    loadSettings();
+    connectSettingSignals();
+
     root->addStretch();
 }
 
@@ -110,8 +116,11 @@ void IrPanel::setupImageParams(QVBoxLayout* root)
     };
 
     brightSpin_ = makeSpin(255);
+    brightSpin_->setObjectName(QStringLiteral("irBrightnessSpin"));
     contrastSpin_ = makeSpin(255);
+    contrastSpin_->setObjectName(QStringLiteral("irContrastSpin"));
     ddeSpin_ = makeSpin(15);
+    ddeSpin_->setObjectName(QStringLiteral("irDdeSpin"));
 
     auto* applyBright   = new QPushButton(QString::fromUtf8("设亮度"), this);
     auto* applyContrast = new QPushButton(QString::fromUtf8("设对比度"), this);
@@ -121,6 +130,7 @@ void IrPanel::setupImageParams(QVBoxLayout* root)
     form->addRow(QString::fromUtf8("DDE"), makeValueButtonRow(ddeSpin_, applyDde, this));
 
     abModeCombo_ = new QComboBox(this);
+    abModeCombo_->setObjectName(QStringLiteral("irAbModeCombo"));
     abModeCombo_->addItem(QString::fromUtf8("手动"), 0);
     abModeCombo_->addItem(QString::fromUtf8("自动"), 1);
     auto* applyAbMode   = new QPushButton(QString::fromUtf8("设 AB 模式"), this);
@@ -154,23 +164,27 @@ void IrPanel::setupIntegration(QVBoxLayout* root)
     auto* form = new QFormLayout(grp);
 
     integSpin_ = new QSpinBox(this);
+    integSpin_->setObjectName(QStringLiteral("irIntegrationSpin"));
     integSpin_->setRange(0, 65535);
     auto* applyInteg = new QPushButton(QString::fromUtf8("设积分"), this);
     form->addRow(QString::fromUtf8("积分时间"), makeValueButtonRow(integSpin_, applyInteg, this));
 
     integModeCombo_ = new QComboBox(this);
+    integModeCombo_->setObjectName(QStringLiteral("irIntegrationModeCombo"));
     integModeCombo_->addItem(QString::fromUtf8("自动积分"), 0);
     integModeCombo_->addItem(QString::fromUtf8("手动积分"), 1);
     auto* applyIntegMode = new QPushButton(QString::fromUtf8("设积分模式"), this);
     form->addRow(QString::fromUtf8("积分模式"), makeValueButtonRow(integModeCombo_, applyIntegMode, this));
 
     gearModeCombo_ = new QComboBox(this);
+    gearModeCombo_->setObjectName(QStringLiteral("irGearModeCombo"));
     gearModeCombo_->addItem(QString::fromUtf8("手动切换"), 0);
     gearModeCombo_->addItem(QString::fromUtf8("自动切换"), 1);
     auto* applyGearMode = new QPushButton(QString::fromUtf8("设档位模式"), this);
     form->addRow(QString::fromUtf8("档位模式"), makeValueButtonRow(gearModeCombo_, applyGearMode, this));
 
     gearSelectCombo_ = new QComboBox(this);
+    gearSelectCombo_->setObjectName(QStringLiteral("irGearSelectCombo"));
     for (int i = 0; i < 8; ++i)
         gearSelectCombo_->addItem(QString::number(i), i);
     auto* applyGear = new QPushButton(QString::fromUtf8("选积分档"), this);
@@ -214,6 +228,7 @@ void IrPanel::setupImageDisplay(QVBoxLayout* root)
     auto* form = new QFormLayout(grp);
 
     imageTypeCombo_ = new QComboBox(this);
+    imageTypeCombo_->setObjectName(QStringLiteral("irImageTypeCombo"));
     imageTypeCombo_->addItem(QString::fromUtf8("增强 8bit"), 0);
     imageTypeCombo_->addItem(QString::fromUtf8("14bit 原始"), 1);
     imageTypeCombo_->addItem(QString::fromUtf8("14bit 预处理"), 2);
@@ -222,6 +237,7 @@ void IrPanel::setupImageDisplay(QVBoxLayout* root)
     form->addRow(QString::fromUtf8("图像类型"), makeValueButtonRow(imageTypeCombo_, applyImageType, this));
 
     testPatternCombo_ = new QComboBox(this);
+    testPatternCombo_->setObjectName(QStringLiteral("irTestPatternCombo"));
     testPatternCombo_->addItem(QString::fromUtf8("竖灰阶"), 0);
     testPatternCombo_->addItem(QString::fromUtf8("横灰阶"), 1);
     testPatternCombo_->addItem(QString::fromUtf8("棋盘格"), 2);
@@ -229,12 +245,14 @@ void IrPanel::setupImageDisplay(QVBoxLayout* root)
     form->addRow(QString::fromUtf8("测试图"), makeValueButtonRow(testPatternCombo_, applyTestPattern, this));
 
     colorModeCombo_ = new QComboBox(this);
+    colorModeCombo_->setObjectName(QStringLiteral("irColorModeCombo"));
     colorModeCombo_->addItem(QString::fromUtf8("白热"), 0);
     colorModeCombo_->addItem(QString::fromUtf8("黑热"), 1);
     auto* applyColorMode = new QPushButton(QString::fromUtf8("设彩色模式"), this);
     form->addRow(QString::fromUtf8("彩色模式"), makeValueButtonRow(colorModeCombo_, applyColorMode, this));
 
     badPixelDispCombo_ = new QComboBox(this);
+    badPixelDispCombo_->setObjectName(QStringLiteral("irBadPixelDisplayCombo"));
     badPixelDispCombo_->addItem(QString::fromUtf8("正常"), 0);
     badPixelDispCombo_->addItem(QString::fromUtf8("高亮"), 1);
     auto* applyBadPixelDisp = new QPushButton(QString::fromUtf8("设坏元显示"), this);
@@ -274,7 +292,9 @@ void IrPanel::setupFilters(QVBoxLayout* root)
         row->setContentsMargins(0, 0, 0, 0);
         row->setSpacing(6);
         tempFilterChk_ = new QCheckBox(QString::fromUtf8("启用"), this);
+        tempFilterChk_->setObjectName(QStringLiteral("irTempFilterCheck"));
         tempFilterCoeffSpin_ = new QSpinBox(this);
+        tempFilterCoeffSpin_->setObjectName(QStringLiteral("irTempFilterCoeffSpin"));
         tempFilterCoeffSpin_->setRange(1, 15);
         tempFilterCoeffSpin_->setValue(1);
         configureCompactSpin(tempFilterCoeffSpin_);
@@ -292,7 +312,9 @@ void IrPanel::setupFilters(QVBoxLayout* root)
         row->setContentsMargins(0, 0, 0, 0);
         row->setSpacing(6);
         medianFilterChk_ = new QCheckBox(QString::fromUtf8("启用"), this);
+        medianFilterChk_->setObjectName(QStringLiteral("irMedianFilterCheck"));
         medianFilterCoeffSpin_ = new QSpinBox(this);
+        medianFilterCoeffSpin_->setObjectName(QStringLiteral("irMedianFilterCoeffSpin"));
         medianFilterCoeffSpin_->setRange(10, 127);
         medianFilterCoeffSpin_->setValue(10);
         configureCompactSpin(medianFilterCoeffSpin_);
@@ -337,14 +359,17 @@ void IrPanel::setupFlipSync(QVBoxLayout* root)
     };
 
     flipHCombo_ = makeOnOffCombo();
+    flipHCombo_->setObjectName(QStringLiteral("irFlipHCombo"));
     auto* applyFlipH = new QPushButton(QString::fromUtf8("设左右翻转"), this);
     form->addRow(QString::fromUtf8("左右翻转"), makeValueButtonRow(flipHCombo_, applyFlipH, this));
 
     flipVCombo_ = makeOnOffCombo();
+    flipVCombo_->setObjectName(QStringLiteral("irFlipVCombo"));
     auto* applyFlipV = new QPushButton(QString::fromUtf8("设上下翻转"), this);
     form->addRow(QString::fromUtf8("上下翻转"), makeValueButtonRow(flipVCombo_, applyFlipV, this));
 
     extSyncCombo_ = makeOnOffCombo();
+    extSyncCombo_->setObjectName(QStringLiteral("irExtSyncCombo"));
     auto* applyExtSync = new QPushButton(QString::fromUtf8("设外同步"), this);
     form->addRow(QString::fromUtf8("外同步"), makeValueButtonRow(extSyncCombo_, applyExtSync, this));
     root->addWidget(grp);
@@ -373,12 +398,14 @@ void IrPanel::setupModeControl(QVBoxLayout* root)
     auto* form = new QFormLayout(grp);
 
     standbyCombo_ = new QComboBox(this);
+    standbyCombo_->setObjectName(QStringLiteral("irStandbyCombo"));
     standbyCombo_->addItem(QString::fromUtf8("正常"), 0);
     standbyCombo_->addItem(QString::fromUtf8("待机"), 1);
     auto* applyStandby = new QPushButton(QString::fromUtf8("设待机"), this);
     form->addRow(QString::fromUtf8("待机"), makeValueButtonRow(standbyCombo_, applyStandby, this));
 
     autoCalibCombo_ = new QComboBox(this);
+    autoCalibCombo_->setObjectName(QStringLiteral("irAutoCalibCombo"));
     autoCalibCombo_->addItem(QString::fromUtf8("关"), 0);
     autoCalibCombo_->addItem(QString::fromUtf8("开"), 1);
     auto* applyAutoCalib = new QPushButton(QString::fromUtf8("设上电校正"), this);
@@ -505,12 +532,14 @@ void IrPanel::setupMaintenance(QVBoxLayout* root)
     auto* form = new QFormLayout();
 
     maintUnlockCombo_ = new QComboBox(this);
+    maintUnlockCombo_->setObjectName(QStringLiteral("irMaintenanceUnlockCombo"));
     maintUnlockCombo_->addItem(QString::fromUtf8("锁定"), 0);
     maintUnlockCombo_->addItem(QString::fromUtf8("解锁"), 1);
     auto* applyUnlock = new QPushButton(QString::fromUtf8("解锁/锁定"), this);
     form->addRow(QString::fromUtf8("维护锁"), makeValueButtonRow(maintUnlockCombo_, applyUnlock, this));
 
     maintExecNameCombo_ = new QComboBox(this);
+    maintExecNameCombo_->setObjectName(QStringLiteral("irMaintenanceExecNameCombo"));
     maintExecNameCombo_->addItem("two_point_calib_p1", QString::fromUtf8("two_point_calib_p1"));
     maintExecNameCombo_->addItem("two_point_calib_p2", QString::fromUtf8("two_point_calib_p2"));
     maintExecNameCombo_->addItem("save_calib_params", QString::fromUtf8("save_calib_params"));
@@ -520,6 +549,7 @@ void IrPanel::setupMaintenance(QVBoxLayout* root)
     maintExecNameCombo_->addItem("bad_pixel_search", QString::fromUtf8("bad_pixel_search"));
 
     maintExecValueSpin_ = new QSpinBox(this);
+    maintExecValueSpin_->setObjectName(QStringLiteral("irMaintenanceExecValueSpin"));
     maintExecValueSpin_->setRange(0, 255);
     auto* applyMaintExec = new QPushButton(QString::fromUtf8("执行维护"), this);
     configureInlineField(maintExecNameCombo_);
@@ -547,9 +577,11 @@ void IrPanel::setupMaintenance(QVBoxLayout* root)
     vb->addLayout(makeGrid2Col({calibP1Btn, calibP2Btn, saveCalibBtn}));
 
     clearKCombo_ = new QComboBox(this);
+    clearKCombo_->setObjectName(QStringLiteral("irClearKCombo"));
     clearKCombo_->addItem(QString::fromUtf8("恢复"), 0);
     clearKCombo_->addItem(QString::fromUtf8("清除"), 1);
     clearBCombo_ = new QComboBox(this);
+    clearBCombo_->setObjectName(QStringLiteral("irClearBCombo"));
     clearBCombo_->addItem(QString::fromUtf8("恢复"), 0);
     clearBCombo_->addItem(QString::fromUtf8("清除"), 1);
 
@@ -638,6 +670,7 @@ void IrPanel::setupBadPixel(QVBoxLayout* root)
     auto* form = new QFormLayout(grp);
 
     badPixelSearchCombo_ = new QComboBox(this);
+    badPixelSearchCombo_->setObjectName(QStringLiteral("irBadPixelSearchCombo"));
     badPixelSearchCombo_->addItem(QString::fromUtf8("重复"), 1);
     badPixelSearchCombo_->addItem(QString::fromUtf8("新增"), 5);
     badPixelSearchCombo_->addItem(QString::fromUtf8("迭代"), 7);
@@ -648,6 +681,7 @@ void IrPanel::setupBadPixel(QVBoxLayout* root)
     {
         for (int i = 0; i < 4; ++i) {
             badPixelPosSpin_[i] = new QSpinBox(this);
+            badPixelPosSpin_[i]->setObjectName(QStringLiteral("irBadPixelPos%1Spin").arg(i));
             badPixelPosSpin_[i]->setRange(0, 255);
         }
         auto* posRow = new QHBoxLayout();
@@ -691,6 +725,139 @@ void IrPanel::setupBadPixel(QVBoxLayout* root)
 }
 
 // ---- helpers ----
+
+void IrPanel::loadSettings()
+{
+    QSettings s;
+    const QString p = QStringLiteral("panels/ir/");
+
+    brightSpin_->setValue(s.value(p + QStringLiteral("brightness"), brightSpin_->value()).toInt());
+    contrastSpin_->setValue(s.value(p + QStringLiteral("contrast"), contrastSpin_->value()).toInt());
+    ddeSpin_->setValue(s.value(p + QStringLiteral("dde"), ddeSpin_->value()).toInt());
+    PanelSettings::setComboByData(abModeCombo_, s.value(p + QStringLiteral("abMode"), abModeCombo_->currentData()), 0);
+
+    integSpin_->setValue(s.value(p + QStringLiteral("integration"), integSpin_->value()).toInt());
+    PanelSettings::setComboByData(integModeCombo_, s.value(p + QStringLiteral("integrationMode"), integModeCombo_->currentData()), 0);
+    PanelSettings::setComboByData(gearModeCombo_, s.value(p + QStringLiteral("gearMode"), gearModeCombo_->currentData()), 0);
+    PanelSettings::setComboByData(gearSelectCombo_, s.value(p + QStringLiteral("gearSelect"), gearSelectCombo_->currentData()), 0);
+
+    PanelSettings::setComboByData(imageTypeCombo_, s.value(p + QStringLiteral("imageType"), imageTypeCombo_->currentData()), 0);
+    PanelSettings::setComboByData(testPatternCombo_, s.value(p + QStringLiteral("testPattern"), testPatternCombo_->currentData()), 0);
+    PanelSettings::setComboByData(colorModeCombo_, s.value(p + QStringLiteral("colorMode"), colorModeCombo_->currentData()), 0);
+    PanelSettings::setComboByData(badPixelDispCombo_, s.value(p + QStringLiteral("badPixelDisplay"), badPixelDispCombo_->currentData()), 0);
+
+    tempFilterChk_->setChecked(s.value(p + QStringLiteral("temporalFilterEnabled"), tempFilterChk_->isChecked()).toBool());
+    tempFilterCoeffSpin_->setValue(s.value(p + QStringLiteral("temporalFilterCoeff"), tempFilterCoeffSpin_->value()).toInt());
+    medianFilterChk_->setChecked(s.value(p + QStringLiteral("medianFilterEnabled"), medianFilterChk_->isChecked()).toBool());
+    medianFilterCoeffSpin_->setValue(s.value(p + QStringLiteral("medianFilterCoeff"), medianFilterCoeffSpin_->value()).toInt());
+
+    PanelSettings::setComboByData(flipHCombo_, s.value(p + QStringLiteral("flipH"), flipHCombo_->currentData()), 0);
+    PanelSettings::setComboByData(flipVCombo_, s.value(p + QStringLiteral("flipV"), flipVCombo_->currentData()), 0);
+    PanelSettings::setComboByData(extSyncCombo_, s.value(p + QStringLiteral("externalSync"), extSyncCombo_->currentData()), 0);
+    PanelSettings::setComboByData(standbyCombo_, s.value(p + QStringLiteral("standby"), standbyCombo_->currentData()), 0);
+    PanelSettings::setComboByData(autoCalibCombo_, s.value(p + QStringLiteral("autoCalibration"), autoCalibCombo_->currentData()), 0);
+
+    PanelSettings::setComboByData(maintUnlockCombo_, s.value(p + QStringLiteral("maintenanceUnlock"), maintUnlockCombo_->currentData()), 0);
+    PanelSettings::setComboByData(maintExecNameCombo_, s.value(p + QStringLiteral("maintenanceExecName"), maintExecNameCombo_->currentData()), 0);
+    maintExecValueSpin_->setValue(s.value(p + QStringLiteral("maintenanceExecValue"), maintExecValueSpin_->value()).toInt());
+    PanelSettings::setComboByData(clearKCombo_, s.value(p + QStringLiteral("clearK"), clearKCombo_->currentData()), 0);
+    PanelSettings::setComboByData(clearBCombo_, s.value(p + QStringLiteral("clearB"), clearBCombo_->currentData()), 0);
+
+    PanelSettings::setComboByData(badPixelSearchCombo_, s.value(p + QStringLiteral("badPixelSearch"), badPixelSearchCombo_->currentData()), 0);
+    for (int i = 0; i < 4; ++i) {
+        if (badPixelPosSpin_[i])
+            badPixelPosSpin_[i]->setValue(s.value(p + QStringLiteral("badPixelPos%1").arg(i),
+                                                  badPixelPosSpin_[i]->value()).toInt());
+    }
+}
+
+void IrPanel::saveSettings() const
+{
+    QSettings s;
+    const QString p = QStringLiteral("panels/ir/");
+
+    s.setValue(p + QStringLiteral("brightness"), brightSpin_->value());
+    s.setValue(p + QStringLiteral("contrast"), contrastSpin_->value());
+    s.setValue(p + QStringLiteral("dde"), ddeSpin_->value());
+    s.setValue(p + QStringLiteral("abMode"), abModeCombo_->currentData());
+
+    s.setValue(p + QStringLiteral("integration"), integSpin_->value());
+    s.setValue(p + QStringLiteral("integrationMode"), integModeCombo_->currentData());
+    s.setValue(p + QStringLiteral("gearMode"), gearModeCombo_->currentData());
+    s.setValue(p + QStringLiteral("gearSelect"), gearSelectCombo_->currentData());
+
+    s.setValue(p + QStringLiteral("imageType"), imageTypeCombo_->currentData());
+    s.setValue(p + QStringLiteral("testPattern"), testPatternCombo_->currentData());
+    s.setValue(p + QStringLiteral("colorMode"), colorModeCombo_->currentData());
+    s.setValue(p + QStringLiteral("badPixelDisplay"), badPixelDispCombo_->currentData());
+
+    s.setValue(p + QStringLiteral("temporalFilterEnabled"), tempFilterChk_->isChecked());
+    s.setValue(p + QStringLiteral("temporalFilterCoeff"), tempFilterCoeffSpin_->value());
+    s.setValue(p + QStringLiteral("medianFilterEnabled"), medianFilterChk_->isChecked());
+    s.setValue(p + QStringLiteral("medianFilterCoeff"), medianFilterCoeffSpin_->value());
+
+    s.setValue(p + QStringLiteral("flipH"), flipHCombo_->currentData());
+    s.setValue(p + QStringLiteral("flipV"), flipVCombo_->currentData());
+    s.setValue(p + QStringLiteral("externalSync"), extSyncCombo_->currentData());
+    s.setValue(p + QStringLiteral("standby"), standbyCombo_->currentData());
+    s.setValue(p + QStringLiteral("autoCalibration"), autoCalibCombo_->currentData());
+
+    s.setValue(p + QStringLiteral("maintenanceUnlock"), maintUnlockCombo_->currentData());
+    s.setValue(p + QStringLiteral("maintenanceExecName"), maintExecNameCombo_->currentData());
+    s.setValue(p + QStringLiteral("maintenanceExecValue"), maintExecValueSpin_->value());
+    s.setValue(p + QStringLiteral("clearK"), clearKCombo_->currentData());
+    s.setValue(p + QStringLiteral("clearB"), clearBCombo_->currentData());
+
+    s.setValue(p + QStringLiteral("badPixelSearch"), badPixelSearchCombo_->currentData());
+    for (int i = 0; i < 4; ++i) {
+        if (badPixelPosSpin_[i])
+            s.setValue(p + QStringLiteral("badPixelPos%1").arg(i), badPixelPosSpin_[i]->value());
+    }
+}
+
+void IrPanel::connectSettingSignals()
+{
+    auto connectSpin = [this](QSpinBox* spin) {
+        connect(spin, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) { saveSettings(); });
+    };
+    auto connectCombo = [this](QComboBox* combo) {
+        connect(combo, QOverload<int>::of(&QComboBox::currentIndexChanged), this, [this](int) { saveSettings(); });
+    };
+    auto connectCheck = [this](QCheckBox* check) {
+        connect(check, &QCheckBox::toggled, this, [this](bool) { saveSettings(); });
+    };
+
+    connectSpin(brightSpin_);
+    connectSpin(contrastSpin_);
+    connectSpin(ddeSpin_);
+    connectCombo(abModeCombo_);
+    connectSpin(integSpin_);
+    connectCombo(integModeCombo_);
+    connectCombo(gearModeCombo_);
+    connectCombo(gearSelectCombo_);
+    connectCombo(imageTypeCombo_);
+    connectCombo(testPatternCombo_);
+    connectCombo(colorModeCombo_);
+    connectCombo(badPixelDispCombo_);
+    connectCheck(tempFilterChk_);
+    connectSpin(tempFilterCoeffSpin_);
+    connectCheck(medianFilterChk_);
+    connectSpin(medianFilterCoeffSpin_);
+    connectCombo(flipHCombo_);
+    connectCombo(flipVCombo_);
+    connectCombo(extSyncCombo_);
+    connectCombo(standbyCombo_);
+    connectCombo(autoCalibCombo_);
+    connectCombo(maintUnlockCombo_);
+    connectCombo(maintExecNameCombo_);
+    connectSpin(maintExecValueSpin_);
+    connectCombo(clearKCombo_);
+    connectCombo(clearBCombo_);
+    connectCombo(badPixelSearchCombo_);
+    for (QSpinBox* spin : badPixelPosSpin_) {
+        if (spin) connectSpin(spin);
+    }
+}
 
 void IrPanel::setActionStatus(const QString& text)
 {

@@ -23,6 +23,9 @@ private slots:
     void onConnectionChanged(bool connected, const QString& ip);
 
 private:
+    void loadSettings();
+    void saveSettings() const;
+
     DeviceClient* dev_;
 
     QLineEdit*   hostEdit_;

@@ -3,6 +3,7 @@
 #include <QVBoxLayout>
 #include <QGroupBox>
 #include <QFormLayout>
+#include <QSettings>
 
 StreamPanel::StreamPanel(DeviceClient* dev, QWidget* parent)
     : QWidget(parent), dev_(dev)
@@ -15,10 +16,15 @@ StreamPanel::StreamPanel(DeviceClient* dev, QWidget* parent)
     auto* vb = new QVBoxLayout(grp);
 
     chkRaw16_          = new QCheckBox("Raw16", this);
+    chkRaw16_->setObjectName(QStringLiteral("streamRaw16Check"));
     chkPreview8_       = new QCheckBox("Preview8", this);
+    chkPreview8_->setObjectName(QStringLiteral("streamPreview8Check"));
     chkSliceStitch16_  = new QCheckBox("SliceStitch16", this);
+    chkSliceStitch16_->setObjectName(QStringLiteral("streamSliceStitch16Check"));
     chkRegionStitch16_ = new QCheckBox("RegionStitch16", this);
+    chkRegionStitch16_->setObjectName(QStringLiteral("streamRegionStitch16Check"));
     chkSpectralPreview_ = new QCheckBox("SpectralPreview", this);
+    chkSpectralPreview_->setObjectName(QStringLiteral("streamSpectralPreviewCheck"));
     chkPreview8_->setVisible(false);
     chkRegionStitch16_->setVisible(false);
 
@@ -52,13 +58,42 @@ StreamPanel::StreamPanel(DeviceClient* dev, QWidget* parent)
 
     root->addStretch();
 
+    loadSettings();
+
     connect(applyBtn_, &QPushButton::clicked, this, &StreamPanel::onApply);
     connect(unsubBtn_, &QPushButton::clicked, this, &StreamPanel::onUnsubAll);
+    connect(chkRaw16_, &QCheckBox::toggled, this, [this](bool) { saveSettings(); });
+    connect(chkPreview8_, &QCheckBox::toggled, this, [this](bool) { saveSettings(); });
+    connect(chkSliceStitch16_, &QCheckBox::toggled, this, [this](bool) { saveSettings(); });
+    connect(chkRegionStitch16_, &QCheckBox::toggled, this, [this](bool) { saveSettings(); });
+    connect(chkSpectralPreview_, &QCheckBox::toggled, this, [this](bool) { saveSettings(); });
 
     pollTimer_ = new QTimer(this);
     pollTimer_->setInterval(2000);
     connect(pollTimer_, &QTimer::timeout, this, &StreamPanel::refreshStatus);
     pollTimer_->start();
+}
+
+void StreamPanel::loadSettings()
+{
+    QSettings s;
+    const QString p = QStringLiteral("panels/stream/");
+    chkRaw16_->setChecked(s.value(p + QStringLiteral("raw16"), chkRaw16_->isChecked()).toBool());
+    chkPreview8_->setChecked(s.value(p + QStringLiteral("preview8"), chkPreview8_->isChecked()).toBool());
+    chkSliceStitch16_->setChecked(s.value(p + QStringLiteral("sliceStitch16"), chkSliceStitch16_->isChecked()).toBool());
+    chkRegionStitch16_->setChecked(s.value(p + QStringLiteral("regionStitch16"), chkRegionStitch16_->isChecked()).toBool());
+    chkSpectralPreview_->setChecked(s.value(p + QStringLiteral("spectralPreview"), chkSpectralPreview_->isChecked()).toBool());
+}
+
+void StreamPanel::saveSettings() const
+{
+    QSettings s;
+    const QString p = QStringLiteral("panels/stream/");
+    s.setValue(p + QStringLiteral("raw16"), chkRaw16_->isChecked());
+    s.setValue(p + QStringLiteral("preview8"), chkPreview8_->isChecked());
+    s.setValue(p + QStringLiteral("sliceStitch16"), chkSliceStitch16_->isChecked());
+    s.setValue(p + QStringLiteral("regionStitch16"), chkRegionStitch16_->isChecked());
+    s.setValue(p + QStringLiteral("spectralPreview"), chkSpectralPreview_->isChecked());
 }
 
 QStringList StreamPanel::selectedChannels() const
