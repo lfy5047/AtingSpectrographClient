@@ -37,6 +37,35 @@ CollectPanel::CollectPanel(DeviceClient* dev, QWidget* parent)
     fl->addRow(QString::fromUtf8("有效 S 速度"), effectiveSSpeedLabel_);
     fl->addRow(QString::fromUtf8("有效 F 速度"), effectiveFSpeedLabel_);
 
+    discardFrontMsSpin_ = new QSpinBox(this);
+    discardFrontMsSpin_->setRange(0, 600000);
+    discardFrontMsSpin_->setSuffix(QStringLiteral(" ms"));
+    discardBackMsSpin_ = new QSpinBox(this);
+    discardBackMsSpin_->setRange(0, 600000);
+    discardBackMsSpin_->setSuffix(QStringLiteral(" ms"));
+    forwardOffsetFramesSpin_ = new QSpinBox(this);
+    forwardOffsetFramesSpin_->setRange(-100000, 100000);
+    reverseOffsetFramesSpin_ = new QSpinBox(this);
+    reverseOffsetFramesSpin_->setRange(-100000, 100000);
+
+    gateCollectingLabel_ = new QLabel(QString::fromUtf8("未知"), this);
+    gateCollectingLabel_->setProperty("readout", true);
+    gatePendingLabel_ = new QLabel(QString::fromUtf8("未知"), this);
+    gatePendingLabel_->setProperty("readout", true);
+    fl->addRow(QString::fromUtf8("前段丢弃时间"), discardFrontMsSpin_);
+    fl->addRow(QString::fromUtf8("后段过扫时间"), discardBackMsSpin_);
+    fl->addRow(QString::fromUtf8("正向补偿帧"), forwardOffsetFramesSpin_);
+    fl->addRow(QString::fromUtf8("反向补偿帧"), reverseOffsetFramesSpin_);
+    fl->addRow(QString::fromUtf8("门控采集状态"), gateCollectingLabel_);
+    fl->addRow(QString::fromUtf8("门控配置状态"), gatePendingLabel_);
+
+    auto* gateRow = new QHBoxLayout();
+    refreshGateConfigBtn_ = new QPushButton(QString::fromUtf8("读取门控"), this);
+    applyGateConfigBtn_ = new QPushButton(QString::fromUtf8("应用门控"), this);
+    gateRow->addWidget(refreshGateConfigBtn_);
+    gateRow->addWidget(applyGateConfigBtn_);
+    fl->addRow(gateRow);
+
     auto* row = new QHBoxLayout();
     startBtn_ = new QPushButton(QString::fromUtf8("开始"), this);
     startBtn_->setProperty("primary", true);
@@ -60,6 +89,8 @@ CollectPanel::CollectPanel(DeviceClient* dev, QWidget* parent)
     connect(stopBtn_, &QPushButton::clicked, this, [this, cb]() { dev_->collect()->stop(this, cb); });
     connect(refreshBtn_, &QPushButton::clicked, this, &CollectPanel::refreshStatus);
     connect(applyOversamplingBtn_, &QPushButton::clicked, this, &CollectPanel::applyOversampling);
+    connect(refreshGateConfigBtn_, &QPushButton::clicked, this, &CollectPanel::refreshGateConfig);
+    connect(applyGateConfigBtn_, &QPushButton::clicked, this, &CollectPanel::applyGateConfig);
 
     connect(dev, &DeviceClient::connectionChanged, this, [this](bool c, const QString&) {
         if (c) refreshStatus();
@@ -77,6 +108,7 @@ void CollectPanel::refreshStatus()
             effectiveFSpeedLabel_->setText(QString::fromUtf8("-"));
         }
     });
+    refreshGateConfig();
 }
 
 void CollectPanel::applyOversampling()
@@ -95,6 +127,40 @@ void CollectPanel::applyOversampling()
         });
 }
 
+void CollectPanel::refreshGateConfig()
+{
+    refreshGateConfigBtn_->setEnabled(false);
+    dev_->collect()->getGateConfig(this, [this](bool ok, const CollectGateConfig& config, const QString& err) {
+        refreshGateConfigBtn_->setEnabled(true);
+        if (ok) {
+            updateGateConfigUi(config);
+        } else {
+            gateCollectingLabel_->setText(QString::fromUtf8("未知"));
+            gatePendingLabel_->setText(err.isEmpty() ? QString::fromUtf8("读取失败") : err);
+        }
+    });
+}
+
+void CollectPanel::applyGateConfig()
+{
+    CollectGateConfig config;
+    config.discardFrontMs = discardFrontMsSpin_->value();
+    config.discardBackMs = discardBackMsSpin_->value();
+    config.forwardOffsetFrames = forwardOffsetFramesSpin_->value();
+    config.reverseOffsetFrames = reverseOffsetFramesSpin_->value();
+
+    applyGateConfigBtn_->setEnabled(false);
+    dev_->collect()->setGateConfig(this, config,
+        [this](bool ok, const CollectGateConfig& updatedConfig, const QString& err) {
+            applyGateConfigBtn_->setEnabled(true);
+            if (ok) {
+                updateGateConfigUi(updatedConfig);
+            } else {
+                QMessageBox::warning(this, "Collect", err);
+            }
+        });
+}
+
 void CollectPanel::updateOversamplingUi(const CollectOversamplingInfo& info)
 {
     statusLabel_->setText(info.collecting
@@ -108,4 +174,32 @@ void CollectPanel::updateOversamplingUi(const CollectOversamplingInfo& info)
     effectiveFSpeedLabel_->setText(QString::number(info.effectiveFSpeed));
     oversampleFactorSpin_->setEnabled(!info.collecting);
     applyOversamplingBtn_->setEnabled(!info.collecting);
+}
+
+void CollectPanel::updateGateConfigUi(const CollectGateConfig& config)
+{
+    {
+        const QSignalBlocker blocker(discardFrontMsSpin_);
+        discardFrontMsSpin_->setValue(config.discardFrontMs);
+    }
+    {
+        const QSignalBlocker blocker(discardBackMsSpin_);
+        discardBackMsSpin_->setValue(config.discardBackMs);
+    }
+    {
+        const QSignalBlocker blocker(forwardOffsetFramesSpin_);
+        forwardOffsetFramesSpin_->setValue(config.forwardOffsetFrames);
+    }
+    {
+        const QSignalBlocker blocker(reverseOffsetFramesSpin_);
+        reverseOffsetFramesSpin_->setValue(config.reverseOffsetFrames);
+    }
+
+    gateCollectingLabel_->setText(config.collecting
+        ? QString::fromUtf8("采集中")
+        : QString::fromUtf8("已停止"));
+    gatePendingLabel_->setText(config.pendingConfig
+        ? QString::fromUtf8("下一段生效")
+        : QString::fromUtf8("已生效"));
+    applyGateConfigBtn_->setEnabled(true);
 }

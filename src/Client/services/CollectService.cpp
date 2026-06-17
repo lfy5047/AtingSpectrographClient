@@ -31,6 +31,28 @@ CollectOversamplingInfo oversamplingInfoFromJson(const nlohmann::json& data)
     return info;
 }
 
+CollectGateConfig gateConfigFromJson(const nlohmann::json& data)
+{
+    CollectGateConfig config;
+    config.discardFrontMs = data.value("discard_front_ms", 0);
+    config.discardBackMs = data.value("discard_back_ms", 0);
+    config.forwardOffsetFrames = data.value("forward_offset_frames", 0);
+    config.reverseOffsetFrames = data.value("reverse_offset_frames", 0);
+    config.collecting = data.value("is_collecting", false);
+    config.pendingConfig = data.value("pending_config", false);
+    return config;
+}
+
+nlohmann::json gateConfigToJson(const CollectGateConfig& config)
+{
+    return {
+        {"discard_front_ms", config.discardFrontMs},
+        {"discard_back_ms", config.discardBackMs},
+        {"forward_offset_frames", config.forwardOffsetFrames},
+        {"reverse_offset_frames", config.reverseOffsetFrames},
+    };
+}
+
 }
 
 void CollectService::getOversampling(QObject* context, CollectOversamplingCallback cb) const
@@ -50,5 +72,25 @@ void CollectService::setOversampling(QObject* context, int oversampleFactor,
         const CollectOversamplingInfo info = r.ok ? oversamplingInfoFromJson(r.data)
                                                   : CollectOversamplingInfo();
         if (cb) cb(r.ok, info, r.msg);
+    });
+}
+
+void CollectService::getGateConfig(QObject* context, CollectGateConfigCallback cb) const
+{
+    request(RpcCommand::Collect::GetGateConfig, {}, context, [cb](const RpcResult& r) {
+        const CollectGateConfig config = r.ok ? gateConfigFromJson(r.data)
+                                              : CollectGateConfig();
+        if (cb) cb(r.ok, config, r.msg);
+    });
+}
+
+void CollectService::setGateConfig(QObject* context, const CollectGateConfig& config,
+                                   CollectGateConfigCallback cb) const
+{
+    request(RpcCommand::Collect::SetGateConfig, gateConfigToJson(config),
+            context, [cb](const RpcResult& r) {
+        const CollectGateConfig updatedConfig = r.ok ? gateConfigFromJson(r.data)
+                                                     : CollectGateConfig();
+        if (cb) cb(r.ok, updatedConfig, r.msg);
     });
 }

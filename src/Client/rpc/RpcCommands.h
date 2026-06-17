@@ -100,6 +100,8 @@ static const char* const Stop = "collect.stop";
 static const char* const Status = "collect.status";
 static const char* const GetOversampling = "collect.get_oversampling";
 static const char* const SetOversampling = "collect.set_oversampling";
+static const char* const GetGateConfig = "collect.get_gate_config";
+static const char* const SetGateConfig = "collect.set_gate_config";
 }
 
 namespace Record {

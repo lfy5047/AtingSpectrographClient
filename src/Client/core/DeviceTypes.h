@@ -23,6 +23,17 @@ struct CollectOversamplingInfo {
 
 using CollectOversamplingCallback = std::function<void(bool ok, const CollectOversamplingInfo& info, const QString& err)>;
 
+struct CollectGateConfig {
+    int discardFrontMs = 0;
+    int discardBackMs = 0;
+    int forwardOffsetFrames = 0;
+    int reverseOffsetFrames = 0;
+    bool collecting = false;
+    bool pendingConfig = false;
+};
+
+using CollectGateConfigCallback = std::function<void(bool ok, const CollectGateConfig& config, const QString& err)>;
+
 struct CameraDeviceOption {
     QString name;
     QString mac;

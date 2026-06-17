@@ -18,6 +18,8 @@ class CollectServiceTest : public QObject {
 private slots:
     void setOversamplingSendsFactor();
     void getOversamplingParsesServerData();
+    void setGateConfigSendsAllFields();
+    void getGateConfigParsesServerData();
 };
 
 namespace {
@@ -137,6 +139,75 @@ void CollectServiceTest::getOversamplingParsesServerData()
                    {"effective_s_speed", 200},
                    {"effective_f_speed", 150},
                    {"is_collecting", true}});
+    QTRY_VERIFY(called);
+}
+
+void CollectServiceTest::setGateConfigSendsAllFields()
+{
+    QTcpServer server;
+    ControlClient client;
+    QTcpSocket* socket = connectClient(server, client);
+    QVERIFY(socket);
+    QTRY_VERIFY(client.isConnected());
+
+    CollectService service(&client);
+    CollectGateConfig config;
+    config.discardFrontMs = 12;
+    config.discardBackMs = 34;
+    config.forwardOffsetFrames = -2;
+    config.reverseOffsetFrames = 3;
+
+    service.setGateConfig(nullptr, config, nullptr);
+
+    const CapturedRequest req = readRequest(socket);
+    QCOMPARE(req.header.magic, cli::proto::kCtrlMagic);
+    QCOMPARE(req.header.version, cli::proto::kCtrlProtoVersion);
+    QCOMPARE(req.header.type, static_cast<uint16_t>(cli::proto::Request));
+    QVERIFY(req.header.payload_len > 0);
+    QCOMPARE(QString::fromStdString(req.payload.value("cmd", std::string())),
+             QStringLiteral("collect.set_gate_config"));
+    QVERIFY(req.payload.contains("params"));
+    QCOMPARE(req.payload["params"].value("discard_front_ms", -1), 12);
+    QCOMPARE(req.payload["params"].value("discard_back_ms", -1), 34);
+    QCOMPARE(req.payload["params"].value("forward_offset_frames", 0), -2);
+    QCOMPARE(req.payload["params"].value("reverse_offset_frames", 0), 3);
+}
+
+void CollectServiceTest::getGateConfigParsesServerData()
+{
+    QTcpServer server;
+    ControlClient client;
+    QTcpSocket* socket = connectClient(server, client);
+    QVERIFY(socket);
+    QTRY_VERIFY(client.isConnected());
+
+    CollectService service(&client);
+    bool called = false;
+    service.getGateConfig(nullptr, [&called](bool ok, const CollectGateConfig& config, const QString& err) {
+        called = true;
+        QVERIFY2(ok, qPrintable(err));
+        QCOMPARE(config.discardFrontMs, 100);
+        QCOMPARE(config.discardBackMs, 200);
+        QCOMPARE(config.forwardOffsetFrames, -5);
+        QCOMPARE(config.reverseOffsetFrames, 6);
+        QVERIFY(config.collecting);
+        QVERIFY(config.pendingConfig);
+    });
+
+    const CapturedRequest req = readRequest(socket);
+    QCOMPARE(req.header.magic, cli::proto::kCtrlMagic);
+    QCOMPARE(req.header.version, cli::proto::kCtrlProtoVersion);
+    QCOMPARE(req.header.type, static_cast<uint16_t>(cli::proto::Request));
+    QVERIFY(req.header.payload_len > 0);
+    QCOMPARE(QString::fromStdString(req.payload.value("cmd", std::string())),
+             QStringLiteral("collect.get_gate_config"));
+    writeResponse(socket, req.header.seq,
+                  {{"discard_front_ms", 100},
+                   {"discard_back_ms", 200},
+                   {"forward_offset_frames", -5},
+                   {"reverse_offset_frames", 6},
+                   {"is_collecting", true},
+                   {"pending_config", true}});
     QTRY_VERIFY(called);
 }
 

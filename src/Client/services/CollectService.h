@@ -14,4 +14,6 @@ public:
     void status(QObject* context, CollectStatusCallback cb) const;
     void getOversampling(QObject* context, CollectOversamplingCallback cb) const;
     void setOversampling(QObject* context, int oversampleFactor, CollectOversamplingCallback cb) const;
+    void getGateConfig(QObject* context, CollectGateConfigCallback cb) const;
+    void setGateConfig(QObject* context, const CollectGateConfig& config, CollectGateConfigCallback cb) const;
 };
