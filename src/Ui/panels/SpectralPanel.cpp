@@ -12,6 +12,10 @@
 #include "PanelSettings.h"
 #include "Protocol.h"
 
+namespace {
+const int kUnknownBandMax = 65535;
+}
+
 SpectralPanel::SpectralPanel(QWidget* parent)
     : QWidget(parent)
 {
@@ -42,32 +46,32 @@ SpectralPanel::SpectralPanel(QWidget* parent)
 
     singleBandSpin_ = new QSpinBox(this);
     singleBandSpin_->setObjectName(QStringLiteral("spectralSingleBandSpin"));
-    singleBandSpin_->setRange(0, 0);
+    singleBandSpin_->setRange(0, kUnknownBandMax);
     form->addRow(QString::fromUtf8("波段"), singleBandSpin_);
 
     rangeStartSpin_ = new QSpinBox(this);
     rangeStartSpin_->setObjectName(QStringLiteral("spectralRangeStartSpin"));
-    rangeStartSpin_->setRange(0, 0);
+    rangeStartSpin_->setRange(0, kUnknownBandMax);
     form->addRow(QString::fromUtf8("起始波段"), rangeStartSpin_);
 
     rangeEndSpin_ = new QSpinBox(this);
     rangeEndSpin_->setObjectName(QStringLiteral("spectralRangeEndSpin"));
-    rangeEndSpin_->setRange(0, 0);
+    rangeEndSpin_->setRange(0, kUnknownBandMax);
     form->addRow(QString::fromUtf8("结束波段"), rangeEndSpin_);
 
     rBandSpin_ = new QSpinBox(this);
     rBandSpin_->setObjectName(QStringLiteral("spectralRBandSpin"));
-    rBandSpin_->setRange(0, 0);
+    rBandSpin_->setRange(0, kUnknownBandMax);
     form->addRow("R Band", rBandSpin_);
 
     gBandSpin_ = new QSpinBox(this);
     gBandSpin_->setObjectName(QStringLiteral("spectralGBandSpin"));
-    gBandSpin_->setRange(0, 0);
+    gBandSpin_->setRange(0, kUnknownBandMax);
     form->addRow("G Band", gBandSpin_);
 
     bBandSpin_ = new QSpinBox(this);
     bBandSpin_->setObjectName(QStringLiteral("spectralBBandSpin"));
-    bBandSpin_->setRange(0, 0);
+    bBandSpin_->setRange(0, kUnknownBandMax);
     form->addRow("B Band", bBandSpin_);
 
     root->addWidget(modeGroup);
@@ -134,7 +138,18 @@ SpectralRenderOptions SpectralPanel::renderOptions() const
 
 void SpectralPanel::setBandCount(int bands)
 {
+    if (bands <= 0) {
+        applySavedBandSettings();
+        return;
+    }
+
     const int maxBand = bands > 0 ? bands - 1 : 0;
+    const QSignalBlocker blockSingle(singleBandSpin_);
+    const QSignalBlocker blockRangeStart(rangeStartSpin_);
+    const QSignalBlocker blockRangeEnd(rangeEndSpin_);
+    const QSignalBlocker blockR(rBandSpin_);
+    const QSignalBlocker blockG(gBandSpin_);
+    const QSignalBlocker blockB(bBandSpin_);
     singleBandSpin_->setRange(0, maxBand);
     rangeStartSpin_->setRange(0, maxBand);
     rangeEndSpin_->setRange(0, maxBand);

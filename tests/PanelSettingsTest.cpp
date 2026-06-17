@@ -32,6 +32,8 @@ private slots:
     void collectPanelRestoresSavedInputs();
     void streamPanelRestoresSavedChannels();
     void spectralPanelRestoresSavedRenderInputs();
+    void spectralPanelShowsSavedBandsBeforeStreamMetadata();
+    void spectralPanelKeepsSavedBandsWhenStatsAreEmpty();
     void irPanelRestoresSavedUserInputs();
 };
 
@@ -240,6 +242,45 @@ void PanelSettingsTest::spectralPanelRestoresSavedRenderInputs()
     QCOMPARE(rBand->value(), 8);
     QCOMPARE(gBand->value(), 9);
     QCOMPARE(bBand->value(), 10);
+}
+
+void PanelSettingsTest::spectralPanelShowsSavedBandsBeforeStreamMetadata()
+{
+    QSettings settings;
+    settings.setValue(QStringLiteral("panels/spectral/mode"), static_cast<int>(SpectralRenderOptions::RangeAverage));
+    settings.setValue(QStringLiteral("panels/spectral/rangeStart"), 6);
+    settings.setValue(QStringLiteral("panels/spectral/rangeEnd"), 7);
+
+    SpectralPanel panel;
+
+    auto* rangeStart = panel.findChild<QSpinBox*>(QStringLiteral("spectralRangeStartSpin"));
+    auto* rangeEnd = panel.findChild<QSpinBox*>(QStringLiteral("spectralRangeEndSpin"));
+
+    QVERIFY(rangeStart);
+    QVERIFY(rangeEnd);
+    QCOMPARE(rangeStart->value(), 6);
+    QCOMPARE(rangeEnd->value(), 7);
+}
+
+void PanelSettingsTest::spectralPanelKeepsSavedBandsWhenStatsAreEmpty()
+{
+    QSettings settings;
+    settings.setValue(QStringLiteral("panels/spectral/mode"), static_cast<int>(SpectralRenderOptions::RangeAverage));
+    settings.setValue(QStringLiteral("panels/spectral/rangeStart"), 6);
+    settings.setValue(QStringLiteral("panels/spectral/rangeEnd"), 7);
+
+    SpectralPanel panel;
+    panel.setBandCount(0);
+
+    auto* rangeStart = panel.findChild<QSpinBox*>(QStringLiteral("spectralRangeStartSpin"));
+    auto* rangeEnd = panel.findChild<QSpinBox*>(QStringLiteral("spectralRangeEndSpin"));
+
+    QVERIFY(rangeStart);
+    QVERIFY(rangeEnd);
+    QCOMPARE(rangeStart->value(), 6);
+    QCOMPARE(rangeEnd->value(), 7);
+    QCOMPARE(QSettings().value(QStringLiteral("panels/spectral/rangeStart")).toInt(), 6);
+    QCOMPARE(QSettings().value(QStringLiteral("panels/spectral/rangeEnd")).toInt(), 7);
 }
 
 void PanelSettingsTest::irPanelRestoresSavedUserInputs()
