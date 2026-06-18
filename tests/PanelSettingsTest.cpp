@@ -2,11 +2,19 @@
 
 #include <QComboBox>
 #include <QCheckBox>
+#include <QCoreApplication>
 #include <QDir>
 #include <QDoubleSpinBox>
+#include <QElapsedTimer>
+#include <QLabel>
 #include <QLineEdit>
 #include <QSettings>
 #include <QSpinBox>
+#include <QTcpServer>
+#include <QTcpSocket>
+
+#include <algorithm>
+#include <cstring>
 
 #include "CameraPanel.h"
 #include "CollectPanel.h"
@@ -15,6 +23,7 @@
 #include "IrPanel.h"
 #include "MirrorPanel.h"
 #include "PanelSettings.h"
+#include "Protocol.h"
 #include "SpectralPanel.h"
 #include "StreamPanel.h"
 #include "TempControlPanel.h"
@@ -33,6 +42,7 @@ private slots:
     void mirrorPanelRestoresSavedMotionInputs();
     void collectPanelRestoresSavedInputs();
     void tempControlPanelRestoresSavedUserInputs();
+    void tempControlStatusRefreshKeepsTargetInput();
     void streamPanelRestoresSavedChannels();
     void spectralPanelRestoresSavedRenderInputs();
     void spectralPanelShowsSavedBandsBeforeStreamMetadata();
@@ -52,6 +62,70 @@ void PanelSettingsTest::initTestCase()
 void PanelSettingsTest::init()
 {
     QSettings().clear();
+}
+
+namespace {
+
+struct CapturedControlRequest {
+    cli::proto::CtrlHeader header;
+    nlohmann::json payload;
+};
+
+CapturedControlRequest readControlRequest(QTcpSocket* socket)
+{
+    using namespace cli::proto;
+
+    const int headerSize = static_cast<int>(sizeof(CtrlHeader));
+    QElapsedTimer timer;
+    timer.start();
+    while (socket->bytesAvailable() < headerSize && timer.elapsed() < 1000) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        socket->waitForReadyRead(50);
+    }
+    if (socket->bytesAvailable() < headerSize) return CapturedControlRequest();
+
+    CapturedControlRequest req;
+    const QByteArray headerBytes = socket->read(sizeof(CtrlHeader));
+    std::memcpy(&req.header, headerBytes.constData(), sizeof(CtrlHeader));
+    timer.restart();
+    while (socket->bytesAvailable() < req.header.payload_len) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
+        socket->waitForReadyRead(50);
+        if (timer.elapsed() >= 1000) return req;
+    }
+    const QByteArray payloadBytes = socket->read(req.header.payload_len);
+    req.payload = nlohmann::json::parse(payloadBytes.constData());
+    return req;
+}
+
+void writeControlResponse(QTcpSocket* socket, uint32_t seq, const nlohmann::json& data)
+{
+    using namespace cli::proto;
+
+    const std::string body = nlohmann::json{{"ok", true}, {"data", data}}.dump();
+    QByteArray frame(static_cast<int>(sizeof(CtrlHeader) + body.size()), '\0');
+
+    CtrlHeader header;
+    header.magic = kCtrlMagic;
+    header.version = kCtrlProtoVersion;
+    header.type = static_cast<uint16_t>(Response);
+    header.seq = seq;
+    header.payload_len = static_cast<uint32_t>(body.size());
+
+    std::memcpy(frame.data(), &header, sizeof(header));
+    std::memcpy(frame.data() + sizeof(header), body.data(), body.size());
+    socket->write(frame);
+    QVERIFY(socket->waitForBytesWritten(1000));
+}
+
+bool panelHasLabelText(QWidget* panel, const QString& text)
+{
+    const auto labels = panel->findChildren<QLabel*>();
+    return std::any_of(labels.begin(), labels.end(), [&text](const QLabel* label) {
+        return label->text() == text;
+    });
+}
+
 }
 
 void PanelSettingsTest::restoresComboByItemData()
@@ -217,6 +291,38 @@ void PanelSettingsTest::tempControlPanelRestoresSavedUserInputs()
     QCOMPARE(module->text(), QStringLiteral("TC2"));
     QCOMPARE(param->text(), QStringLiteral("TCPIDP"));
     QCOMPARE(raw->text(), QStringLiteral("TC1:TCACTTEMP?"));
+}
+
+void PanelSettingsTest::tempControlStatusRefreshKeepsTargetInput()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+
+    DeviceClient device;
+    TempControlPanel panel(&device);
+    auto* target = panel.findChild<QDoubleSpinBox*>(QStringLiteral("tempControlTargetSpin"));
+    QVERIFY(target);
+    target->setValue(30.0);
+
+    device.connectTo(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(server.waitForNewConnection(1000));
+    QTcpSocket* socket = server.nextPendingConnection();
+    QVERIFY(socket);
+    QTRY_VERIFY(device.isConnected());
+
+    const CapturedControlRequest req = readControlRequest(socket);
+    QCOMPARE(QString::fromStdString(req.payload.value("cmd", std::string())),
+             QStringLiteral("tempctrl.status"));
+    writeControlResponse(socket, req.header.seq,
+                         {{"adjust_temperature", 25.5},
+                          {"actual_temperature", 24.8},
+                          {"switch", 1},
+                          {"output_enabled", 1},
+                          {"error_status", "255"},
+                          {"ts", 123456}});
+
+    QTRY_VERIFY(panelHasLabelText(&panel, QString::fromUtf8("24.80 ℃")));
+    QCOMPARE(target->value(), 30.0);
 }
 
 void PanelSettingsTest::streamPanelRestoresSavedChannels()

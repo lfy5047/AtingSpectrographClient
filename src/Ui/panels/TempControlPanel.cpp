@@ -12,7 +12,6 @@
 #include <QLineEdit>
 #include <QPushButton>
 #include <QSettings>
-#include <QSignalBlocker>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -341,10 +340,6 @@ void TempControlPanel::updateStatusUi(const TempControlStatus& status)
         timestampLabel_->setText(QDateTime::fromMSecsSinceEpoch(status.timestamp).toString(Qt::ISODate));
     } else {
         timestampLabel_->setText(QDateTime::currentDateTime().toString(Qt::ISODate));
-    }
-    {
-        const QSignalBlocker blocker(targetTemperatureSpin_);
-        targetTemperatureSpin_->setValue(status.adjustTemperature);
     }
 }
 
