@@ -89,6 +89,26 @@ target_link_libraries(CollectServiceTest PRIVATE
 )
 add_test(NAME CollectServiceTest COMMAND CollectServiceTest)
 
+add_executable(TempControlServiceTest
+    TempControlServiceTest.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/rpc/ControlClient.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/TempControlService.cpp
+)
+target_include_directories(TempControlServiceTest PRIVATE
+    ${PROJECT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/src/Client
+    ${PROJECT_SOURCE_DIR}/src/Client/core
+    ${PROJECT_SOURCE_DIR}/src/Client/rpc
+    ${PROJECT_SOURCE_DIR}/src/Client/services
+    ${PROJECT_SOURCE_DIR}/Common/include
+)
+target_link_libraries(TempControlServiceTest PRIVATE
+    Qt5::Test
+    Qt5::Network
+)
+add_test(NAME TempControlServiceTest COMMAND TempControlServiceTest)
+
 add_executable(DeleteVerificationTest
     DeleteVerificationTest.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/DeleteVerification.cpp
@@ -154,6 +174,7 @@ add_executable(PanelSettingsTest
     ${PROJECT_SOURCE_DIR}/src/Client/services/RecordService.cpp
     ${PROJECT_SOURCE_DIR}/src/Client/services/StreamControlService.cpp
     ${PROJECT_SOURCE_DIR}/src/Client/services/SystemService.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/TempControlService.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/panels/CameraPanel.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/panels/CollectPanel.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/panels/ConnectionPanel.cpp
@@ -161,6 +182,7 @@ add_executable(PanelSettingsTest
     ${PROJECT_SOURCE_DIR}/src/Ui/panels/MirrorPanel.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/panels/SpectralPanel.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/panels/StreamPanel.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/panels/TempControlPanel.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/PanelSettings.cpp
 )
 target_include_directories(PanelSettingsTest PRIVATE

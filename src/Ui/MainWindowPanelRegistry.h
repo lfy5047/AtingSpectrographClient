@@ -15,6 +15,7 @@ class SpectralPanel;
 class SpectrumAnalysisCoordinator;
 class SpectrumAnalysisPanel;
 class StreamPanel;
+class TempControlPanel;
 
 class MainWindowPanelRegistry : public QObject {
     Q_OBJECT
@@ -25,14 +26,15 @@ public:
         Camera = 2,
         Mirror = 3,
         Ir = 4,
-        Collect = 5,
-        Stream = 6,
-        Spectral = 7,
-        RecordPlayback = 8,
-        SpectrumAnalysis = 9,
-        Log = 10,
+        TempControl = 5,
+        Collect = 6,
+        Stream = 7,
+        Spectral = 8,
+        RecordPlayback = 9,
+        SpectrumAnalysis = 10,
+        Log = 11,
     };
-    static const int PanelVersion = 3;
+    static const int PanelVersion = 4;
 
     MainWindowPanelRegistry(DeviceClient* device, MainWindowChrome* chrome, QObject* parent = nullptr);
 
@@ -65,6 +67,7 @@ private:
     CameraPanel* cameraPanel_ = nullptr;
     MirrorPanel* mirrorPanel_ = nullptr;
     IrPanel* irPanel_ = nullptr;
+    TempControlPanel* tempControlPanel_ = nullptr;
     CollectPanel* collectPanel_ = nullptr;
     StreamPanel* streamPanel_ = nullptr;
     SpectralPanel* spectralPanel_ = nullptr;

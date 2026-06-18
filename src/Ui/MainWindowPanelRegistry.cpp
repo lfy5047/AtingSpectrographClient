@@ -14,6 +14,7 @@
 #include "panels/SpectralPanel.h"
 #include "panels/SpectrumAnalysisPanel.h"
 #include "panels/StreamPanel.h"
+#include "panels/TempControlPanel.h"
 #include "widgets/ViewerAreaWidget.h"
 
 #include <QEvent>
@@ -28,10 +29,12 @@ const char* kPanelNames[] = {
     "相机设置",
     "转镜控制",
     "红外热像",
+    "温控控制",
     "数据采集",
     "流通道",
     "光谱显示",
     "录制回放",
+    "光谱分析",
     "系统日志",
 };
 
@@ -108,6 +111,7 @@ void MainWindowPanelRegistry::setupPanels()
     cameraPanel_ = new CameraPanel(device_, stack);
     mirrorPanel_ = new MirrorPanel(device_, stack);
     irPanel_ = new IrPanel(device_, stack);
+    tempControlPanel_ = new TempControlPanel(device_, stack);
     collectPanel_ = new CollectPanel(device_, stack);
     streamPanel_ = new StreamPanel(device_, stack);
     spectralPanel_ = new SpectralPanel(stack);
@@ -119,6 +123,7 @@ void MainWindowPanelRegistry::setupPanels()
     stack->addWidget(wrapInScroll(cameraPanel_));
     stack->addWidget(wrapInScroll(mirrorPanel_));
     stack->addWidget(wrapInScroll(irPanel_));
+    stack->addWidget(wrapInScroll(tempControlPanel_));
     stack->addWidget(wrapInScroll(collectPanel_));
     stack->addWidget(wrapInScroll(streamPanel_));
     stack->addWidget(wrapInScroll(spectralPanel_));

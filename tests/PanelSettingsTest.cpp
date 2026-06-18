@@ -3,6 +3,7 @@
 #include <QComboBox>
 #include <QCheckBox>
 #include <QDir>
+#include <QDoubleSpinBox>
 #include <QLineEdit>
 #include <QSettings>
 #include <QSpinBox>
@@ -16,6 +17,7 @@
 #include "PanelSettings.h"
 #include "SpectralPanel.h"
 #include "StreamPanel.h"
+#include "TempControlPanel.h"
 
 class PanelSettingsTest : public QObject {
     Q_OBJECT
@@ -30,6 +32,7 @@ private slots:
     void cameraPanelRestoresSavedResolution();
     void mirrorPanelRestoresSavedMotionInputs();
     void collectPanelRestoresSavedInputs();
+    void tempControlPanelRestoresSavedUserInputs();
     void streamPanelRestoresSavedChannels();
     void spectralPanelRestoresSavedRenderInputs();
     void spectralPanelShowsSavedBandsBeforeStreamMetadata();
@@ -179,6 +182,41 @@ void PanelSettingsTest::collectPanelRestoresSavedInputs()
     QCOMPARE(back->value(), 22);
     QCOMPARE(forward->value(), -3);
     QCOMPARE(reverse->value(), 4);
+}
+
+void PanelSettingsTest::tempControlPanelRestoresSavedUserInputs()
+{
+    QSettings settings;
+    const QString p = QStringLiteral("panels/tempControl/");
+    settings.setValue(p + QStringLiteral("targetTemperature"), 26.5);
+    settings.setValue(p + QStringLiteral("selectedKey"), QStringLiteral("ramp_speed"));
+    settings.setValue(p + QStringLiteral("advancedValue"), QStringLiteral("1.25"));
+    settings.setValue(p + QStringLiteral("module"), QStringLiteral("TC2"));
+    settings.setValue(p + QStringLiteral("param"), QStringLiteral("TCPIDP"));
+    settings.setValue(p + QStringLiteral("rawCommand"), QStringLiteral("TC1:TCACTTEMP?"));
+
+    DeviceClient device;
+    TempControlPanel panel(&device);
+
+    auto* target = panel.findChild<QDoubleSpinBox*>(QStringLiteral("tempControlTargetSpin"));
+    auto* key = panel.findChild<QComboBox*>(QStringLiteral("tempControlKeyCombo"));
+    auto* value = panel.findChild<QLineEdit*>(QStringLiteral("tempControlAdvancedValueEdit"));
+    auto* module = panel.findChild<QLineEdit*>(QStringLiteral("tempControlModuleEdit"));
+    auto* param = panel.findChild<QLineEdit*>(QStringLiteral("tempControlParamEdit"));
+    auto* raw = panel.findChild<QLineEdit*>(QStringLiteral("tempControlRawCommandEdit"));
+
+    QVERIFY(target);
+    QVERIFY(key);
+    QVERIFY(value);
+    QVERIFY(module);
+    QVERIFY(param);
+    QVERIFY(raw);
+    QCOMPARE(target->value(), 26.5);
+    QCOMPARE(key->currentData().toString(), QStringLiteral("ramp_speed"));
+    QCOMPARE(value->text(), QStringLiteral("1.25"));
+    QCOMPARE(module->text(), QStringLiteral("TC2"));
+    QCOMPARE(param->text(), QStringLiteral("TCPIDP"));
+    QCOMPARE(raw->text(), QStringLiteral("TC1:TCACTTEMP?"));
 }
 
 void PanelSettingsTest::streamPanelRestoresSavedChannels()

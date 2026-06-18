@@ -104,6 +104,17 @@ static const char* const GetGateConfig = "collect.get_gate_config";
 static const char* const SetGateConfig = "collect.set_gate_config";
 }
 
+namespace TempControl {
+static const char* const Params = "tempctrl.params";
+static const char* const Status = "tempctrl.status";
+static const char* const SetAdjustTemperature = "tempctrl.set_adjust_temperature";
+static const char* const SetSwitch = "tempctrl.set_switch";
+static const char* const Query = "tempctrl.query";
+static const char* const Set = "tempctrl.set";
+static const char* const Save = "tempctrl.save";
+static const char* const SendRaw = "tempctrl.send_raw";
+}
+
 namespace Record {
 static const char* const GetRetention = "record.get_retention";
 static const char* const SetRetention = "record.set_retention";
