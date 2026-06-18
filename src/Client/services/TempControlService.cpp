@@ -45,6 +45,7 @@ TempControlStatus statusFromJson(const nlohmann::json& data)
     TempControlStatus status;
     status.adjustTemperature = data.value("adjust_temperature", 0.0);
     status.actualTemperature = data.value("actual_temperature", 0.0);
+    status.actualVoltage = data.value("actual_voltage", 0.0);
     status.switchEnabled = jsonValueToBool(data, "switch");
     status.outputEnabled = jsonValueToBool(data, "output_enabled");
     const auto errorIt = data.find("error_status");

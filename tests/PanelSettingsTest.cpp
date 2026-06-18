@@ -263,6 +263,8 @@ void PanelSettingsTest::tempControlPanelRestoresSavedUserInputs()
     QSettings settings;
     const QString p = QStringLiteral("panels/tempControl/");
     settings.setValue(p + QStringLiteral("targetTemperature"), 26.5);
+    settings.setValue(p + QStringLiteral("maxTemperature"), 80.5);
+    settings.setValue(p + QStringLiteral("maxVoltage"), 12.5);
     settings.setValue(p + QStringLiteral("selectedKey"), QStringLiteral("ramp_speed"));
     settings.setValue(p + QStringLiteral("advancedValue"), QStringLiteral("1.25"));
     settings.setValue(p + QStringLiteral("module"), QStringLiteral("TC2"));
@@ -273,6 +275,8 @@ void PanelSettingsTest::tempControlPanelRestoresSavedUserInputs()
     TempControlPanel panel(&device);
 
     auto* target = panel.findChild<QDoubleSpinBox*>(QStringLiteral("tempControlTargetSpin"));
+    auto* maxTemperature = panel.findChild<QDoubleSpinBox*>(QStringLiteral("tempControlMaxTemperatureSpin"));
+    auto* maxVoltage = panel.findChild<QDoubleSpinBox*>(QStringLiteral("tempControlMaxVoltageSpin"));
     auto* key = panel.findChild<QComboBox*>(QStringLiteral("tempControlKeyCombo"));
     auto* value = panel.findChild<QLineEdit*>(QStringLiteral("tempControlAdvancedValueEdit"));
     auto* module = panel.findChild<QLineEdit*>(QStringLiteral("tempControlModuleEdit"));
@@ -280,17 +284,18 @@ void PanelSettingsTest::tempControlPanelRestoresSavedUserInputs()
     auto* raw = panel.findChild<QLineEdit*>(QStringLiteral("tempControlRawCommandEdit"));
 
     QVERIFY(target);
+    QVERIFY(maxTemperature);
+    QVERIFY(maxVoltage);
     QVERIFY(key);
     QVERIFY(value);
-    QVERIFY(module);
-    QVERIFY(param);
-    QVERIFY(raw);
+    QVERIFY(!module);
+    QVERIFY(!param);
+    QVERIFY(!raw);
     QCOMPARE(target->value(), 26.5);
+    QCOMPARE(maxTemperature->value(), 80.5);
+    QCOMPARE(maxVoltage->value(), 12.5);
     QCOMPARE(key->currentData().toString(), QStringLiteral("ramp_speed"));
     QCOMPARE(value->text(), QStringLiteral("1.25"));
-    QCOMPARE(module->text(), QStringLiteral("TC2"));
-    QCOMPARE(param->text(), QStringLiteral("TCPIDP"));
-    QCOMPARE(raw->text(), QStringLiteral("TC1:TCACTTEMP?"));
 }
 
 void PanelSettingsTest::tempControlStatusRefreshKeepsTargetInput()
@@ -316,12 +321,14 @@ void PanelSettingsTest::tempControlStatusRefreshKeepsTargetInput()
     writeControlResponse(socket, req.header.seq,
                          {{"adjust_temperature", 25.5},
                           {"actual_temperature", 24.8},
+                          {"actual_voltage", -1.25},
                           {"switch", 1},
                           {"output_enabled", 1},
                           {"error_status", "255"},
                           {"ts", 123456}});
 
     QTRY_VERIFY(panelHasLabelText(&panel, QString::fromUtf8("24.80 ℃")));
+    QVERIFY(panelHasLabelText(&panel, QString::fromUtf8("-1.25 V")));
     QCOMPARE(target->value(), 30.0);
 }
 

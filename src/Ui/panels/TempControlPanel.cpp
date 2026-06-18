@@ -3,7 +3,6 @@
 #include "DeviceClient.h"
 
 #include <QComboBox>
-#include <QDateTime>
 #include <QDoubleSpinBox>
 #include <QFormLayout>
 #include <QGroupBox>
@@ -66,12 +65,13 @@ TempControlPanel::TempControlPanel(DeviceClient* dev, QWidget* parent)
 
     connect(targetTemperatureSpin_, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
             this, [this](double) { saveSettings(); });
+    connect(maxTemperatureSpin_, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, [this](double) { saveSettings(); });
+    connect(maxVoltageSpin_, QOverload<double>::of(&QDoubleSpinBox::valueChanged),
+            this, [this](double) { saveSettings(); });
     connect(keyCombo_, QOverload<int>::of(&QComboBox::currentIndexChanged),
             this, [this](int) { saveSettings(); });
     connect(advancedValueEdit_, &QLineEdit::textChanged, this, [this](const QString&) { saveSettings(); });
-    connect(moduleEdit_, &QLineEdit::textChanged, this, [this](const QString&) { saveSettings(); });
-    connect(paramEdit_, &QLineEdit::textChanged, this, [this](const QString&) { saveSettings(); });
-    connect(rawCommandEdit_, &QLineEdit::textChanged, this, [this](const QString&) { saveSettings(); });
 
     connect(setTargetButton_, &QPushButton::clicked, this, [this]() {
         const double value = targetTemperatureSpin_->value();
@@ -84,6 +84,20 @@ TempControlPanel::TempControlPanel(DeviceClient* dev, QWidget* parent)
         runJsonAction(QString::fromUtf8("保存调节温度"),
                       [this](JsonCallback cb) {
             dev_->tempControl()->save(this, QStringLiteral("adjust_temperature"), cb);
+        });
+    });
+    connect(setMaxTemperatureButton_, &QPushButton::clicked, this, [this]() {
+        const QString value = QString::number(maxTemperatureSpin_->value(), 'f', 2);
+        runJsonAction(QString::fromUtf8("设置最高设定温度"),
+                      [this, value](JsonCallback cb) {
+            dev_->tempControl()->set(this, QStringLiteral("max_temperature"), value, cb);
+        });
+    });
+    connect(setMaxVoltageButton_, &QPushButton::clicked, this, [this]() {
+        const QString value = QString::number(maxVoltageSpin_->value(), 'f', 2);
+        runJsonAction(QString::fromUtf8("设置最大输出电压"),
+                      [this, value](JsonCallback cb) {
+            dev_->tempControl()->set(this, QStringLiteral("max_voltage"), value, cb);
         });
     });
     connect(switchOnButton_, &QPushButton::clicked, this, [this]() {
@@ -114,39 +128,6 @@ TempControlPanel::TempControlPanel(DeviceClient* dev, QWidget* parent)
                       [this, key](JsonCallback cb) { dev_->tempControl()->save(this, key, cb); });
     });
 
-    connect(queryParamButton_, &QPushButton::clicked, this, [this]() {
-        const QString module = moduleName();
-        const QString param = paramName();
-        runJsonAction(QString::fromUtf8("查询模块参数"),
-                      [this, module, param](JsonCallback cb) {
-            dev_->tempControl()->queryRawParam(this, module, param, cb);
-        });
-    });
-    connect(setParamButton_, &QPushButton::clicked, this, [this]() {
-        const QString module = moduleName();
-        const QString param = paramName();
-        const QString value = advancedValue();
-        runJsonAction(QString::fromUtf8("设置模块参数"),
-                      [this, module, param, value](JsonCallback cb) {
-            dev_->tempControl()->setRawParam(this, module, param, value, cb);
-        });
-    });
-    connect(saveParamButton_, &QPushButton::clicked, this, [this]() {
-        const QString module = moduleName();
-        const QString param = paramName();
-        runJsonAction(QString::fromUtf8("保存模块参数"),
-                      [this, module, param](JsonCallback cb) {
-            dev_->tempControl()->saveRawParam(this, module, param, cb);
-        });
-    });
-    connect(sendRawButton_, &QPushButton::clicked, this, [this]() {
-        const QString command = rawCommandEdit_->text().trimmed();
-        runJsonAction(QString::fromUtf8("发送原始命令"),
-                      [this, command](JsonCallback cb) {
-            dev_->tempControl()->sendRaw(this, command, cb);
-        });
-    });
-
     if (dev_ && dev_->isConnected()) {
         refreshStatus();
         refreshTimer_->start();
@@ -165,16 +146,14 @@ void TempControlPanel::setupUi()
     auto* statusForm = new QFormLayout(statusGroup);
     actualTemperatureLabel_ = makeReadout(this);
     adjustTemperatureLabel_ = makeReadout(this);
+    actualVoltageLabel_ = makeReadout(this);
     switchLabel_ = makeReadout(this);
     outputEnabledLabel_ = makeReadout(this);
-    errorStatusLabel_ = makeReadout(this);
-    timestampLabel_ = makeReadout(this);
     statusForm->addRow(QString::fromUtf8("实际温度"), actualTemperatureLabel_);
     statusForm->addRow(QString::fromUtf8("调节温度"), adjustTemperatureLabel_);
+    statusForm->addRow(QString::fromUtf8("实际输出电压"), actualVoltageLabel_);
     statusForm->addRow(QString::fromUtf8("温控开关"), switchLabel_);
     statusForm->addRow(QString::fromUtf8("功率输出"), outputEnabledLabel_);
-    statusForm->addRow(QString::fromUtf8("错误状态"), errorStatusLabel_);
-    statusForm->addRow(QString::fromUtf8("更新时间"), timestampLabel_);
     root->addWidget(statusGroup);
 
     auto* controlGroup = new QGroupBox(QString::fromUtf8("常用控制"), this);
@@ -193,6 +172,31 @@ void TempControlPanel::setupUi()
     targetRow->addWidget(setTargetButton_);
     targetRow->addWidget(saveTargetButton_);
     controlForm->addRow(QString::fromUtf8("目标温度"), targetRow);
+
+    maxTemperatureSpin_ = new QDoubleSpinBox(this);
+    maxTemperatureSpin_->setObjectName(QStringLiteral("tempControlMaxTemperatureSpin"));
+    maxTemperatureSpin_->setRange(-273.15, 1000.0);
+    maxTemperatureSpin_->setDecimals(2);
+    maxTemperatureSpin_->setSingleStep(0.1);
+    maxTemperatureSpin_->setSuffix(QString::fromUtf8(" ℃"));
+    setMaxTemperatureButton_ = new QPushButton(QString::fromUtf8("设置"), this);
+    auto* maxTemperatureRow = new QHBoxLayout();
+    maxTemperatureRow->addWidget(maxTemperatureSpin_, 1);
+    maxTemperatureRow->addWidget(setMaxTemperatureButton_);
+    controlForm->addRow(QString::fromUtf8("最高设定温度"), maxTemperatureRow);
+
+    maxVoltageSpin_ = new QDoubleSpinBox(this);
+    maxVoltageSpin_->setObjectName(QStringLiteral("tempControlMaxVoltageSpin"));
+    maxVoltageSpin_->setRange(0.0, 1000.0);
+    maxVoltageSpin_->setDecimals(2);
+    maxVoltageSpin_->setSingleStep(0.1);
+    maxVoltageSpin_->setSuffix(QStringLiteral(" V"));
+    setMaxVoltageButton_ = new QPushButton(QString::fromUtf8("设置"), this);
+    auto* maxVoltageRow = new QHBoxLayout();
+    maxVoltageRow->addWidget(maxVoltageSpin_, 1);
+    maxVoltageRow->addWidget(setMaxVoltageButton_);
+    controlForm->addRow(QString::fromUtf8("最大输出电压"), maxVoltageRow);
+
     switchOnButton_ = new QPushButton(QString::fromUtf8("打开温控"), this);
     switchOnButton_->setProperty("primary", true);
     switchOffButton_ = new QPushButton(QString::fromUtf8("关闭温控"), this);
@@ -239,29 +243,6 @@ void TempControlPanel::setupUi()
     saveKeyButton_ = new QPushButton(QString::fromUtf8("保存参数"), this);
     addButtonRow(advancedForm, {queryKeyButton_, setKeyButton_, saveKeyButton_});
 
-    moduleEdit_ = new QLineEdit(this);
-    moduleEdit_->setObjectName(QStringLiteral("tempControlModuleEdit"));
-    moduleEdit_->setPlaceholderText(QStringLiteral("TC1"));
-    paramEdit_ = new QLineEdit(this);
-    paramEdit_->setObjectName(QStringLiteral("tempControlParamEdit"));
-    paramEdit_->setPlaceholderText(QStringLiteral("TCACTTEMP"));
-    advancedForm->addRow(QString::fromUtf8("模块"), moduleEdit_);
-    advancedForm->addRow(QString::fromUtf8("协议参数"), paramEdit_);
-
-    queryParamButton_ = new QPushButton(QString::fromUtf8("查询模块参数"), this);
-    setParamButton_ = new QPushButton(QString::fromUtf8("设置模块参数"), this);
-    saveParamButton_ = new QPushButton(QString::fromUtf8("保存模块参数"), this);
-    addButtonRow(advancedForm, {queryParamButton_, setParamButton_, saveParamButton_});
-
-    rawCommandEdit_ = new QLineEdit(this);
-    rawCommandEdit_->setObjectName(QStringLiteral("tempControlRawCommandEdit"));
-    rawCommandEdit_->setPlaceholderText(QStringLiteral("TC1:TCACTTEMP?"));
-    sendRawButton_ = new QPushButton(QString::fromUtf8("发送原始命令"), this);
-    auto* rawRow = new QHBoxLayout();
-    rawRow->addWidget(rawCommandEdit_, 1);
-    rawRow->addWidget(sendRawButton_);
-    advancedForm->addRow(QString::fromUtf8("Raw"), rawRow);
-
     resultLabel_ = makeReadout(this);
     resultLabel_->setWordWrap(true);
     advancedForm->addRow(QString::fromUtf8("结果"), resultLabel_);
@@ -274,6 +255,10 @@ void TempControlPanel::loadSettings()
     QSettings s;
     targetTemperatureSpin_->setValue(s.value(kSettingsPrefix + QStringLiteral("targetTemperature"),
                                              targetTemperatureSpin_->value()).toDouble());
+    maxTemperatureSpin_->setValue(s.value(kSettingsPrefix + QStringLiteral("maxTemperature"),
+                                          maxTemperatureSpin_->value()).toDouble());
+    maxVoltageSpin_->setValue(s.value(kSettingsPrefix + QStringLiteral("maxVoltage"),
+                                      maxVoltageSpin_->value()).toDouble());
     const QString selectedKeyValue = s.value(kSettingsPrefix + QStringLiteral("selectedKey"),
                                              QStringLiteral("adjust_temperature")).toString();
     const int keyIndex = keyCombo_->findData(selectedKeyValue);
@@ -281,21 +266,16 @@ void TempControlPanel::loadSettings()
         keyCombo_->setCurrentIndex(keyIndex);
     }
     advancedValueEdit_->setText(s.value(kSettingsPrefix + QStringLiteral("advancedValue")).toString());
-    moduleEdit_->setText(s.value(kSettingsPrefix + QStringLiteral("module"),
-                                 QStringLiteral("TC1")).toString());
-    paramEdit_->setText(s.value(kSettingsPrefix + QStringLiteral("param")).toString());
-    rawCommandEdit_->setText(s.value(kSettingsPrefix + QStringLiteral("rawCommand")).toString());
 }
 
 void TempControlPanel::saveSettings() const
 {
     QSettings s;
     s.setValue(kSettingsPrefix + QStringLiteral("targetTemperature"), targetTemperatureSpin_->value());
+    s.setValue(kSettingsPrefix + QStringLiteral("maxTemperature"), maxTemperatureSpin_->value());
+    s.setValue(kSettingsPrefix + QStringLiteral("maxVoltage"), maxVoltageSpin_->value());
     s.setValue(kSettingsPrefix + QStringLiteral("selectedKey"), selectedKey());
     s.setValue(kSettingsPrefix + QStringLiteral("advancedValue"), advancedValueEdit_->text());
-    s.setValue(kSettingsPrefix + QStringLiteral("module"), moduleEdit_->text());
-    s.setValue(kSettingsPrefix + QStringLiteral("param"), paramEdit_->text());
-    s.setValue(kSettingsPrefix + QStringLiteral("rawCommand"), rawCommandEdit_->text());
 }
 
 void TempControlPanel::refreshStatus()
@@ -323,24 +303,18 @@ void TempControlPanel::setStatusUnavailable(const QString& reason)
     statusPending_ = false;
     actualTemperatureLabel_->setText(QStringLiteral("-"));
     adjustTemperatureLabel_->setText(QStringLiteral("-"));
+    actualVoltageLabel_->setText(QStringLiteral("-"));
     switchLabel_->setText(reason);
     outputEnabledLabel_->setText(QStringLiteral("-"));
-    errorStatusLabel_->setText(QStringLiteral("-"));
-    timestampLabel_->setText(QStringLiteral("-"));
 }
 
 void TempControlPanel::updateStatusUi(const TempControlStatus& status)
 {
     actualTemperatureLabel_->setText(QString::number(status.actualTemperature, 'f', 2) + QString::fromUtf8(" ℃"));
     adjustTemperatureLabel_->setText(QString::number(status.adjustTemperature, 'f', 2) + QString::fromUtf8(" ℃"));
+    actualVoltageLabel_->setText(QString::number(status.actualVoltage, 'f', 2) + QStringLiteral(" V"));
     switchLabel_->setText(boolStateText(status.switchEnabled));
     outputEnabledLabel_->setText(boolStateText(status.outputEnabled));
-    errorStatusLabel_->setText(status.errorStatus.isEmpty() ? QStringLiteral("-") : status.errorStatus);
-    if (status.timestamp > 0) {
-        timestampLabel_->setText(QDateTime::fromMSecsSinceEpoch(status.timestamp).toString(Qt::ISODate));
-    } else {
-        timestampLabel_->setText(QDateTime::currentDateTime().toString(Qt::ISODate));
-    }
 }
 
 void TempControlPanel::setResult(const QString& text)
@@ -378,16 +352,6 @@ QString TempControlPanel::selectedKeyName() const
 QString TempControlPanel::advancedValue() const
 {
     return advancedValueEdit_->text().trimmed();
-}
-
-QString TempControlPanel::moduleName() const
-{
-    return moduleEdit_->text().trimmed();
-}
-
-QString TempControlPanel::paramName() const
-{
-    return paramEdit_->text().trimmed();
 }
 
 QString TempControlPanel::jsonToText(const nlohmann::json& data)

@@ -29,8 +29,6 @@ private:
     QString selectedKey() const;
     QString selectedKeyName() const;
     QString advancedValue() const;
-    QString moduleName() const;
-    QString paramName() const;
     static QString jsonToText(const nlohmann::json& data);
 
     DeviceClient* dev_ = nullptr;
@@ -39,15 +37,18 @@ private:
 
     QLabel* actualTemperatureLabel_ = nullptr;
     QLabel* adjustTemperatureLabel_ = nullptr;
+    QLabel* actualVoltageLabel_ = nullptr;
     QLabel* switchLabel_ = nullptr;
     QLabel* outputEnabledLabel_ = nullptr;
-    QLabel* errorStatusLabel_ = nullptr;
-    QLabel* timestampLabel_ = nullptr;
     QLabel* resultLabel_ = nullptr;
 
     QDoubleSpinBox* targetTemperatureSpin_ = nullptr;
+    QDoubleSpinBox* maxTemperatureSpin_ = nullptr;
+    QDoubleSpinBox* maxVoltageSpin_ = nullptr;
     QPushButton* setTargetButton_ = nullptr;
     QPushButton* saveTargetButton_ = nullptr;
+    QPushButton* setMaxTemperatureButton_ = nullptr;
+    QPushButton* setMaxVoltageButton_ = nullptr;
     QPushButton* switchOnButton_ = nullptr;
     QPushButton* switchOffButton_ = nullptr;
 
@@ -56,13 +57,4 @@ private:
     QPushButton* queryKeyButton_ = nullptr;
     QPushButton* setKeyButton_ = nullptr;
     QPushButton* saveKeyButton_ = nullptr;
-
-    QLineEdit* moduleEdit_ = nullptr;
-    QLineEdit* paramEdit_ = nullptr;
-    QPushButton* queryParamButton_ = nullptr;
-    QPushButton* setParamButton_ = nullptr;
-    QPushButton* saveParamButton_ = nullptr;
-
-    QLineEdit* rawCommandEdit_ = nullptr;
-    QPushButton* sendRawButton_ = nullptr;
 };

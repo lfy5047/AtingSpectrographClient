@@ -5,6 +5,7 @@
 struct TempControlStatus {
     double adjustTemperature = 0.0;
     double actualTemperature = 0.0;
+    double actualVoltage = 0.0;
     bool switchEnabled = false;
     bool outputEnabled = false;
     QString errorStatus;

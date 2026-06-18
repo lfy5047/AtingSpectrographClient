@@ -147,6 +147,7 @@ void TempControlServiceTest::statusParsesServerData()
         QVERIFY2(ok, qPrintable(err));
         QCOMPARE(status.adjustTemperature, 25.5);
         QCOMPARE(status.actualTemperature, 24.8);
+        QCOMPARE(status.actualVoltage, -1.25);
         QCOMPARE(status.switchEnabled, true);
         QCOMPARE(status.outputEnabled, true);
         QCOMPARE(status.errorStatus, QStringLiteral("255"));
@@ -158,6 +159,7 @@ void TempControlServiceTest::statusParsesServerData()
     writeResponse(socket, req.header.seq,
                   {{"adjust_temperature", 25.5},
                    {"actual_temperature", 24.8},
+                   {"actual_voltage", -1.25},
                    {"switch", 1},
                    {"output_enabled", 1},
                    {"error_status", "255"},
