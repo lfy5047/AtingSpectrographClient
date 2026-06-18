@@ -323,14 +323,23 @@ void PanelSettingsTest::tempControlStatusRefreshKeepsTargetInput()
     writeControlResponse(socket, req.header.seq,
                          {{"adjust_temperature", 25.5},
                           {"actual_temperature", 24.8},
-                          {"actual_voltage", -1.25},
                           {"switch", 1},
                           {"output_enabled", 1},
                           {"error_status", "255"},
                           {"ts", 123456}});
 
+    const CapturedControlRequest voltageReq = readControlRequest(socket);
+    QCOMPARE(QString::fromStdString(voltageReq.payload.value("cmd", std::string())),
+             QStringLiteral("tempctrl.query"));
+    QCOMPARE(QString::fromStdString(voltageReq.payload["params"].value("key", std::string())),
+             QStringLiteral("actual_voltage"));
+    writeControlResponse(socket, voltageReq.header.seq,
+                         {{"key", "actual_voltage"},
+                          {"typed_value", -1.25},
+                          {"value", "-1.25"}});
+
     QTRY_VERIFY(panelHasLabelText(&panel, QString::fromUtf8("24.80 ℃")));
-    QVERIFY(panelHasLabelText(&panel, QString::fromUtf8("-1.25 V")));
+    QTRY_VERIFY(panelHasLabelText(&panel, QString::fromUtf8("-1.25 V")));
     QCOMPARE(target->value(), 30.0);
 }
 

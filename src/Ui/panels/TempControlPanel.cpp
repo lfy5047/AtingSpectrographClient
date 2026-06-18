@@ -40,6 +40,30 @@ void addButtonRow(QFormLayout* form, const QList<QPushButton*>& buttons)
     form->addRow(row);
 }
 
+bool jsonValueToDouble(const nlohmann::json& value, double* out)
+{
+    if (!out) return false;
+    if (value.is_number()) {
+        *out = value.get<double>();
+        return true;
+    }
+    if (value.is_string()) {
+        bool ok = false;
+        const double parsed = QString::fromStdString(value.get<std::string>()).trimmed().toDouble(&ok);
+        if (ok) {
+            *out = parsed;
+            return true;
+        }
+    }
+    return false;
+}
+
+bool jsonFieldToDouble(const nlohmann::json& data, const char* key, double* out)
+{
+    const auto it = data.find(key);
+    return it != data.end() && jsonValueToDouble(*it, out);
+}
+
 }
 
 TempControlPanel::TempControlPanel(DeviceClient* dev, QWidget* parent)
@@ -310,8 +334,31 @@ void TempControlPanel::refreshStatus()
         statusPending_ = false;
         if (ok) {
             updateStatusUi(status);
+            refreshActualVoltage();
         } else {
             setStatusUnavailable(err.isEmpty() ? QString::fromUtf8("状态读取失败") : err);
+        }
+    });
+}
+
+void TempControlPanel::refreshActualVoltage()
+{
+    if (!dev_ || !dev_->isConnected()) {
+        actualVoltagePending_ = false;
+        actualVoltageLabel_->setText(QStringLiteral("-"));
+        return;
+    }
+    if (actualVoltagePending_) {
+        return;
+    }
+    actualVoltagePending_ = true;
+    dev_->tempControl()->query(this, QStringLiteral("actual_voltage"),
+                               [this](bool ok, const nlohmann::json& data, const QString&) {
+        actualVoltagePending_ = false;
+        if (ok) {
+            updateActualVoltage(data);
+        } else {
+            actualVoltageLabel_->setText(QStringLiteral("-"));
         }
     });
 }
@@ -319,6 +366,7 @@ void TempControlPanel::refreshStatus()
 void TempControlPanel::setStatusUnavailable(const QString& reason)
 {
     statusPending_ = false;
+    actualVoltagePending_ = false;
     actualTemperatureLabel_->setText(QStringLiteral("-"));
     adjustTemperatureLabel_->setText(QStringLiteral("-"));
     actualVoltageLabel_->setText(QStringLiteral("-"));
@@ -330,9 +378,20 @@ void TempControlPanel::updateStatusUi(const TempControlStatus& status)
 {
     actualTemperatureLabel_->setText(QString::number(status.actualTemperature, 'f', 2) + QString::fromUtf8(" ℃"));
     adjustTemperatureLabel_->setText(QString::number(status.adjustTemperature, 'f', 2) + QString::fromUtf8(" ℃"));
-    actualVoltageLabel_->setText(QString::number(status.actualVoltage, 'f', 2) + QStringLiteral(" V"));
     switchLabel_->setText(boolStateText(status.switchEnabled));
     outputEnabledLabel_->setText(boolStateText(status.outputEnabled));
+}
+
+void TempControlPanel::updateActualVoltage(const nlohmann::json& data)
+{
+    double value = 0.0;
+    if ((data.is_object() && (jsonFieldToDouble(data, "typed_value", &value)
+                              || jsonFieldToDouble(data, "value", &value)))
+        || jsonValueToDouble(data, &value)) {
+        actualVoltageLabel_->setText(QString::number(value, 'f', 2) + QStringLiteral(" V"));
+    } else {
+        actualVoltageLabel_->setText(QStringLiteral("-"));
+    }
 }
 
 void TempControlPanel::setResult(const QString& text)

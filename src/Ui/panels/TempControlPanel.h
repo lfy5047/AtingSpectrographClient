@@ -22,8 +22,10 @@ private:
     void loadSettings();
     void saveSettings() const;
     void refreshStatus();
+    void refreshActualVoltage();
     void setStatusUnavailable(const QString& reason);
     void updateStatusUi(const TempControlStatus& status);
+    void updateActualVoltage(const nlohmann::json& data);
     void setResult(const QString& text);
     void runJsonAction(const QString& label, const std::function<void(JsonCallback)>& action);
     QString selectedKey() const;
@@ -34,6 +36,7 @@ private:
     DeviceClient* dev_ = nullptr;
     QTimer* refreshTimer_ = nullptr;
     bool statusPending_ = false;
+    bool actualVoltagePending_ = false;
 
     QLabel* actualTemperatureLabel_ = nullptr;
     QLabel* adjustTemperatureLabel_ = nullptr;
