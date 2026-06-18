@@ -93,11 +93,23 @@ TempControlPanel::TempControlPanel(DeviceClient* dev, QWidget* parent)
             dev_->tempControl()->set(this, QStringLiteral("max_temperature"), value, cb);
         });
     });
+    connect(saveMaxTemperatureButton_, &QPushButton::clicked, this, [this]() {
+        runJsonAction(QString::fromUtf8("保存最高设定温度"),
+                      [this](JsonCallback cb) {
+            dev_->tempControl()->save(this, QStringLiteral("max_temperature"), cb);
+        });
+    });
     connect(setMaxVoltageButton_, &QPushButton::clicked, this, [this]() {
         const QString value = QString::number(maxVoltageSpin_->value(), 'f', 2);
         runJsonAction(QString::fromUtf8("设置最大输出电压"),
                       [this, value](JsonCallback cb) {
             dev_->tempControl()->set(this, QStringLiteral("max_voltage"), value, cb);
+        });
+    });
+    connect(saveMaxVoltageButton_, &QPushButton::clicked, this, [this]() {
+        runJsonAction(QString::fromUtf8("保存最大输出电压"),
+                      [this](JsonCallback cb) {
+            dev_->tempControl()->save(this, QStringLiteral("max_voltage"), cb);
         });
     });
     connect(switchOnButton_, &QPushButton::clicked, this, [this]() {
@@ -180,9 +192,12 @@ void TempControlPanel::setupUi()
     maxTemperatureSpin_->setSingleStep(0.1);
     maxTemperatureSpin_->setSuffix(QString::fromUtf8(" ℃"));
     setMaxTemperatureButton_ = new QPushButton(QString::fromUtf8("设置"), this);
+    saveMaxTemperatureButton_ = new QPushButton(QString::fromUtf8("保存"), this);
+    saveMaxTemperatureButton_->setObjectName(QStringLiteral("tempControlSaveMaxTemperatureButton"));
     auto* maxTemperatureRow = new QHBoxLayout();
     maxTemperatureRow->addWidget(maxTemperatureSpin_, 1);
     maxTemperatureRow->addWidget(setMaxTemperatureButton_);
+    maxTemperatureRow->addWidget(saveMaxTemperatureButton_);
     controlForm->addRow(QString::fromUtf8("最高设定温度"), maxTemperatureRow);
 
     maxVoltageSpin_ = new QDoubleSpinBox(this);
@@ -192,9 +207,12 @@ void TempControlPanel::setupUi()
     maxVoltageSpin_->setSingleStep(0.1);
     maxVoltageSpin_->setSuffix(QStringLiteral(" V"));
     setMaxVoltageButton_ = new QPushButton(QString::fromUtf8("设置"), this);
+    saveMaxVoltageButton_ = new QPushButton(QString::fromUtf8("保存"), this);
+    saveMaxVoltageButton_->setObjectName(QStringLiteral("tempControlSaveMaxVoltageButton"));
     auto* maxVoltageRow = new QHBoxLayout();
     maxVoltageRow->addWidget(maxVoltageSpin_, 1);
     maxVoltageRow->addWidget(setMaxVoltageButton_);
+    maxVoltageRow->addWidget(saveMaxVoltageButton_);
     controlForm->addRow(QString::fromUtf8("最大输出电压"), maxVoltageRow);
 
     switchOnButton_ = new QPushButton(QString::fromUtf8("打开温控"), this);

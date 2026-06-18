@@ -48,7 +48,9 @@ private:
     QPushButton* setTargetButton_ = nullptr;
     QPushButton* saveTargetButton_ = nullptr;
     QPushButton* setMaxTemperatureButton_ = nullptr;
+    QPushButton* saveMaxTemperatureButton_ = nullptr;
     QPushButton* setMaxVoltageButton_ = nullptr;
+    QPushButton* saveMaxVoltageButton_ = nullptr;
     QPushButton* switchOnButton_ = nullptr;
     QPushButton* switchOffButton_ = nullptr;
 

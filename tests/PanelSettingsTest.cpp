@@ -8,6 +8,7 @@
 #include <QElapsedTimer>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPushButton>
 #include <QSettings>
 #include <QSpinBox>
 #include <QTcpServer>
@@ -43,6 +44,7 @@ private slots:
     void collectPanelRestoresSavedInputs();
     void tempControlPanelRestoresSavedUserInputs();
     void tempControlStatusRefreshKeepsTargetInput();
+    void tempControlCommonSaveButtonsSendSaveCommands();
     void streamPanelRestoresSavedChannels();
     void spectralPanelRestoresSavedRenderInputs();
     void spectralPanelShowsSavedBandsBeforeStreamMetadata();
@@ -330,6 +332,43 @@ void PanelSettingsTest::tempControlStatusRefreshKeepsTargetInput()
     QTRY_VERIFY(panelHasLabelText(&panel, QString::fromUtf8("24.80 ℃")));
     QVERIFY(panelHasLabelText(&panel, QString::fromUtf8("-1.25 V")));
     QCOMPARE(target->value(), 30.0);
+}
+
+void PanelSettingsTest::tempControlCommonSaveButtonsSendSaveCommands()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+
+    DeviceClient device;
+    TempControlPanel panel(&device);
+    auto* saveMaxTemperature = panel.findChild<QPushButton*>(QStringLiteral("tempControlSaveMaxTemperatureButton"));
+    auto* saveMaxVoltage = panel.findChild<QPushButton*>(QStringLiteral("tempControlSaveMaxVoltageButton"));
+    QVERIFY(saveMaxTemperature);
+    QVERIFY(saveMaxVoltage);
+
+    device.connectTo(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(server.waitForNewConnection(1000));
+    QTcpSocket* socket = server.nextPendingConnection();
+    QVERIFY(socket);
+    QTRY_VERIFY(device.isConnected());
+
+    const CapturedControlRequest statusReq = readControlRequest(socket);
+    QCOMPARE(QString::fromStdString(statusReq.payload.value("cmd", std::string())),
+             QStringLiteral("tempctrl.status"));
+
+    saveMaxTemperature->click();
+    const CapturedControlRequest saveMaxTemperatureReq = readControlRequest(socket);
+    QCOMPARE(QString::fromStdString(saveMaxTemperatureReq.payload.value("cmd", std::string())),
+             QStringLiteral("tempctrl.save"));
+    QCOMPARE(QString::fromStdString(saveMaxTemperatureReq.payload["params"].value("key", std::string())),
+             QStringLiteral("max_temperature"));
+
+    saveMaxVoltage->click();
+    const CapturedControlRequest saveMaxVoltageReq = readControlRequest(socket);
+    QCOMPARE(QString::fromStdString(saveMaxVoltageReq.payload.value("cmd", std::string())),
+             QStringLiteral("tempctrl.save"));
+    QCOMPARE(QString::fromStdString(saveMaxVoltageReq.payload["params"].value("key", std::string())),
+             QStringLiteral("max_voltage"));
 }
 
 void PanelSettingsTest::streamPanelRestoresSavedChannels()
