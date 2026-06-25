@@ -18,7 +18,7 @@ static const struct { const char* label; int iconType; int panelIndex; } kNavIte
     {"相机设置", 2, 2},
     {"转镜控制", 3, 3},
     {"红外热像", 4, 4},
-    {"温控控制", 4, 5},
+    {"温控控制", 11, 5},
     {"数据采集", 5, 6},
     {"流通道", 6, 7},
     {"光谱显示", 9, 8},
@@ -214,6 +214,15 @@ static void drawIcon(QPainter& p, int type, const QColor& c, int sz)
         p.drawLine(5, 10, 21, 10);
         break;
     }
+    case 11:
+        p.drawRoundedRect(4, 5, 16, 14, 2, 2);
+        p.drawLine(7, 10, 17, 10);
+        p.drawLine(7, 15, 17, 15);
+        p.setBrush(c);
+        p.drawEllipse(QPointF(10, 10), 1.5, 1.5);
+        p.drawEllipse(QPointF(15, 15), 1.5, 1.5);
+        p.setBrush(Qt::NoBrush);
+        break;
     }
 }
 

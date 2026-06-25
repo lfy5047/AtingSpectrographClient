@@ -161,6 +161,20 @@ target_link_libraries(ImageViewThemeTest PRIVATE
 )
 add_test(NAME ImageViewThemeTest COMMAND ImageViewThemeTest)
 
+add_executable(SidebarWidgetTest
+    SidebarWidgetTest.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/widgets/SidebarWidget.cpp
+)
+target_include_directories(SidebarWidgetTest PRIVATE
+    ${PROJECT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/src
+)
+target_link_libraries(SidebarWidgetTest PRIVATE
+    Qt5::Test
+    Qt5::Widgets
+)
+add_test(NAME SidebarWidgetTest COMMAND SidebarWidgetTest)
+
 add_executable(PanelSettingsTest
     PanelSettingsTest.cpp
     ${PROJECT_SOURCE_DIR}/src/Client/core/DeviceClient.cpp
