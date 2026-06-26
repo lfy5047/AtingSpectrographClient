@@ -53,6 +53,8 @@ private slots:
     void irPanelRestoresSavedUserInputs();
     void irPanelSwitchesBetweenSeparateLegacyAndCi05Pages();
     void irPanelCi05PageUsesSeparateCi05Controls();
+    void irPanelCi05PageReadsAllStatusRegisters();
+    void irPanelCi05PageTriggersAllCompensations();
 };
 
 void PanelSettingsTest::initTestCase()
@@ -662,12 +664,16 @@ void PanelSettingsTest::irPanelCi05PageUsesSeparateCi05Controls()
     auto* ci05Brightness = panel.findChild<QSpinBox*>(QStringLiteral("irCi05BrightnessSpin"));
     auto* legacyBrightness = panel.findChild<QSpinBox*>(QStringLiteral("irBrightnessSpin"));
     auto* applyCi05Brightness = panel.findChild<QPushButton*>(QStringLiteral("irCi05ApplyBrightnessButton"));
+    auto* applyCi05FrameRate = panel.findChild<QPushButton*>(QStringLiteral("irCi05ApplyFrameRateButton"));
     auto* currentModel = panel.findChild<QLabel*>(QStringLiteral("irCurrentModelLabel"));
     QVERIFY(ci05Brightness);
     QVERIFY(legacyBrightness);
     QVERIFY(applyCi05Brightness);
+    QVERIFY(applyCi05FrameRate);
     QVERIFY(currentModel);
     QVERIFY(ci05Brightness != legacyBrightness);
+    QVERIFY2(applyCi05FrameRate->text().contains(QStringLiteral("0.01 Hz")),
+             qPrintable(applyCi05FrameRate->text()));
 
     device.connectTo(QStringLiteral("127.0.0.1"), server.serverPort());
     QVERIFY(server.waitForNewConnection(1000));
@@ -688,6 +694,103 @@ void PanelSettingsTest::irPanelCi05PageUsesSeparateCi05Controls()
     QCOMPARE(QString::fromStdString(brightnessReq.payload.value("cmd", std::string())),
              QStringLiteral("ir.ci05.set_brightness"));
     QCOMPARE(brightnessReq.payload["params"].value("value", -1), 50);
+}
+
+void PanelSettingsTest::irPanelCi05PageReadsAllStatusRegisters()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+
+    DeviceClient device;
+    IrPanel panel(&device);
+    auto* currentModel = panel.findChild<QLabel*>(QStringLiteral("irCurrentModelLabel"));
+    auto* readStatus1 = panel.findChild<QPushButton*>(QStringLiteral("irCi05ReadStatus1Button"));
+    auto* readStatus2 = panel.findChild<QPushButton*>(QStringLiteral("irCi05ReadStatus2Button"));
+    auto* readStatus3 = panel.findChild<QPushButton*>(QStringLiteral("irCi05ReadStatus3Button"));
+    auto* readStatus4 = panel.findChild<QPushButton*>(QStringLiteral("irCi05ReadStatus4Button"));
+    QVERIFY(currentModel);
+    QVERIFY(readStatus1);
+    QVERIFY(readStatus2);
+    QVERIFY(readStatus3);
+    QVERIFY(readStatus4);
+
+    device.connectTo(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(server.waitForNewConnection(1000));
+    QTcpSocket* socket = server.nextPendingConnection();
+    QVERIFY(socket);
+    QTRY_VERIFY(device.isConnected());
+
+    const CapturedControlRequest modelReq = readControlRequest(socket);
+    QCOMPARE(QString::fromStdString(modelReq.payload.value("cmd", std::string())),
+             QStringLiteral("ir.core.current"));
+    writeControlResponse(socket, modelReq.header.seq, {{"model", "ci05"}});
+    QTRY_COMPARE(currentModel->text(), QString::fromUtf8("当前机芯: ci05"));
+
+    readStatus2->click();
+    CapturedControlRequest statusReq = readControlRequest(socket);
+    QCOMPARE(QString::fromStdString(statusReq.payload.value("cmd", std::string())),
+             QStringLiteral("ir.ci05.read_status2"));
+
+    readStatus3->click();
+    statusReq = readControlRequest(socket);
+    QCOMPARE(QString::fromStdString(statusReq.payload.value("cmd", std::string())),
+             QStringLiteral("ir.ci05.read_status3"));
+
+    readStatus4->click();
+    statusReq = readControlRequest(socket);
+    QCOMPARE(QString::fromStdString(statusReq.payload.value("cmd", std::string())),
+             QStringLiteral("ir.ci05.read_status4"));
+}
+
+void PanelSettingsTest::irPanelCi05PageTriggersAllCompensations()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+
+    DeviceClient device;
+    IrPanel panel(&device);
+    auto* currentModel = panel.findChild<QLabel*>(QStringLiteral("irCurrentModelLabel"));
+    auto* shutter = panel.findChild<QPushButton*>(QStringLiteral("irCi05TriggerShutterCompensationButton"));
+    auto* scene = panel.findChild<QPushButton*>(QStringLiteral("irCi05TriggerSceneCompensationButton"));
+    auto* defocus = panel.findChild<QPushButton*>(QStringLiteral("irCi05TriggerDefocusCompensationButton"));
+    auto* integration = panel.findChild<QPushButton*>(QStringLiteral("irCi05TriggerIntegrationCorrectionButton"));
+    QVERIFY(currentModel);
+    QVERIFY(shutter);
+    QVERIFY(scene);
+    QVERIFY(defocus);
+    QVERIFY(integration);
+
+    device.connectTo(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(server.waitForNewConnection(1000));
+    QTcpSocket* socket = server.nextPendingConnection();
+    QVERIFY(socket);
+    QTRY_VERIFY(device.isConnected());
+
+    const CapturedControlRequest modelReq = readControlRequest(socket);
+    QCOMPARE(QString::fromStdString(modelReq.payload.value("cmd", std::string())),
+             QStringLiteral("ir.core.current"));
+    writeControlResponse(socket, modelReq.header.seq, {{"model", "ci05"}});
+    QTRY_COMPARE(currentModel->text(), QString::fromUtf8("当前机芯: ci05"));
+
+    shutter->click();
+    CapturedControlRequest request = readControlRequest(socket);
+    QCOMPARE(QString::fromStdString(request.payload.value("cmd", std::string())),
+             QStringLiteral("ir.ci05.trigger_shutter_compensation"));
+
+    scene->click();
+    request = readControlRequest(socket);
+    QCOMPARE(QString::fromStdString(request.payload.value("cmd", std::string())),
+             QStringLiteral("ir.ci05.trigger_scene_compensation"));
+
+    defocus->click();
+    request = readControlRequest(socket);
+    QCOMPARE(QString::fromStdString(request.payload.value("cmd", std::string())),
+             QStringLiteral("ir.ci05.trigger_defocus_compensation"));
+
+    integration->click();
+    request = readControlRequest(socket);
+    QCOMPARE(QString::fromStdString(request.payload.value("cmd", std::string())),
+             QStringLiteral("ir.ci05.trigger_integration_correction"));
 }
 
 QTEST_MAIN(PanelSettingsTest)

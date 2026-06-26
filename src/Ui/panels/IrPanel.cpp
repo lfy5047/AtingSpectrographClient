@@ -302,8 +302,9 @@ void IrPanel::setupCi05Page(QVBoxLayout* root)
     integrationForm->addRow(QString::fromUtf8("积分时间"), makeValueButtonRow(ci05IntegrationMsSpin_, applyIntegration, this));
 
     ci05FrameRateSpin_ = makeSpin(0, 65535, QStringLiteral("irCi05FrameRateSpin"));
-    auto* applyFrameRate = new QPushButton(QString::fromUtf8("设帧频 x100"), this);
-    integrationForm->addRow(QString::fromUtf8("帧频"), makeValueButtonRow(ci05FrameRateSpin_, applyFrameRate, this));
+    auto* applyFrameRate = new QPushButton(QString::fromUtf8("设帧频 0.01 Hz"), this);
+    applyFrameRate->setObjectName(QStringLiteral("irCi05ApplyFrameRateButton"));
+    integrationForm->addRow(QString::fromUtf8("帧频编码值"), makeValueButtonRow(ci05FrameRateSpin_, applyFrameRate, this));
 
     auto* readFrameRate = new QPushButton(QString::fromUtf8("读帧频"), this);
     auto* frameRateReadout = makeReadoutLabel(QString::fromUtf8("帧频"), this);
@@ -322,6 +323,37 @@ void IrPanel::setupCi05Page(QVBoxLayout* root)
         });
     });
 
+    auto* compensationGroup = new QGroupBox(QString::fromUtf8("CI05 补偿 / 校正"), this);
+    auto* compensationLayout = new QVBoxLayout(compensationGroup);
+    auto* shutterCompensation = new QPushButton(QString::fromUtf8("快门补偿"), this);
+    shutterCompensation->setObjectName(QStringLiteral("irCi05TriggerShutterCompensationButton"));
+    auto* sceneCompensation = new QPushButton(QString::fromUtf8("场景补偿"), this);
+    sceneCompensation->setObjectName(QStringLiteral("irCi05TriggerSceneCompensationButton"));
+    auto* defocusCompensation = new QPushButton(QString::fromUtf8("离焦补偿"), this);
+    defocusCompensation->setObjectName(QStringLiteral("irCi05TriggerDefocusCompensationButton"));
+    auto* integrationCorrection = new QPushButton(QString::fromUtf8("积分时间校正"), this);
+    integrationCorrection->setObjectName(QStringLiteral("irCi05TriggerIntegrationCorrectionButton"));
+    compensationLayout->addLayout(makeGrid2Col({shutterCompensation, sceneCompensation,
+                                                 defocusCompensation, integrationCorrection}));
+    auto* sceneHint = new QLabel(QString::fromUtf8("场景补偿前请确保画面为均匀场景。"), this);
+    sceneHint->setWordWrap(true);
+    sceneHint->setProperty("secondary", true);
+    compensationLayout->addWidget(sceneHint);
+    root->addWidget(compensationGroup);
+
+    connect(shutterCompensation, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->ci05TriggerShutterCompensation(this, writeCb);
+    });
+    connect(sceneCompensation, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->ci05TriggerSceneCompensation(this, writeCb);
+    });
+    connect(defocusCompensation, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->ci05TriggerDefocusCompensation(this, writeCb);
+    });
+    connect(integrationCorrection, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->ci05TriggerIntegrationCorrection(this, writeCb);
+    });
+
     auto* statusGroup = new QGroupBox(QString::fromUtf8("CI05 状态读取"), this);
     auto* statusLayout = new QVBoxLayout(statusGroup);
     ci05ActionStatusLabel_ = new QLabel("-", this);
@@ -332,7 +364,20 @@ void IrPanel::setupCi05Page(QVBoxLayout* root)
     statusLayout->addWidget(makeReadoutButtonRow(workStateReadout, readWorkState, this));
     auto* status1Readout = makeReadoutLabel(QStringLiteral("Status1"), this);
     auto* readStatus1 = new QPushButton(QStringLiteral("读 Status1"), this);
+    readStatus1->setObjectName(QStringLiteral("irCi05ReadStatus1Button"));
     statusLayout->addWidget(makeReadoutButtonRow(status1Readout, readStatus1, this));
+    auto* status2Readout = makeReadoutLabel(QStringLiteral("Status2"), this);
+    auto* readStatus2 = new QPushButton(QStringLiteral("读 Status2"), this);
+    readStatus2->setObjectName(QStringLiteral("irCi05ReadStatus2Button"));
+    statusLayout->addWidget(makeReadoutButtonRow(status2Readout, readStatus2, this));
+    auto* status3Readout = makeReadoutLabel(QStringLiteral("Status3"), this);
+    auto* readStatus3 = new QPushButton(QStringLiteral("读 Status3"), this);
+    readStatus3->setObjectName(QStringLiteral("irCi05ReadStatus3Button"));
+    statusLayout->addWidget(makeReadoutButtonRow(status3Readout, readStatus3, this));
+    auto* status4Readout = makeReadoutLabel(QStringLiteral("Status4"), this);
+    auto* readStatus4 = new QPushButton(QStringLiteral("读 Status4"), this);
+    readStatus4->setObjectName(QStringLiteral("irCi05ReadStatus4Button"));
+    statusLayout->addWidget(makeReadoutButtonRow(status4Readout, readStatus4, this));
     statusLayout->addWidget(ci05ActionStatusLabel_);
     root->addWidget(statusGroup);
 
@@ -344,6 +389,21 @@ void IrPanel::setupCi05Page(QVBoxLayout* root)
     connect(readStatus1, &QPushButton::clicked, this, [this, status1Readout]() {
         dev_->ir()->ci05ReadStatus1(this, [this, status1Readout](bool ok, const nlohmann::json& data, const QString& err) {
             updateReadoutLabel(status1Readout, QStringLiteral("Status1"), ok, data, err);
+        });
+    });
+    connect(readStatus2, &QPushButton::clicked, this, [this, status2Readout]() {
+        dev_->ir()->ci05ReadStatus2(this, [this, status2Readout](bool ok, const nlohmann::json& data, const QString& err) {
+            updateReadoutLabel(status2Readout, QStringLiteral("Status2"), ok, data, err);
+        });
+    });
+    connect(readStatus3, &QPushButton::clicked, this, [this, status3Readout]() {
+        dev_->ir()->ci05ReadStatus3(this, [this, status3Readout](bool ok, const nlohmann::json& data, const QString& err) {
+            updateReadoutLabel(status3Readout, QStringLiteral("Status3"), ok, data, err);
+        });
+    });
+    connect(readStatus4, &QPushButton::clicked, this, [this, status4Readout]() {
+        dev_->ir()->ci05ReadStatus4(this, [this, status4Readout](bool ok, const nlohmann::json& data, const QString& err) {
+            updateReadoutLabel(status4Readout, QStringLiteral("Status4"), ok, data, err);
         });
     });
 
