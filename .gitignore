@@ -74,5 +74,6 @@ Desktop.ini
 .vscode/
 recordings/
 .codex/
+.worktrees/
 .planning/
 docs/
