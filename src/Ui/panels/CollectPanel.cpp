@@ -8,6 +8,7 @@
 #include <QSettings>
 #include <QSignalBlocker>
 #include <QSpinBox>
+#include <QTimer>
 
 CollectPanel::CollectPanel(DeviceClient* dev, QWidget* parent)
     : QWidget(parent), dev_(dev)
@@ -84,6 +85,18 @@ CollectPanel::CollectPanel(DeviceClient* dev, QWidget* parent)
     fl->addRow(row);
 
     root->addWidget(grp);
+
+    auto* backgroundCalibrationGroup = new QGroupBox(QString::fromUtf8("背景矫正"), this);
+    auto* backgroundCalibrationForm = new QFormLayout(backgroundCalibrationGroup);
+    backgroundCalibrationStatusLabel_ = new QLabel(QString::fromUtf8("未启动"), this);
+    backgroundCalibrationStatusLabel_->setObjectName(QStringLiteral("collectBackgroundCalibrationStatusLabel"));
+    backgroundCalibrationStatusLabel_->setProperty("readout", true);
+    backgroundCalibrationBtn_ = new QPushButton(QString::fromUtf8("开始背景矫正"), this);
+    backgroundCalibrationBtn_->setObjectName(QStringLiteral("collectBackgroundCalibrationButton"));
+    backgroundCalibrationBtn_->setProperty("primary", true);
+    backgroundCalibrationForm->addRow(QString::fromUtf8("状态"), backgroundCalibrationStatusLabel_);
+    backgroundCalibrationForm->addRow(backgroundCalibrationBtn_);
+    root->addWidget(backgroundCalibrationGroup);
     root->addStretch();
 
     loadSettings();
@@ -99,6 +112,7 @@ CollectPanel::CollectPanel(DeviceClient* dev, QWidget* parent)
     connect(applyOversamplingBtn_, &QPushButton::clicked, this, &CollectPanel::applyOversampling);
     connect(refreshGateConfigBtn_, &QPushButton::clicked, this, &CollectPanel::refreshGateConfig);
     connect(applyGateConfigBtn_, &QPushButton::clicked, this, &CollectPanel::applyGateConfig);
+    connect(backgroundCalibrationBtn_, &QPushButton::clicked, this, &CollectPanel::startBackgroundCalibration);
     connect(oversampleFactorSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) { saveSettings(); });
     connect(discardFrontMsSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) { saveSettings(); });
     connect(discardBackMsSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) { saveSettings(); });
@@ -108,6 +122,11 @@ CollectPanel::CollectPanel(DeviceClient* dev, QWidget* parent)
     connect(dev, &DeviceClient::connectionChanged, this, [this](bool c, const QString&) {
         if (c) refreshStatus();
     });
+
+    backgroundCalibrationTimer_ = new QTimer(this);
+    backgroundCalibrationTimer_->setSingleShot(true);
+    connect(backgroundCalibrationTimer_, &QTimer::timeout,
+            this, &CollectPanel::pollBackgroundCalibrationStatus);
 }
 
 void CollectPanel::loadSettings()
@@ -237,4 +256,71 @@ void CollectPanel::updateGateConfigUi(const CollectGateConfig& config)
         ? QString::fromUtf8("下一段生效")
         : QString::fromUtf8("已生效"));
     applyGateConfigBtn_->setEnabled(true);
+}
+
+void CollectPanel::startBackgroundCalibration()
+{
+    const auto answer = QMessageBox::question(
+        this, QString::fromUtf8("背景矫正"),
+        QString::fromUtf8("背景矫正会移动转镜并触发红外机芯校正，是否继续？"),
+        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
+    if (answer != QMessageBox::Yes) return;
+
+    backgroundCalibrationBtn_->setEnabled(false);
+    dev_->systemApi()->startBackgroundCalibration(
+        this, [this](bool ok, const BackgroundCalibrationStart& result, const QString& err) {
+            if (!ok) {
+                backgroundCalibrationBtn_->setEnabled(true);
+                QMessageBox::warning(this, QString::fromUtf8("背景矫正"), err);
+                return;
+            }
+            setBackgroundCalibrationStage(result.stage);
+            backgroundCalibrationTimer_->start(300);
+        });
+}
+
+void CollectPanel::pollBackgroundCalibrationStatus()
+{
+    dev_->systemApi()->backgroundCalibrationStatus(
+        this, [this](bool ok, const BackgroundCalibrationStatus& status, const QString& err) {
+            if (!ok) {
+                backgroundCalibrationBtn_->setEnabled(true);
+                backgroundCalibrationStatusLabel_->setText(
+                    err.isEmpty() ? QString::fromUtf8("状态查询失败") : err);
+                QMessageBox::warning(this, QString::fromUtf8("背景矫正"), err);
+                return;
+            }
+
+            setBackgroundCalibrationStage(status.stage, status.error);
+            if (status.running) {
+                backgroundCalibrationTimer_->start(300);
+            } else {
+                finishBackgroundCalibration(status);
+            }
+        });
+}
+
+void CollectPanel::finishBackgroundCalibration(const BackgroundCalibrationStatus& status)
+{
+    backgroundCalibrationTimer_->stop();
+    backgroundCalibrationBtn_->setEnabled(true);
+    if (status.stage == QStringLiteral("failed")) {
+        QMessageBox::warning(this, QString::fromUtf8("背景矫正"),
+                             status.error.isEmpty() ? QString::fromUtf8("背景矫正失败") : status.error);
+    }
+}
+
+void CollectPanel::setBackgroundCalibrationStage(const QString& stage, const QString& error)
+{
+    QString text;
+    if (stage == QStringLiteral("idle")) text = QString::fromUtf8("未启动");
+    else if (stage == QStringLiteral("moving_to_background")) text = QString::fromUtf8("正在前往背景位");
+    else if (stage == QStringLiteral("calibrating")) text = QString::fromUtf8("正在背景矫正");
+    else if (stage == QStringLiteral("restoring")) text = QString::fromUtf8("正在复位");
+    else if (stage == QStringLiteral("completed")) text = QString::fromUtf8("背景矫正完成");
+    else if (stage == QStringLiteral("failed")) text = QString::fromUtf8("背景矫正失败");
+    else text = stage;
+
+    if (!error.isEmpty()) text += QStringLiteral(": ") + error;
+    backgroundCalibrationStatusLabel_->setText(text);
 }

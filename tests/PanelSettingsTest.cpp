@@ -43,6 +43,7 @@ private slots:
     void cameraPanelRestoresSavedResolution();
     void mirrorPanelRestoresSavedMotionInputs();
     void collectPanelRestoresSavedInputs();
+    void collectPanelProvidesBackgroundCalibrationControls();
     void tempControlPanelRestoresSavedUserInputs();
     void tempControlStatusRefreshKeepsTargetInput();
     void tempControlCommonSaveButtonsSendSaveCommands();
@@ -791,6 +792,18 @@ void PanelSettingsTest::irPanelCi05PageTriggersAllCompensations()
     request = readControlRequest(socket);
     QCOMPARE(QString::fromStdString(request.payload.value("cmd", std::string())),
              QStringLiteral("ir.ci05.trigger_integration_correction"));
+}
+
+void PanelSettingsTest::collectPanelProvidesBackgroundCalibrationControls()
+{
+    DeviceClient device;
+    CollectPanel panel(&device);
+    auto* button = panel.findChild<QPushButton*>(QStringLiteral("collectBackgroundCalibrationButton"));
+    auto* status = panel.findChild<QLabel*>(QStringLiteral("collectBackgroundCalibrationStatusLabel"));
+    QVERIFY(button);
+    QVERIFY(status);
+    QCOMPARE(button->text(), QString::fromUtf8("开始背景矫正"));
+    QCOMPARE(status->text(), QString::fromUtf8("未启动"));
 }
 
 QTEST_MAIN(PanelSettingsTest)

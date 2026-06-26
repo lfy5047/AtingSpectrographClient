@@ -6,8 +6,10 @@
 
 class DeviceClient;
 class QSpinBox;
+class QTimer;
 struct CollectOversamplingInfo;
 struct CollectGateConfig;
+struct BackgroundCalibrationStatus;
 
 class CollectPanel : public QWidget {
     Q_OBJECT
@@ -19,6 +21,10 @@ private slots:
     void applyOversampling();
     void refreshGateConfig();
     void applyGateConfig();
+    void startBackgroundCalibration();
+    void pollBackgroundCalibrationStatus();
+    void finishBackgroundCalibration(const BackgroundCalibrationStatus& status);
+    void setBackgroundCalibrationStage(const QString& stage, const QString& error = QString());
 
 private:
     void loadSettings();
@@ -43,4 +49,7 @@ private:
     QPushButton* startBtn_;
     QPushButton* stopBtn_;
     QPushButton* refreshBtn_;
+    QLabel* backgroundCalibrationStatusLabel_ = nullptr;
+    QPushButton* backgroundCalibrationBtn_ = nullptr;
+    QTimer* backgroundCalibrationTimer_ = nullptr;
 };
