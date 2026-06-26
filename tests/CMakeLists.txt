@@ -109,6 +109,26 @@ target_link_libraries(TempControlServiceTest PRIVATE
 )
 add_test(NAME TempControlServiceTest COMMAND TempControlServiceTest)
 
+add_executable(IrServiceTest
+    IrServiceTest.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/rpc/ControlClient.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/IrService.cpp
+)
+target_include_directories(IrServiceTest PRIVATE
+    ${PROJECT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/src/Client
+    ${PROJECT_SOURCE_DIR}/src/Client/core
+    ${PROJECT_SOURCE_DIR}/src/Client/rpc
+    ${PROJECT_SOURCE_DIR}/src/Client/services
+    ${PROJECT_SOURCE_DIR}/Common/include
+)
+target_link_libraries(IrServiceTest PRIVATE
+    Qt5::Test
+    Qt5::Network
+)
+add_test(NAME IrServiceTest COMMAND IrServiceTest)
+
 add_executable(DeleteVerificationTest
     DeleteVerificationTest.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/DeleteVerification.cpp

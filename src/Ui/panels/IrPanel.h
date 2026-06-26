@@ -7,6 +7,8 @@
 #include <QComboBox>
 #include <QCheckBox>
 #include <QGroupBox>
+#include <QStackedWidget>
+#include <QString>
 #include "json.hpp"
 
 class DeviceClient;
@@ -26,6 +28,12 @@ private:
     void setupQueries(class QVBoxLayout* root);
     void setupMaintenance(class QVBoxLayout* root);
     void setupBadPixel(class QVBoxLayout* root);
+    void setupLegacyPage(class QVBoxLayout* root);
+    void setupCi05Page(class QVBoxLayout* root);
+
+    void queryCurrentModel();
+    bool isCi05Model() const;
+    void updateModelUi();
 
     void loadSettings();
     void saveSettings() const;
@@ -38,6 +46,11 @@ private:
     static QString bytesToHex(const nlohmann::json& arr);
 
     DeviceClient* dev_;
+    QString currentModel_ = QStringLiteral("legacy");
+    QLabel* currentModelLabel_ = nullptr;
+    QStackedWidget* coreModeStack_ = nullptr;
+    QWidget* legacyPage_ = nullptr;
+    QWidget* ci05Page_ = nullptr;
 
     // 亮度 / 对比度 / DDE / AB 模式
     QSpinBox*  brightSpin_ = nullptr;
@@ -85,4 +98,25 @@ private:
 
     // 动作状态标签。读取结果使用各自就近的 QLabel。
     QLabel*    actionStatusLabel_ = nullptr;
+
+    QSpinBox*  ci05BrightnessSpin_ = nullptr;
+    QSpinBox*  ci05ContrastSpin_ = nullptr;
+    QSpinBox*  ci05OverallBrightnessSpin_ = nullptr;
+    QSpinBox*  ci05OverallContrastSpin_ = nullptr;
+    QSpinBox*  ci05SharpnessSpin_ = nullptr;
+    QComboBox* ci05EzoomCombo_ = nullptr;
+    QComboBox* ci05FreezeCombo_ = nullptr;
+    QComboBox* ci05MirrorCombo_ = nullptr;
+    QComboBox* ci05PaletteCombo_ = nullptr;
+    QComboBox* ci05AgcCombo_ = nullptr;
+    QComboBox* ci05FovCombo_ = nullptr;
+    QSpinBox*  ci05FocusSpeedSpin_ = nullptr;
+    QSpinBox*  ci05ZoomSpeedSpin_ = nullptr;
+    QSpinBox*  ci05IntegrationMsSpin_ = nullptr;
+    QSpinBox*  ci05FrameRateSpin_ = nullptr;
+    QComboBox* ci05IntegrationGearCombo_ = nullptr;
+    QComboBox* ci05IntegrationAutoCombo_ = nullptr;
+    QComboBox* ci05BackgroundGearCombo_ = nullptr;
+    QComboBox* ci05BackgroundAutoCombo_ = nullptr;
+    QLabel*    ci05ActionStatusLabel_ = nullptr;
 };

@@ -1,245 +1,476 @@
 #include "IrService.h"
+
 #include <vector>
 
-// ---- 基础标定 ----
+namespace {
+
+void callJson(const JsonCallback& cb, const RpcResult& r)
+{
+    if (cb) cb(r.ok, r.data, r.msg);
+}
+
+} // namespace
+
+void IrService::currentModel(QObject* context, JsonCallback cb) const
+{
+    request(RpcCommand::Ir::Core::Current, {}, context, [cb](const RpcResult& r) {
+        callJson(cb, r);
+    }, RpcTimeout::Slow);
+}
 
 void IrService::triggerCalibration(QObject* context, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::TriggerCalibration, {}, context, cb, RpcTimeout::Slow);
+    simpleCmd(RpcCommand::Ir::Legacy::TriggerCalibration, {}, context, cb, RpcTimeout::Slow);
 }
 
 void IrService::forceShutter(QObject* context, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::ForceShutter, {}, context, cb, RpcTimeout::Slow);
+    simpleCmd(RpcCommand::Ir::Legacy::ForceShutter, {}, context, cb, RpcTimeout::Slow);
 }
-
-// ---- 版本 ----
 
 void IrService::getVersion(QObject* context, JsonCallback cb) const
 {
-    request(RpcCommand::Ir::GetVersion, {}, context, [cb](const RpcResult& r) {
-        if (cb) cb(r.ok, r.data, r.msg);
+    request(RpcCommand::Ir::Legacy::GetVersion, {}, context, [cb](const RpcResult& r) {
+        callJson(cb, r);
     }, RpcTimeout::Slow);
 }
 
-// ---- 图像选择与显示 ----
-
 void IrService::setImageType(QObject* context, quint8 value, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::SetImageType, {{"value", value}}, context, cb);
+    simpleCmd(RpcCommand::Ir::Legacy::SetImageType, {{"value", value}}, context, cb);
 }
 
 void IrService::setTestPattern(QObject* context, quint8 value, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::SetTestPattern, {{"value", value}}, context, cb);
+    simpleCmd(RpcCommand::Ir::Legacy::SetTestPattern, {{"value", value}}, context, cb);
 }
 
 void IrService::setColorMode(QObject* context, quint8 value, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::SetColorMode, {{"value", value}}, context, cb);
+    simpleCmd(RpcCommand::Ir::Legacy::SetColorMode, {{"value", value}}, context, cb);
 }
 
 void IrService::setBadPixelDisplayMode(QObject* context, quint8 value, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::SetBadPixelDisplayMode, {{"value", value}}, context, cb);
+    simpleCmd(RpcCommand::Ir::Legacy::SetBadPixelDisplayMode, {{"value", value}}, context, cb);
 }
-
-// ---- 图像参数 ----
 
 void IrService::setBrightness(QObject* context, quint8 v, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::SetBrightness, {{"value", v}}, context, cb);
+    simpleCmd(RpcCommand::Ir::Legacy::SetBrightness, {{"value", v}}, context, cb);
 }
 
 void IrService::setContrast(QObject* context, quint8 v, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::SetContrast, {{"value", v}}, context, cb);
+    simpleCmd(RpcCommand::Ir::Legacy::SetContrast, {{"value", v}}, context, cb);
 }
 
 void IrService::setAbMode(QObject* context, quint8 value, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::SetAbMode, {{"value", value}}, context, cb);
+    simpleCmd(RpcCommand::Ir::Legacy::SetAbMode, {{"value", value}}, context, cb);
 }
 
 void IrService::setDde(QObject* context, quint8 value, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::SetDde, {{"value", value}}, context, cb);
+    simpleCmd(RpcCommand::Ir::Legacy::SetDde, {{"value", value}}, context, cb);
 }
 
 void IrService::setTemporalFilter(QObject* context, bool enable, quint8 coeff, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::SetTemporalFilter, {{"enable", enable}, {"coeff", coeff}}, context, cb);
+    simpleCmd(RpcCommand::Ir::Legacy::SetTemporalFilter, {{"enable", enable}, {"coeff", coeff}}, context, cb);
 }
 
 void IrService::setMedianFilter(QObject* context, bool enable, quint8 coeff, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::SetMedianFilter, {{"enable", enable}, {"coeff", coeff}}, context, cb);
+    simpleCmd(RpcCommand::Ir::Legacy::SetMedianFilter, {{"enable", enable}, {"coeff", coeff}}, context, cb);
 }
-
-// ---- 翻转与同步 ----
 
 void IrService::setFlipHorizontal(QObject* context, quint8 value, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::SetFlipHorizontal, {{"value", value}}, context, cb);
+    simpleCmd(RpcCommand::Ir::Legacy::SetFlipHorizontal, {{"value", value}}, context, cb);
 }
 
 void IrService::setFlipVertical(QObject* context, quint8 value, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::SetFlipVertical, {{"value", value}}, context, cb);
+    simpleCmd(RpcCommand::Ir::Legacy::SetFlipVertical, {{"value", value}}, context, cb);
 }
 
 void IrService::setExternalSync(QObject* context, quint8 value, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::SetExternalSync, {{"value", value}}, context, cb);
+    simpleCmd(RpcCommand::Ir::Legacy::SetExternalSync, {{"value", value}}, context, cb);
 }
-
-// ---- 积分时间 ----
 
 void IrService::setIntegration(QObject* context, quint16 v, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::SetIntegration, {{"value", v}}, context, cb);
+    simpleCmd(RpcCommand::Ir::Legacy::SetIntegration, {{"value", v}}, context, cb);
 }
 
 void IrService::setManualIntegration(QObject* context, quint8 value, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::SetManualIntegration, {{"value", value}}, context, cb);
+    simpleCmd(RpcCommand::Ir::Legacy::SetManualIntegration, {{"value", value}}, context, cb);
 }
 
 void IrService::setIntegrationGearMode(QObject* context, quint8 value, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::SetIntegrationGearMode, {{"value", value}}, context, cb);
+    simpleCmd(RpcCommand::Ir::Legacy::SetIntegrationGearMode, {{"value", value}}, context, cb);
 }
 
 void IrService::selectIntegrationGear(QObject* context, quint8 value, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::SelectIntegrationGear, {{"value", value}}, context, cb);
+    simpleCmd(RpcCommand::Ir::Legacy::SelectIntegrationGear, {{"value", value}}, context, cb);
 }
 
 void IrService::queryIntegrationTime(QObject* context, JsonCallback cb) const
 {
-    request(RpcCommand::Ir::QueryIntegrationTime, {}, context, [cb](const RpcResult& r) {
-        if (cb) cb(r.ok, r.data, r.msg);
+    request(RpcCommand::Ir::Legacy::QueryIntegrationTime, {}, context, [cb](const RpcResult& r) {
+        callJson(cb, r);
     }, RpcTimeout::Slow);
 }
 
-// ---- 模式控制 ----
-
 void IrService::setStandby(QObject* context, quint8 value, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::SetStandby, {{"value", value}}, context, cb);
+    simpleCmd(RpcCommand::Ir::Legacy::SetStandby, {{"value", value}}, context, cb);
 }
 
 void IrService::setOnboardAutoCalibration(QObject* context, quint8 value, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::SetOnboardAutoCalibration, {{"value", value}}, context, cb);
+    simpleCmd(RpcCommand::Ir::Legacy::SetOnboardAutoCalibration, {{"value", value}}, context, cb);
 }
-
-// ---- 读取查询 ----
 
 void IrService::readModuleId(QObject* context, JsonCallback cb) const
 {
-    request(RpcCommand::Ir::ReadModuleId, {}, context, [cb](const RpcResult& r) {
-        if (cb) cb(r.ok, r.data, r.msg);
+    request(RpcCommand::Ir::Legacy::ReadModuleId, {}, context, [cb](const RpcResult& r) {
+        callJson(cb, r);
     }, RpcTimeout::Slow);
 }
 
 void IrService::readSelfCheck(QObject* context, JsonCallback cb) const
 {
-    request(RpcCommand::Ir::ReadSelfCheck, {}, context, [cb](const RpcResult& r) {
-        if (cb) cb(r.ok, r.data, r.msg);
+    request(RpcCommand::Ir::Legacy::ReadSelfCheck, {}, context, [cb](const RpcResult& r) {
+        callJson(cb, r);
     }, RpcTimeout::Slow);
 }
 
 void IrService::readFocusPlaneTemp(QObject* context, JsonCallback cb) const
 {
-    request(RpcCommand::Ir::ReadFocusPlaneTemp, {}, context, [cb](const RpcResult& r) {
-        if (cb) cb(r.ok, r.data, r.msg);
+    request(RpcCommand::Ir::Legacy::ReadFocusPlaneTemp, {}, context, [cb](const RpcResult& r) {
+        callJson(cb, r);
     }, RpcTimeout::Slow);
 }
 
 void IrService::readMean(QObject* context, JsonCallback cb) const
 {
-    request(RpcCommand::Ir::ReadMean, {}, context, [cb](const RpcResult& r) {
-        if (cb) cb(r.ok, r.data, r.msg);
+    request(RpcCommand::Ir::Legacy::ReadMean, {}, context, [cb](const RpcResult& r) {
+        callJson(cb, r);
     }, RpcTimeout::Slow);
 }
 
 void IrService::readCorrectionParamGear(QObject* context, JsonCallback cb) const
 {
-    request(RpcCommand::Ir::ReadCorrectionParamGear, {}, context, [cb](const RpcResult& r) {
-        if (cb) cb(r.ok, r.data, r.msg);
+    request(RpcCommand::Ir::Legacy::ReadCorrectionParamGear, {}, context, [cb](const RpcResult& r) {
+        callJson(cb, r);
     }, RpcTimeout::Slow);
 }
 
 void IrService::readCoreTemp(QObject* context, JsonCallback cb) const
 {
-    request(RpcCommand::Ir::ReadCoreTemp, {}, context, [cb](const RpcResult& r) {
-        if (cb) cb(r.ok, r.data, r.msg);
+    request(RpcCommand::Ir::Legacy::ReadCoreTemp, {}, context, [cb](const RpcResult& r) {
+        callJson(cb, r);
     }, RpcTimeout::Slow);
 }
 
 void IrService::readBadPixelCount(QObject* context, JsonCallback cb) const
 {
-    request(RpcCommand::Ir::ReadBadPixelCount, {}, context, [cb](const RpcResult& r) {
-        if (cb) cb(r.ok, r.data, r.msg);
+    request(RpcCommand::Ir::Legacy::ReadBadPixelCount, {}, context, [cb](const RpcResult& r) {
+        callJson(cb, r);
     }, RpcTimeout::Slow);
 }
 
-// ---- 维护与校正 ----
-
 void IrService::maintenanceUnlock(QObject* context, quint8 value, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::MaintenanceUnlock, {{"value", value}}, context, cb, RpcTimeout::Slow);
+    simpleCmd(RpcCommand::Ir::Legacy::MaintenanceUnlock, {{"value", value}}, context, cb, RpcTimeout::Slow);
 }
 
 void IrService::maintenanceExec(QObject* context, const QString& name, quint8 value, JsonCallback cb) const
 {
-    request(RpcCommand::Ir::MaintenanceExec, {{"name", name.toStdString()}, {"value", value}}, context, [cb](const RpcResult& r) {
-        if (cb) cb(r.ok, r.data, r.msg);
-    }, RpcTimeout::Slow);
+    request(RpcCommand::Ir::Legacy::MaintenanceExec, {{"name", name.toStdString()}, {"value", value}},
+            context, [cb](const RpcResult& r) { callJson(cb, r); }, RpcTimeout::Slow);
 }
 
 void IrService::twoPointCalibP1(QObject* context, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::TwoPointCalibP1, {}, context, cb, RpcTimeout::Slow);
+    simpleCmd(RpcCommand::Ir::Legacy::TwoPointCalibP1, {}, context, cb, RpcTimeout::Slow);
 }
 
 void IrService::twoPointCalibP2(QObject* context, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::TwoPointCalibP2, {}, context, cb, RpcTimeout::Slow);
+    simpleCmd(RpcCommand::Ir::Legacy::TwoPointCalibP2, {}, context, cb, RpcTimeout::Slow);
 }
 
 void IrService::saveCalibParams(QObject* context, JsonCallback cb) const
 {
-    request(RpcCommand::Ir::SaveCalibParams, {}, context, [cb](const RpcResult& r) {
-        if (cb) cb(r.ok, r.data, r.msg);
+    request(RpcCommand::Ir::Legacy::SaveCalibParams, {}, context, [cb](const RpcResult& r) {
+        callJson(cb, r);
     }, RpcTimeout::Slow);
 }
 
 void IrService::clearK(QObject* context, quint8 value, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::ClearK, {{"value", value}}, context, cb, RpcTimeout::Slow);
+    simpleCmd(RpcCommand::Ir::Legacy::ClearK, {{"value", value}}, context, cb, RpcTimeout::Slow);
 }
 
 void IrService::clearB(QObject* context, quint8 value, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::ClearB, {{"value", value}}, context, cb, RpcTimeout::Slow);
+    simpleCmd(RpcCommand::Ir::Legacy::ClearB, {{"value", value}}, context, cb, RpcTimeout::Slow);
 }
-
-// ---- 坏元管理 ----
 
 void IrService::badPixelSearch(QObject* context, quint8 value, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::BadPixelSearch, {{"value", value}}, context, cb, RpcTimeout::Slow);
+    simpleCmd(RpcCommand::Ir::Legacy::BadPixelSearch, {{"value", value}}, context, cb, RpcTimeout::Slow);
 }
 
 void IrService::setBadPixelPosition(QObject* context, const quint8 pos[4], Callback cb) const
 {
     std::vector<uint8_t> arr = {pos[0], pos[1], pos[2], pos[3]};
-    simpleCmd(RpcCommand::Ir::SetBadPixelPosition, {{"pos", arr}}, context, cb, RpcTimeout::Slow);
+    simpleCmd(RpcCommand::Ir::Legacy::SetBadPixelPosition, {{"pos", arr}}, context, cb, RpcTimeout::Slow);
 }
 
 void IrService::saveBadPixel(QObject* context, Callback cb) const
 {
-    simpleCmd(RpcCommand::Ir::SaveBadPixel, {}, context, cb, RpcTimeout::Slow);
+    simpleCmd(RpcCommand::Ir::Legacy::SaveBadPixel, {}, context, cb, RpcTimeout::Slow);
+}
+
+void IrService::ci05FocusStartPositive(QObject* context, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::FocusStartPositive, {}, context, cb);
+}
+
+void IrService::ci05FocusStartNegative(QObject* context, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::FocusStartNegative, {}, context, cb);
+}
+
+void IrService::ci05FocusStop(QObject* context, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::FocusStop, {}, context, cb);
+}
+
+void IrService::ci05FocusStepPositive(QObject* context, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::FocusStepPositive, {}, context, cb);
+}
+
+void IrService::ci05FocusStepNegative(QObject* context, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::FocusStepNegative, {}, context, cb);
+}
+
+void IrService::ci05ZoomStartPositive(QObject* context, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::ZoomStartPositive, {}, context, cb);
+}
+
+void IrService::ci05ZoomStartNegative(QObject* context, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::ZoomStartNegative, {}, context, cb);
+}
+
+void IrService::ci05ZoomStop(QObject* context, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::ZoomStop, {}, context, cb);
+}
+
+void IrService::ci05AutoFocus(QObject* context, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::AutoFocus, {}, context, cb, RpcTimeout::Slow);
+}
+
+void IrService::ci05SetFov(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetFov, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetFocusSpeed(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetFocusSpeed, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetZoomSpeed(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetZoomSpeed, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05QueryFocalLength(QObject* context, JsonCallback cb) const
+{
+    request(RpcCommand::Ir::Ci05::QueryFocalLength, {}, context, [cb](const RpcResult& r) { callJson(cb, r); }, RpcTimeout::Slow);
+}
+
+void IrService::ci05QueryFocusMotorPosition(QObject* context, JsonCallback cb) const
+{
+    request(RpcCommand::Ir::Ci05::QueryFocusMotorPosition, {}, context, [cb](const RpcResult& r) { callJson(cb, r); }, RpcTimeout::Slow);
+}
+
+void IrService::ci05QueryZoomMotorPosition(QObject* context, JsonCallback cb) const
+{
+    request(RpcCommand::Ir::Ci05::QueryZoomMotorPosition, {}, context, [cb](const RpcResult& r) { callJson(cb, r); }, RpcTimeout::Slow);
+}
+
+void IrService::ci05SetBrightness(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetBrightness, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetContrast(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetContrast, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetOverallBrightness(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetOverallBrightness, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetOverallContrast(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetOverallContrast, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetSharpness(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetSharpness, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetEzoom(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetEzoom, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetFreeze(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetFreeze, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetMirrorMode(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetMirrorMode, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetPolarityPalette(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetPolarityPalette, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetAgcMode(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetAgcMode, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SaveParams(QObject* context, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SaveParams, {}, context, cb, RpcTimeout::Slow);
+}
+
+void IrService::ci05SetIntegrationMsX10(QObject* context, quint16 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetIntegrationMsX10, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetIntegrationMc(QObject* context, quint32 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetIntegrationMc, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetFrameRateHzX100(QObject* context, quint16 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetFrameRateHzX100, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05ReadFrameRateHz(QObject* context, JsonCallback cb) const
+{
+    request(RpcCommand::Ir::Ci05::ReadFrameRateHz, {}, context, [cb](const RpcResult& r) { callJson(cb, r); }, RpcTimeout::Slow);
+}
+
+void IrService::ci05SetIntegrationGear(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetIntegrationGear, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetIntegrationGearAuto(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetIntegrationGearAuto, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetBackgroundGear(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetBackgroundGear, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetBackgroundGearAuto(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetBackgroundGearAuto, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05TriggerShutterCompensation(QObject* context, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::TriggerShutterCompensation, {}, context, cb, RpcTimeout::Slow);
+}
+
+void IrService::ci05TriggerSceneCompensation(QObject* context, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::TriggerSceneCompensation, {}, context, cb, RpcTimeout::Slow);
+}
+
+void IrService::ci05TriggerDefocusCompensation(QObject* context, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::TriggerDefocusCompensation, {}, context, cb, RpcTimeout::Slow);
+}
+
+void IrService::ci05TriggerIntegrationCorrection(QObject* context, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::TriggerIntegrationCorrection, {}, context, cb, RpcTimeout::Slow);
+}
+
+void IrService::ci05ReadSerialNumber(QObject* context, JsonCallback cb) const
+{
+    request(RpcCommand::Ir::Ci05::ReadSerialNumber, {}, context, [cb](const RpcResult& r) { callJson(cb, r); }, RpcTimeout::Slow);
+}
+
+void IrService::ci05ReadWorkMinutes(QObject* context, JsonCallback cb) const
+{
+    request(RpcCommand::Ir::Ci05::ReadWorkMinutes, {}, context, [cb](const RpcResult& r) { callJson(cb, r); }, RpcTimeout::Slow);
+}
+
+void IrService::ci05ReadCoolingDoneSeconds(QObject* context, JsonCallback cb) const
+{
+    request(RpcCommand::Ir::Ci05::ReadCoolingDoneSeconds, {}, context, [cb](const RpcResult& r) { callJson(cb, r); }, RpcTimeout::Slow);
+}
+
+void IrService::ci05ReadStatus1(QObject* context, JsonCallback cb) const
+{
+    request(RpcCommand::Ir::Ci05::ReadStatus1, {}, context, [cb](const RpcResult& r) { callJson(cb, r); }, RpcTimeout::Slow);
+}
+
+void IrService::ci05ReadStatus2(QObject* context, JsonCallback cb) const
+{
+    request(RpcCommand::Ir::Ci05::ReadStatus2, {}, context, [cb](const RpcResult& r) { callJson(cb, r); }, RpcTimeout::Slow);
+}
+
+void IrService::ci05ReadStatus3(QObject* context, JsonCallback cb) const
+{
+    request(RpcCommand::Ir::Ci05::ReadStatus3, {}, context, [cb](const RpcResult& r) { callJson(cb, r); }, RpcTimeout::Slow);
+}
+
+void IrService::ci05ReadStatus4(QObject* context, JsonCallback cb) const
+{
+    request(RpcCommand::Ir::Ci05::ReadStatus4, {}, context, [cb](const RpcResult& r) { callJson(cb, r); }, RpcTimeout::Slow);
+}
+
+void IrService::ci05ReadWorkState(QObject* context, JsonCallback cb) const
+{
+    request(RpcCommand::Ir::Ci05::ReadWorkState, {}, context, [cb](const RpcResult& r) { callJson(cb, r); }, RpcTimeout::Slow);
+}
+
+void IrService::ci05ReadSelfCheck(QObject* context, JsonCallback cb) const
+{
+    request(RpcCommand::Ir::Ci05::ReadSelfCheck, {}, context, [cb](const RpcResult& r) { callJson(cb, r); }, RpcTimeout::Slow);
 }

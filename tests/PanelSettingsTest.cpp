@@ -11,6 +11,7 @@
 #include <QPushButton>
 #include <QSettings>
 #include <QSpinBox>
+#include <QStackedWidget>
 #include <QTcpServer>
 #include <QTcpSocket>
 
@@ -50,6 +51,8 @@ private slots:
     void spectralPanelShowsSavedBandsBeforeStreamMetadata();
     void spectralPanelKeepsSavedBandsWhenStatsAreEmpty();
     void irPanelRestoresSavedUserInputs();
+    void irPanelSwitchesBetweenSeparateLegacyAndCi05Pages();
+    void irPanelCi05PageUsesSeparateCi05Controls();
 };
 
 void PanelSettingsTest::initTestCase()
@@ -616,6 +619,75 @@ void PanelSettingsTest::irPanelRestoresSavedUserInputs()
     QCOMPARE(badPixelPos1->value(), 20);
     QCOMPARE(badPixelPos2->value(), 30);
     QCOMPARE(badPixelPos3->value(), 40);
+}
+
+void PanelSettingsTest::irPanelSwitchesBetweenSeparateLegacyAndCi05Pages()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+
+    DeviceClient device;
+    IrPanel panel(&device);
+    auto* stack = panel.findChild<QStackedWidget*>(QStringLiteral("irCoreModeStack"));
+    auto* legacyPage = panel.findChild<QWidget*>(QStringLiteral("irLegacyPage"));
+    auto* ci05Page = panel.findChild<QWidget*>(QStringLiteral("irCi05Page"));
+    auto* currentModel = panel.findChild<QLabel*>(QStringLiteral("irCurrentModelLabel"));
+    QVERIFY(stack);
+    QVERIFY(legacyPage);
+    QVERIFY(ci05Page);
+    QVERIFY(currentModel);
+    QCOMPARE(stack->currentWidget(), legacyPage);
+
+    device.connectTo(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(server.waitForNewConnection(1000));
+    QTcpSocket* socket = server.nextPendingConnection();
+    QVERIFY(socket);
+    QTRY_VERIFY(device.isConnected());
+
+    const CapturedControlRequest modelReq = readControlRequest(socket);
+    QCOMPARE(QString::fromStdString(modelReq.payload.value("cmd", std::string())),
+             QStringLiteral("ir.core.current"));
+    writeControlResponse(socket, modelReq.header.seq, {{"model", "ci05"}});
+    QTRY_COMPARE(currentModel->text(), QString::fromUtf8("当前机芯: ci05"));
+    QCOMPARE(stack->currentWidget(), ci05Page);
+}
+
+void PanelSettingsTest::irPanelCi05PageUsesSeparateCi05Controls()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+
+    DeviceClient device;
+    IrPanel panel(&device);
+    auto* ci05Brightness = panel.findChild<QSpinBox*>(QStringLiteral("irCi05BrightnessSpin"));
+    auto* legacyBrightness = panel.findChild<QSpinBox*>(QStringLiteral("irBrightnessSpin"));
+    auto* applyCi05Brightness = panel.findChild<QPushButton*>(QStringLiteral("irCi05ApplyBrightnessButton"));
+    auto* currentModel = panel.findChild<QLabel*>(QStringLiteral("irCurrentModelLabel"));
+    QVERIFY(ci05Brightness);
+    QVERIFY(legacyBrightness);
+    QVERIFY(applyCi05Brightness);
+    QVERIFY(currentModel);
+    QVERIFY(ci05Brightness != legacyBrightness);
+
+    device.connectTo(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(server.waitForNewConnection(1000));
+    QTcpSocket* socket = server.nextPendingConnection();
+    QVERIFY(socket);
+    QTRY_VERIFY(device.isConnected());
+
+    const CapturedControlRequest modelReq = readControlRequest(socket);
+    QCOMPARE(QString::fromStdString(modelReq.payload.value("cmd", std::string())),
+             QStringLiteral("ir.core.current"));
+    writeControlResponse(socket, modelReq.header.seq, {{"model", "ci05"}});
+    QTRY_COMPARE(currentModel->text(), QString::fromUtf8("当前机芯: ci05"));
+
+    ci05Brightness->setValue(50);
+    applyCi05Brightness->click();
+
+    const CapturedControlRequest brightnessReq = readControlRequest(socket);
+    QCOMPARE(QString::fromStdString(brightnessReq.payload.value("cmd", std::string())),
+             QStringLiteral("ir.ci05.set_brightness"));
+    QCOMPARE(brightnessReq.payload["params"].value("value", -1), 50);
 }
 
 QTEST_MAIN(PanelSettingsTest)
