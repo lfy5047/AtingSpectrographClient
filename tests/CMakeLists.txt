@@ -89,6 +89,26 @@ target_link_libraries(CollectServiceTest PRIVATE
 )
 add_test(NAME CollectServiceTest COMMAND CollectServiceTest)
 
+add_executable(SystemServiceTest
+    SystemServiceTest.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/rpc/ControlClient.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/SystemService.cpp
+)
+target_include_directories(SystemServiceTest PRIVATE
+    ${PROJECT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/src/Client
+    ${PROJECT_SOURCE_DIR}/src/Client/core
+    ${PROJECT_SOURCE_DIR}/src/Client/rpc
+    ${PROJECT_SOURCE_DIR}/src/Client/services
+    ${PROJECT_SOURCE_DIR}/Common/include
+)
+target_link_libraries(SystemServiceTest PRIVATE
+    Qt5::Test
+    Qt5::Network
+)
+add_test(NAME SystemServiceTest COMMAND SystemServiceTest)
+
 add_executable(TempControlServiceTest
     TempControlServiceTest.cpp
     ${PROJECT_SOURCE_DIR}/src/Client/rpc/ControlClient.cpp

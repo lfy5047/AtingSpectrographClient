@@ -10,6 +10,8 @@ namespace System {
 static const char* const Ping = "system.ping";
 static const char* const Version = "system.version";
 static const char* const Status = "system.status";
+static const char* const BackgroundCalibrationStart = "system.background_calibration.start";
+static const char* const BackgroundCalibrationStatus = "system.background_calibration.status";
 }
 
 namespace StreamControl {
