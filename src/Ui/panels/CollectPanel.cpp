@@ -7,6 +7,7 @@
 #include <QMessageBox>
 #include <QSettings>
 #include <QSignalBlocker>
+#include <QCheckBox>
 #include <QSpinBox>
 
 CollectPanel::CollectPanel(DeviceClient* dev, QWidget* parent)
@@ -60,6 +61,8 @@ CollectPanel::CollectPanel(DeviceClient* dev, Mode mode, QWidget* parent)
         reverseOffsetFramesSpin_ = new QSpinBox(this);
         reverseOffsetFramesSpin_->setObjectName(QStringLiteral("collectReverseOffsetFramesSpin"));
         reverseOffsetFramesSpin_->setRange(-100000, 100000);
+        staticCollectModeCheck_ = new QCheckBox(QString::fromUtf8("启用"), this);
+        staticCollectModeCheck_->setObjectName(QStringLiteral("collectStaticCollectModeCheck"));
 
         gateCollectingLabel_ = new QLabel(QString::fromUtf8("未知"), this);
         gateCollectingLabel_->setProperty("readout", true);
@@ -69,6 +72,7 @@ CollectPanel::CollectPanel(DeviceClient* dev, Mode mode, QWidget* parent)
         fl->addRow(QString::fromUtf8("后段过扫时间"), discardBackMsSpin_);
         fl->addRow(QString::fromUtf8("正向补偿帧"), forwardOffsetFramesSpin_);
         fl->addRow(QString::fromUtf8("反向补偿帧"), reverseOffsetFramesSpin_);
+        fl->addRow(QString::fromUtf8("静态采集模式"), staticCollectModeCheck_);
         fl->addRow(QString::fromUtf8("门控采集状态"), gateCollectingLabel_);
         fl->addRow(QString::fromUtf8("门控配置状态"), gatePendingLabel_);
 
@@ -121,6 +125,7 @@ CollectPanel::CollectPanel(DeviceClient* dev, Mode mode, QWidget* parent)
         connect(discardBackMsSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) { saveSettings(); });
         connect(forwardOffsetFramesSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) { saveSettings(); });
         connect(reverseOffsetFramesSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) { saveSettings(); });
+        connect(staticCollectModeCheck_, &QCheckBox::toggled, this, [this](bool) { saveSettings(); });
     }
 
     connect(dev, &DeviceClient::connectionChanged, this, [this](bool c, const QString&) {
@@ -139,6 +144,7 @@ void CollectPanel::loadSettings()
     discardBackMsSpin_->setValue(s.value(p + QStringLiteral("discardBackMs"), discardBackMsSpin_->value()).toInt());
     forwardOffsetFramesSpin_->setValue(s.value(p + QStringLiteral("forwardOffsetFrames"), forwardOffsetFramesSpin_->value()).toInt());
     reverseOffsetFramesSpin_->setValue(s.value(p + QStringLiteral("reverseOffsetFrames"), reverseOffsetFramesSpin_->value()).toInt());
+    staticCollectModeCheck_->setChecked(s.value(p + QStringLiteral("staticCollectMode"), staticCollectModeCheck_->isChecked()).toBool());
 }
 
 void CollectPanel::saveSettings() const
@@ -151,6 +157,7 @@ void CollectPanel::saveSettings() const
     s.setValue(p + QStringLiteral("discardBackMs"), discardBackMsSpin_->value());
     s.setValue(p + QStringLiteral("forwardOffsetFrames"), forwardOffsetFramesSpin_->value());
     s.setValue(p + QStringLiteral("reverseOffsetFrames"), reverseOffsetFramesSpin_->value());
+    s.setValue(p + QStringLiteral("staticCollectMode"), staticCollectModeCheck_->isChecked());
 }
 
 void CollectPanel::refreshStatus()
@@ -208,6 +215,7 @@ void CollectPanel::applyGateConfig()
     config.discardBackMs = discardBackMsSpin_->value();
     config.forwardOffsetFrames = forwardOffsetFramesSpin_->value();
     config.reverseOffsetFrames = reverseOffsetFramesSpin_->value();
+    config.staticCollectMode = staticCollectModeCheck_->isChecked();
 
     applyGateConfigBtn_->setEnabled(false);
     dev_->collect()->setGateConfig(this, config,
@@ -255,6 +263,10 @@ void CollectPanel::updateGateConfigUi(const CollectGateConfig& config)
     {
         const QSignalBlocker blocker(reverseOffsetFramesSpin_);
         reverseOffsetFramesSpin_->setValue(config.reverseOffsetFrames);
+    }
+    {
+        const QSignalBlocker blocker(staticCollectModeCheck_);
+        staticCollectModeCheck_->setChecked(config.staticCollectMode);
     }
 
     gateCollectingLabel_->setText(config.collecting

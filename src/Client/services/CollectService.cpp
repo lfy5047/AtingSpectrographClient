@@ -38,6 +38,7 @@ CollectGateConfig gateConfigFromJson(const nlohmann::json& data)
     config.discardBackMs = data.value("discard_back_ms", 0);
     config.forwardOffsetFrames = data.value("forward_offset_frames", 0);
     config.reverseOffsetFrames = data.value("reverse_offset_frames", 0);
+    config.staticCollectMode = data.value("static_collect_mode", false);
     config.collecting = data.value("is_collecting", false);
     config.pendingConfig = data.value("pending_config", false);
     return config;
@@ -50,6 +51,7 @@ nlohmann::json gateConfigToJson(const CollectGateConfig& config)
         {"discard_back_ms", config.discardBackMs},
         {"forward_offset_frames", config.forwardOffsetFrames},
         {"reverse_offset_frames", config.reverseOffsetFrames},
+        {"static_collect_mode", config.staticCollectMode},
     };
 }
 

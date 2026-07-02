@@ -28,6 +28,7 @@ struct CollectGateConfig {
     int discardBackMs = 0;
     int forwardOffsetFrames = 0;
     int reverseOffsetFrames = 0;
+    bool staticCollectMode = false;
     bool collecting = false;
     bool pendingConfig = false;
 };

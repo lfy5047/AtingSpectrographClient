@@ -5,6 +5,7 @@
 #include <QLabel>
 
 class DeviceClient;
+class QCheckBox;
 class QSpinBox;
 struct CollectOversamplingInfo;
 struct CollectGateConfig;
@@ -43,6 +44,7 @@ private:
     QSpinBox*    discardBackMsSpin_ = nullptr;
     QSpinBox*    forwardOffsetFramesSpin_ = nullptr;
     QSpinBox*    reverseOffsetFramesSpin_ = nullptr;
+    QCheckBox*   staticCollectModeCheck_ = nullptr;
     QPushButton* applyOversamplingBtn_ = nullptr;
     QPushButton* refreshGateConfigBtn_ = nullptr;
     QPushButton* applyGateConfigBtn_ = nullptr;

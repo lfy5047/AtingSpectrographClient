@@ -156,6 +156,7 @@ void CollectServiceTest::setGateConfigSendsAllFields()
     config.discardBackMs = 34;
     config.forwardOffsetFrames = -2;
     config.reverseOffsetFrames = 3;
+    config.staticCollectMode = true;
 
     service.setGateConfig(nullptr, config, nullptr);
 
@@ -171,6 +172,7 @@ void CollectServiceTest::setGateConfigSendsAllFields()
     QCOMPARE(req.payload["params"].value("discard_back_ms", -1), 34);
     QCOMPARE(req.payload["params"].value("forward_offset_frames", 0), -2);
     QCOMPARE(req.payload["params"].value("reverse_offset_frames", 0), 3);
+    QVERIFY(req.payload["params"].value("static_collect_mode", false));
 }
 
 void CollectServiceTest::getGateConfigParsesServerData()
@@ -190,6 +192,7 @@ void CollectServiceTest::getGateConfigParsesServerData()
         QCOMPARE(config.discardBackMs, 200);
         QCOMPARE(config.forwardOffsetFrames, -5);
         QCOMPARE(config.reverseOffsetFrames, 6);
+        QVERIFY(config.staticCollectMode);
         QVERIFY(config.collecting);
         QVERIFY(config.pendingConfig);
     });
@@ -206,6 +209,7 @@ void CollectServiceTest::getGateConfigParsesServerData()
                    {"discard_back_ms", 200},
                    {"forward_offset_frames", -5},
                    {"reverse_offset_frames", 6},
+                   {"static_collect_mode", true},
                    {"is_collecting", true},
                    {"pending_config", true}});
     QTRY_VERIFY(called);

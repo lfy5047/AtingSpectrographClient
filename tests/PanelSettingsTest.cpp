@@ -264,6 +264,7 @@ void PanelSettingsTest::collectPanelRestoresSavedInputs()
     settings.setValue(QStringLiteral("panels/collect/discardBackMs"), 22);
     settings.setValue(QStringLiteral("panels/collect/forwardOffsetFrames"), -3);
     settings.setValue(QStringLiteral("panels/collect/reverseOffsetFrames"), 4);
+    settings.setValue(QStringLiteral("panels/collect/staticCollectMode"), true);
 
     DeviceClient device;
     CollectPanel panel(&device);
@@ -273,17 +274,20 @@ void PanelSettingsTest::collectPanelRestoresSavedInputs()
     auto* back = panel.findChild<QSpinBox*>(QStringLiteral("collectDiscardBackMsSpin"));
     auto* forward = panel.findChild<QSpinBox*>(QStringLiteral("collectForwardOffsetFramesSpin"));
     auto* reverse = panel.findChild<QSpinBox*>(QStringLiteral("collectReverseOffsetFramesSpin"));
+    auto* staticMode = panel.findChild<QCheckBox*>(QStringLiteral("collectStaticCollectModeCheck"));
 
     QVERIFY(oversample);
     QVERIFY(front);
     QVERIFY(back);
     QVERIFY(forward);
     QVERIFY(reverse);
+    QVERIFY(staticMode);
     QCOMPARE(oversample->value(), 8);
     QCOMPARE(front->value(), 11);
     QCOMPARE(back->value(), 22);
     QCOMPARE(forward->value(), -3);
     QCOMPARE(reverse->value(), 4);
+    QVERIFY(staticMode->isChecked());
 }
 
 void PanelSettingsTest::collectPanelDoesNotExposeBackgroundCalibrationControls()
@@ -337,6 +341,7 @@ void PanelSettingsTest::dataAcquisitionPanelKeepsOnlyOperationalCollectionContro
     QVERIFY(!collect->findChild<QSpinBox*>(QStringLiteral("collectDiscardBackMsSpin")));
     QVERIFY(!collect->findChild<QSpinBox*>(QStringLiteral("collectForwardOffsetFramesSpin")));
     QVERIFY(!collect->findChild<QSpinBox*>(QStringLiteral("collectReverseOffsetFramesSpin")));
+    QVERIFY(!collect->findChild<QCheckBox*>(QStringLiteral("collectStaticCollectModeCheck")));
     QVERIFY(!collect->findChild<QPushButton*>(QStringLiteral("collectRefreshButton")));
     QVERIFY(!collect->findChild<QPushButton*>(QStringLiteral("collectApplyOversamplingButton")));
     QVERIFY(!collect->findChild<QPushButton*>(QStringLiteral("collectRefreshGateConfigButton")));
