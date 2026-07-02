@@ -280,6 +280,16 @@ void IrService::ci05ZoomStop(QObject* context, Callback cb) const
     simpleCmd(RpcCommand::Ir::Ci05::ZoomStop, {}, context, cb);
 }
 
+void IrService::ci05ZoomStepPositive(QObject* context, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::ZoomStepPositive, {}, context, cb);
+}
+
+void IrService::ci05ZoomStepNegative(QObject* context, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::ZoomStepNegative, {}, context, cb);
+}
+
 void IrService::ci05AutoFocus(QObject* context, Callback cb) const
 {
     simpleCmd(RpcCommand::Ir::Ci05::AutoFocus, {}, context, cb, RpcTimeout::Slow);
@@ -290,6 +300,16 @@ void IrService::ci05SetFov(QObject* context, quint8 value, Callback cb) const
     simpleCmd(RpcCommand::Ir::Ci05::SetFov, {{"value", value}}, context, cb);
 }
 
+void IrService::ci05ShutterOpen(QObject* context, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::ShutterOpen, {}, context, cb);
+}
+
+void IrService::ci05ShutterClose(QObject* context, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::ShutterClose, {}, context, cb);
+}
+
 void IrService::ci05SetFocusSpeed(QObject* context, quint8 value, Callback cb) const
 {
     simpleCmd(RpcCommand::Ir::Ci05::SetFocusSpeed, {{"value", value}}, context, cb);
@@ -298,6 +318,21 @@ void IrService::ci05SetFocusSpeed(QObject* context, quint8 value, Callback cb) c
 void IrService::ci05SetZoomSpeed(QObject* context, quint8 value, Callback cb) const
 {
     simpleCmd(RpcCommand::Ir::Ci05::SetZoomSpeed, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05CallPreset(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::CallPreset, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetPreset(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetPreset, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetFocalLengthMmX10(QObject* context, quint16 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetFocalLengthMmX10, {{"value", value}}, context, cb);
 }
 
 void IrService::ci05QueryFocalLength(QObject* context, JsonCallback cb) const
@@ -313,6 +348,46 @@ void IrService::ci05QueryFocusMotorPosition(QObject* context, JsonCallback cb) c
 void IrService::ci05QueryZoomMotorPosition(QObject* context, JsonCallback cb) const
 {
     request(RpcCommand::Ir::Ci05::QueryZoomMotorPosition, {}, context, [cb](const RpcResult& r) { callJson(cb, r); }, RpcTimeout::Slow);
+}
+
+void IrService::ci05MenuUser(QObject* context, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::MenuUser, {}, context, cb);
+}
+
+void IrService::ci05MenuRight(QObject* context, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::MenuRight, {}, context, cb);
+}
+
+void IrService::ci05MenuLeft(QObject* context, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::MenuLeft, {}, context, cb);
+}
+
+void IrService::ci05MenuParamInc(QObject* context, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::MenuParamInc, {}, context, cb);
+}
+
+void IrService::ci05MenuParamDec(QObject* context, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::MenuParamDec, {}, context, cb);
+}
+
+void IrService::ci05PromptOn(QObject* context, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::PromptOn, {}, context, cb);
+}
+
+void IrService::ci05PromptOff(QObject* context, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::PromptOff, {}, context, cb);
+}
+
+void IrService::ci05SetSyncMode(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetSyncMode, {{"value", value}}, context, cb);
 }
 
 void IrService::ci05SetBrightness(QObject* context, quint8 value, Callback cb) const
@@ -338,6 +413,11 @@ void IrService::ci05SetOverallContrast(QObject* context, quint8 value, Callback 
 void IrService::ci05SetSharpness(QObject* context, quint8 value, Callback cb) const
 {
     simpleCmd(RpcCommand::Ir::Ci05::SetSharpness, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetY8Level(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetY8Level, {{"value", value}}, context, cb);
 }
 
 void IrService::ci05SetEzoom(QObject* context, quint8 value, Callback cb) const
@@ -373,6 +453,16 @@ void IrService::ci05SaveParams(QObject* context, Callback cb) const
 void IrService::ci05SetIntegrationMsX10(QObject* context, quint16 value, Callback cb) const
 {
     simpleCmd(RpcCommand::Ir::Ci05::SetIntegrationMsX10, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05IntegrationIncrease0p1Ms(QObject* context, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::IntegrationIncrease0p1Ms, {}, context, cb);
+}
+
+void IrService::ci05IntegrationDecrease0p1Ms(QObject* context, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::IntegrationDecrease0p1Ms, {}, context, cb);
 }
 
 void IrService::ci05SetIntegrationMc(QObject* context, quint32 value, Callback cb) const
@@ -428,6 +518,61 @@ void IrService::ci05TriggerDefocusCompensation(QObject* context, Callback cb) co
 void IrService::ci05TriggerIntegrationCorrection(QObject* context, Callback cb) const
 {
     simpleCmd(RpcCommand::Ir::Ci05::TriggerIntegrationCorrection, {}, context, cb, RpcTimeout::Slow);
+}
+
+void IrService::ci05SetBootCompensationMode(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetBootCompensationMode, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetGearSwitchCompensationMode(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetGearSwitchCompensationMode, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetVideoSource(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetVideoSource, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetParamLine(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetParamLine, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetDigitalFormat(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetDigitalFormat, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetTestPattern(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetTestPattern, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetImageMode(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetImageMode, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetStatusOutputMode(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetStatusOutputMode, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetTmodFilter(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetTmodFilter, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetNtmFilter(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetNtmFilter, {{"value", value}}, context, cb);
+}
+
+void IrService::ci05SetVerticalStripeRemoval(QObject* context, quint8 value, Callback cb) const
+{
+    simpleCmd(RpcCommand::Ir::Ci05::SetVerticalStripeRemoval, {{"value", value}}, context, cb);
 }
 
 void IrService::ci05ReadSerialNumber(QObject* context, JsonCallback cb) const

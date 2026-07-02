@@ -160,6 +160,26 @@ void IrServiceTest::ci05CommonCommandsUseCi05Namespace()
     verifyRequestFrame(req, QStringLiteral("ir.ci05.set_brightness"));
     QCOMPARE(req.payload["params"].value("value", -1), 50);
 
+    service.ci05SetOverallBrightness(nullptr, 66, nullptr);
+    req = readRequest(socket);
+    verifyRequestFrame(req, QStringLiteral("ir.ci05.set_overall_brightness"));
+    QCOMPARE(req.payload["params"].value("value", -1), 66);
+
+    service.ci05SetMirrorMode(nullptr, 3, nullptr);
+    req = readRequest(socket);
+    verifyRequestFrame(req, QStringLiteral("ir.ci05.set_mirror_mode"));
+    QCOMPARE(req.payload["params"].value("value", -1), 3);
+
+    service.ci05SetSyncMode(nullptr, 2, nullptr);
+    req = readRequest(socket);
+    verifyRequestFrame(req, QStringLiteral("ir.ci05.set_sync_mode"));
+    QCOMPARE(req.payload["params"].value("value", -1), 2);
+
+    service.ci05SetIntegrationMc(nullptr, 123456, nullptr);
+    req = readRequest(socket);
+    verifyRequestFrame(req, QStringLiteral("ir.ci05.set_integration_mc"));
+    QCOMPARE(req.payload["params"].value("value", -1), 123456);
+
     service.ci05FocusStartPositive(nullptr, nullptr);
     req = readRequest(socket);
     verifyRequestFrame(req, QStringLiteral("ir.ci05.focus_start_positive"));

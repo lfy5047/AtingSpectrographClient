@@ -136,7 +136,11 @@ IrPanel::IrPanel(DeviceClient* dev, QWidget* parent)
 void IrPanel::setupLegacyPage(QVBoxLayout* root)
 {
     auto* commonGroup = new QGroupBox(QString::fromUtf8("常用参数"), this);
+    commonGroup->setObjectName(QStringLiteral("irLegacyCommonGroup"));
     auto* commonRoot = new QVBoxLayout(commonGroup);
+    auto* backgroundCorrectionBtn = new QPushButton(QString::fromUtf8("背景矫正"), this);
+    backgroundCorrectionBtn->setObjectName(QStringLiteral("irLegacyBackgroundCorrectionButton"));
+    commonRoot->addWidget(backgroundCorrectionBtn);
     setupIntegration(commonRoot);
     setupImageDisplay(commonRoot);
     setupFlipSync(commonRoot);
@@ -161,6 +165,13 @@ void IrPanel::setupLegacyPage(QVBoxLayout* root)
     connect(advancedGroup, &QGroupBox::toggled, advancedContent, &QWidget::setVisible);
     root->addWidget(advancedGroup);
     root->addStretch();
+
+    connect(backgroundCorrectionBtn, &QPushButton::clicked, this, [this]() {
+        dev_->ir()->triggerCalibration(this, [this](bool ok, const QString& err) {
+            if (!ok) QMessageBox::warning(this, "IR", err);
+            setActionStatus(ok ? "OK" : err);
+        });
+    });
 }
 
 void IrPanel::setupCi05Page(QVBoxLayout* root)
@@ -180,6 +191,64 @@ void IrPanel::setupCi05Page(QVBoxLayout* root)
         return spin;
     };
 
+    auto makeCombo = [this](const QString& name) {
+        auto* combo = new QComboBox(this);
+        combo->setObjectName(name);
+        return combo;
+    };
+    auto addRangeItems = [](QComboBox* combo, const QString& prefix, int min, int max) {
+        for (int i = min; i <= max; ++i)
+            combo->addItem(prefix + QString::number(i), i);
+    };
+    auto addOffOnItems = [](QComboBox* combo) {
+        combo->addItem(QString::fromUtf8("关"), 0);
+        combo->addItem(QString::fromUtf8("开"), 1);
+    };
+    auto comboValue = [](QComboBox* combo) {
+        return static_cast<quint8>(combo->currentData().toInt());
+    };
+
+    auto* commonGroup = new QGroupBox(QString::fromUtf8("常用参数"), this);
+    commonGroup->setObjectName(QStringLiteral("irCi05CommonGroup"));
+    auto* commonRoot = new QVBoxLayout(commonGroup);
+
+    auto* advancedGroup = new QGroupBox(QString::fromUtf8("高级设置"), this);
+    advancedGroup->setObjectName(QStringLiteral("irCi05AdvancedGroup"));
+    advancedGroup->setCheckable(true);
+    advancedGroup->setChecked(false);
+    auto* advancedLayout = new QVBoxLayout(advancedGroup);
+    auto* advancedContent = new QWidget(advancedGroup);
+    auto* advancedRoot = new QVBoxLayout(advancedContent);
+    advancedRoot->setContentsMargins(0, 0, 0, 0);
+    advancedLayout->addWidget(advancedContent);
+    advancedContent->setVisible(false);
+    connect(advancedGroup, &QGroupBox::toggled, advancedContent, &QWidget::setVisible);
+
+    auto* commonCompensationGroup = new QGroupBox(QString::fromUtf8("CI05 补偿"), this);
+    auto* commonCompensationLayout = new QVBoxLayout(commonCompensationGroup);
+    auto* shutterCompensation = new QPushButton(QString::fromUtf8("快门补偿"), this);
+    shutterCompensation->setObjectName(QStringLiteral("irCi05TriggerShutterCompensationButton"));
+    auto* sceneCompensation = new QPushButton(QString::fromUtf8("场景补偿"), this);
+    sceneCompensation->setObjectName(QStringLiteral("irCi05TriggerSceneCompensationButton"));
+    commonCompensationLayout->addLayout(makeGrid2Col({shutterCompensation, sceneCompensation}));
+    auto* sceneHint = new QLabel(QString::fromUtf8("场景补偿前请确保画面为均匀场景。"), this);
+    sceneHint->setWordWrap(true);
+    sceneHint->setProperty("secondary", true);
+    commonCompensationLayout->addWidget(sceneHint);
+    commonRoot->addWidget(commonCompensationGroup);
+
+    auto* commonIntegrationGroup = new QGroupBox(QString::fromUtf8("CI05 积分时间设置"), this);
+    auto* commonIntegrationForm = new QFormLayout(commonIntegrationGroup);
+    ci05IntegrationMsSpin_ = makeSpin(0, 65535, QStringLiteral("irCi05IntegrationMsSpin"));
+    auto* applyIntegration = new QPushButton(QString::fromUtf8("设积分 0.1ms"), this);
+    commonIntegrationForm->addRow(QString::fromUtf8("积分时间"), makeValueButtonRow(ci05IntegrationMsSpin_, applyIntegration, this));
+    auto* integrationIncrease = new QPushButton(QString::fromUtf8("积分 +0.1ms"), this);
+    auto* integrationDecrease = new QPushButton(QString::fromUtf8("积分 -0.1ms"), this);
+    commonIntegrationForm->addRow(QString::fromUtf8("微调"), makeReadoutButtonRow(new QLabel(QStringLiteral("-"), this), integrationIncrease, this));
+    commonIntegrationForm->addRow(QString(), makeReadoutButtonRow(new QLabel(QStringLiteral("-"), this), integrationDecrease, this));
+    commonRoot->addWidget(commonIntegrationGroup);
+    root->addWidget(commonGroup);
+
     auto* lensGroup = new QGroupBox(QString::fromUtf8("CI05 镜头控制"), this);
     auto* lensLayout = new QVBoxLayout(lensGroup);
     auto* focusPos = new QPushButton(QString::fromUtf8("调焦 +"), this);
@@ -188,9 +257,12 @@ void IrPanel::setupCi05Page(QVBoxLayout* root)
     auto* focusStepNeg = new QPushButton(QString::fromUtf8("单步调焦 -"), this);
     auto* zoomPos = new QPushButton(QString::fromUtf8("变倍 +"), this);
     auto* zoomNeg = new QPushButton(QString::fromUtf8("变倍 -"), this);
+    auto* zoomStepPos = new QPushButton(QString::fromUtf8("单步变倍 +"), this);
+    auto* zoomStepNeg = new QPushButton(QString::fromUtf8("单步变倍 -"), this);
     auto* autoFocus = new QPushButton(QString::fromUtf8("自动聚焦"), this);
     lensLayout->addLayout(makeGrid2Col({focusPos, focusNeg, focusStepPos, focusStepNeg,
-                                        zoomPos, zoomNeg, autoFocus}));
+                                        zoomPos, zoomNeg, zoomStepPos, zoomStepNeg,
+                                        autoFocus}));
 
     auto* lensForm = new QFormLayout();
     ci05FovCombo_ = new QComboBox(this);
@@ -208,8 +280,20 @@ void IrPanel::setupCi05Page(QVBoxLayout* root)
     ci05ZoomSpeedSpin_ = makeSpin(0, 10, QStringLiteral("irCi05ZoomSpeedSpin"));
     auto* applyZoomSpeed = new QPushButton(QString::fromUtf8("设变倍速度"), this);
     lensForm->addRow(QString::fromUtf8("变倍速度"), makeValueButtonRow(ci05ZoomSpeedSpin_, applyZoomSpeed, this));
+    auto* shutterOpen = new QPushButton(QString::fromUtf8("快门打开"), this);
+    auto* shutterClose = new QPushButton(QString::fromUtf8("快门关闭"), this);
+    lensForm->addRow(QString::fromUtf8("快门"), makeReadoutButtonRow(new QLabel(QStringLiteral("-"), this), shutterOpen, this));
+    lensForm->addRow(QString(), makeReadoutButtonRow(new QLabel(QStringLiteral("-"), this), shutterClose, this));
+    auto* presetSpin = makeSpin(0, 255, QStringLiteral("irCi05PresetSpin"));
+    auto* callPreset = new QPushButton(QString::fromUtf8("调用预置位"), this);
+    auto* setPreset = new QPushButton(QString::fromUtf8("设置预置位"), this);
+    lensForm->addRow(QString::fromUtf8("预置位"), makeValueButtonRow(presetSpin, callPreset, this));
+    lensForm->addRow(QString(), makeReadoutButtonRow(new QLabel(QStringLiteral("-"), this), setPreset, this));
+    auto* focalLengthSpin = makeSpin(0, 65535, QStringLiteral("irCi05FocalLengthSpin"));
+    auto* applyFocalLength = new QPushButton(QString::fromUtf8("设焦距 0.1mm"), this);
+    lensForm->addRow(QString::fromUtf8("焦距"), makeValueButtonRow(focalLengthSpin, applyFocalLength, this));
     lensLayout->addLayout(lensForm);
-    root->addWidget(lensGroup);
+    advancedRoot->addWidget(lensGroup);
 
     connect(focusPos, &QPushButton::pressed, this, [this, writeCb]() {
         dev_->ir()->ci05FocusStartPositive(this, writeCb);
@@ -241,6 +325,12 @@ void IrPanel::setupCi05Page(QVBoxLayout* root)
     connect(focusStepNeg, &QPushButton::clicked, this, [this, writeCb]() {
         dev_->ir()->ci05FocusStepNegative(this, writeCb);
     });
+    connect(zoomStepPos, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->ci05ZoomStepPositive(this, writeCb);
+    });
+    connect(zoomStepNeg, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->ci05ZoomStepNegative(this, writeCb);
+    });
     connect(autoFocus, &QPushButton::clicked, this, [this, writeCb]() {
         dev_->ir()->ci05AutoFocus(this, writeCb);
     });
@@ -253,6 +343,21 @@ void IrPanel::setupCi05Page(QVBoxLayout* root)
     connect(applyZoomSpeed, &QPushButton::clicked, this, [this, writeCb]() {
         dev_->ir()->ci05SetZoomSpeed(this, static_cast<quint8>(ci05ZoomSpeedSpin_->value()), writeCb);
     });
+    connect(shutterOpen, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->ci05ShutterOpen(this, writeCb);
+    });
+    connect(shutterClose, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->ci05ShutterClose(this, writeCb);
+    });
+    connect(callPreset, &QPushButton::clicked, this, [this, presetSpin, writeCb]() {
+        dev_->ir()->ci05CallPreset(this, static_cast<quint8>(presetSpin->value()), writeCb);
+    });
+    connect(setPreset, &QPushButton::clicked, this, [this, presetSpin, writeCb]() {
+        dev_->ir()->ci05SetPreset(this, static_cast<quint8>(presetSpin->value()), writeCb);
+    });
+    connect(applyFocalLength, &QPushButton::clicked, this, [this, focalLengthSpin, writeCb]() {
+        dev_->ir()->ci05SetFocalLengthMmX10(this, static_cast<quint16>(focalLengthSpin->value()), writeCb);
+    });
 
     auto* imageGroup = new QGroupBox(QString::fromUtf8("CI05 图像参数"), this);
     auto* imageForm = new QFormLayout(imageGroup);
@@ -264,6 +369,15 @@ void IrPanel::setupCi05Page(QVBoxLayout* root)
     ci05ContrastSpin_ = makeSpin(0, 100, QStringLiteral("irCi05ContrastSpin"));
     auto* applyContrast = new QPushButton(QString::fromUtf8("设对比度"), this);
     imageForm->addRow(QString::fromUtf8("对比度"), makeValueButtonRow(ci05ContrastSpin_, applyContrast, this));
+
+    ci05OverallBrightnessSpin_ = makeSpin(0, 100, QStringLiteral("irCi05OverallBrightnessSpin"));
+    auto* applyOverallBrightness = new QPushButton(QString::fromUtf8("设全局亮度"), this);
+    applyOverallBrightness->setObjectName(QStringLiteral("irCi05ApplyOverallBrightnessButton"));
+    imageForm->addRow(QString::fromUtf8("全局亮度"), makeValueButtonRow(ci05OverallBrightnessSpin_, applyOverallBrightness, this));
+
+    ci05OverallContrastSpin_ = makeSpin(0, 100, QStringLiteral("irCi05OverallContrastSpin"));
+    auto* applyOverallContrast = new QPushButton(QString::fromUtf8("设全局对比度"), this);
+    imageForm->addRow(QString::fromUtf8("全局对比度"), makeValueButtonRow(ci05OverallContrastSpin_, applyOverallContrast, this));
 
     ci05SharpnessSpin_ = makeSpin(0, 7, QStringLiteral("irCi05SharpnessSpin"));
     auto* applySharpness = new QPushButton(QString::fromUtf8("设锐化"), this);
@@ -290,13 +404,42 @@ void IrPanel::setupCi05Page(QVBoxLayout* root)
     ci05AgcCombo_->addItem(QString::fromUtf8("手动"), 1);
     auto* applyAgc = new QPushButton(QString::fromUtf8("设 AGC"), this);
     imageForm->addRow(QString::fromUtf8("AGC"), makeValueButtonRow(ci05AgcCombo_, applyAgc, this));
-    root->addWidget(imageGroup);
+
+    ci05MirrorCombo_ = makeCombo(QStringLiteral("irCi05MirrorCombo"));
+    ci05MirrorCombo_->addItem(QString::fromUtf8("正常"), 0);
+    ci05MirrorCombo_->addItem(QString::fromUtf8("水平"), 1);
+    ci05MirrorCombo_->addItem(QString::fromUtf8("垂直"), 2);
+    ci05MirrorCombo_->addItem(QString::fromUtf8("水平+垂直"), 3);
+    auto* applyMirror = new QPushButton(QString::fromUtf8("设镜像"), this);
+    applyMirror->setObjectName(QStringLiteral("irCi05ApplyMirrorButton"));
+    imageForm->addRow(QString::fromUtf8("镜像模式"), makeValueButtonRow(ci05MirrorCombo_, applyMirror, this));
+
+    ci05PaletteCombo_ = makeCombo(QStringLiteral("irCi05PaletteCombo"));
+    addRangeItems(ci05PaletteCombo_, QString::fromUtf8("伪彩 "), 0, 7);
+    auto* applyPalette = new QPushButton(QString::fromUtf8("设极性/伪彩"), this);
+    imageForm->addRow(QString::fromUtf8("极性/伪彩"), makeValueButtonRow(ci05PaletteCombo_, applyPalette, this));
+
+    ci05Y8LevelCombo_ = makeCombo(QStringLiteral("irCi05Y8LevelCombo"));
+    addRangeItems(ci05Y8LevelCombo_, QString::fromUtf8("档位 "), 0, 5);
+    auto* applyY8Level = new QPushButton(QString::fromUtf8("设 Y8 档位"), this);
+    imageForm->addRow(QString::fromUtf8("Y8 档位"), makeValueButtonRow(ci05Y8LevelCombo_, applyY8Level, this));
+
+    auto* saveParams = new QPushButton(QString::fromUtf8("保存参数"), this);
+    saveParams->setObjectName(QStringLiteral("irCi05SaveParamsButton"));
+    imageForm->addRow(saveParams);
+    advancedRoot->addWidget(imageGroup);
 
     connect(applyBrightness, &QPushButton::clicked, this, [this, writeCb]() {
         dev_->ir()->ci05SetBrightness(this, static_cast<quint8>(ci05BrightnessSpin_->value()), writeCb);
     });
     connect(applyContrast, &QPushButton::clicked, this, [this, writeCb]() {
         dev_->ir()->ci05SetContrast(this, static_cast<quint8>(ci05ContrastSpin_->value()), writeCb);
+    });
+    connect(applyOverallBrightness, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->ci05SetOverallBrightness(this, static_cast<quint8>(ci05OverallBrightnessSpin_->value()), writeCb);
+    });
+    connect(applyOverallContrast, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->ci05SetOverallContrast(this, static_cast<quint8>(ci05OverallContrastSpin_->value()), writeCb);
     });
     connect(applySharpness, &QPushButton::clicked, this, [this, writeCb]() {
         dev_->ir()->ci05SetSharpness(this, static_cast<quint8>(ci05SharpnessSpin_->value()), writeCb);
@@ -310,13 +453,21 @@ void IrPanel::setupCi05Page(QVBoxLayout* root)
     connect(applyAgc, &QPushButton::clicked, this, [this, writeCb]() {
         dev_->ir()->ci05SetAgcMode(this, static_cast<quint8>(ci05AgcCombo_->currentData().toInt()), writeCb);
     });
+    connect(applyMirror, &QPushButton::clicked, this, [this, comboValue, writeCb]() {
+        dev_->ir()->ci05SetMirrorMode(this, comboValue(ci05MirrorCombo_), writeCb);
+    });
+    connect(applyPalette, &QPushButton::clicked, this, [this, comboValue, writeCb]() {
+        dev_->ir()->ci05SetPolarityPalette(this, comboValue(ci05PaletteCombo_), writeCb);
+    });
+    connect(applyY8Level, &QPushButton::clicked, this, [this, comboValue, writeCb]() {
+        dev_->ir()->ci05SetY8Level(this, comboValue(ci05Y8LevelCombo_), writeCb);
+    });
+    connect(saveParams, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->ci05SaveParams(this, writeCb);
+    });
 
-    auto* integrationGroup = new QGroupBox(QString::fromUtf8("CI05 积分 / 帧频"), this);
+    auto* integrationGroup = new QGroupBox(QString::fromUtf8("CI05 积分 / 帧频 / 本底"), this);
     auto* integrationForm = new QFormLayout(integrationGroup);
-    ci05IntegrationMsSpin_ = makeSpin(0, 65535, QStringLiteral("irCi05IntegrationMsSpin"));
-    auto* applyIntegration = new QPushButton(QString::fromUtf8("设积分 0.1ms"), this);
-    integrationForm->addRow(QString::fromUtf8("积分时间"), makeValueButtonRow(ci05IntegrationMsSpin_, applyIntegration, this));
-
     ci05FrameRateSpin_ = makeSpin(0, 65535, QStringLiteral("irCi05FrameRateSpin"));
     auto* applyFrameRate = new QPushButton(QString::fromUtf8("设帧频 0.01 Hz"), this);
     applyFrameRate->setObjectName(QStringLiteral("irCi05ApplyFrameRateButton"));
@@ -325,13 +476,61 @@ void IrPanel::setupCi05Page(QVBoxLayout* root)
     auto* readFrameRate = new QPushButton(QString::fromUtf8("读帧频"), this);
     auto* frameRateReadout = makeReadoutLabel(QString::fromUtf8("帧频"), this);
     integrationForm->addRow(QString::fromUtf8("读取"), makeReadoutButtonRow(frameRateReadout, readFrameRate, this));
-    root->addWidget(integrationGroup);
+
+    ci05IntegrationMcSpin_ = makeSpin(0, 16777215, QStringLiteral("irCi05IntegrationMcSpin"));
+    auto* applyIntegrationMc = new QPushButton(QString::fromUtf8("设 CLK 积分"), this);
+    integrationForm->addRow(QString::fromUtf8("CLK 积分"), makeValueButtonRow(ci05IntegrationMcSpin_, applyIntegrationMc, this));
+
+    ci05IntegrationGearCombo_ = makeCombo(QStringLiteral("irCi05IntegrationGearCombo"));
+    addRangeItems(ci05IntegrationGearCombo_, QString::fromUtf8("档位 "), 0, 2);
+    auto* applyIntegrationGear = new QPushButton(QString::fromUtf8("设积分档位"), this);
+    applyIntegrationGear->setObjectName(QStringLiteral("irCi05ApplyIntegrationGearButton"));
+    integrationForm->addRow(QString::fromUtf8("积分档位"), makeValueButtonRow(ci05IntegrationGearCombo_, applyIntegrationGear, this));
+
+    ci05IntegrationAutoCombo_ = makeCombo(QStringLiteral("irCi05IntegrationAutoCombo"));
+    ci05IntegrationAutoCombo_->addItem(QString::fromUtf8("手动"), 0);
+    ci05IntegrationAutoCombo_->addItem(QString::fromUtf8("自动"), 1);
+    auto* applyIntegrationAuto = new QPushButton(QString::fromUtf8("设积分档自动"), this);
+    integrationForm->addRow(QString::fromUtf8("积分档自动"), makeValueButtonRow(ci05IntegrationAutoCombo_, applyIntegrationAuto, this));
+
+    ci05BackgroundGearCombo_ = makeCombo(QStringLiteral("irCi05BackgroundGearCombo"));
+    addRangeItems(ci05BackgroundGearCombo_, QString::fromUtf8("档位 "), 0, 2);
+    auto* applyBackgroundGear = new QPushButton(QString::fromUtf8("设本底档位"), this);
+    integrationForm->addRow(QString::fromUtf8("本底档位"), makeValueButtonRow(ci05BackgroundGearCombo_, applyBackgroundGear, this));
+
+    ci05BackgroundAutoCombo_ = makeCombo(QStringLiteral("irCi05BackgroundAutoCombo"));
+    ci05BackgroundAutoCombo_->addItem(QString::fromUtf8("手动"), 0);
+    ci05BackgroundAutoCombo_->addItem(QString::fromUtf8("自动"), 1);
+    auto* applyBackgroundAuto = new QPushButton(QString::fromUtf8("设本底档自动"), this);
+    integrationForm->addRow(QString::fromUtf8("本底档自动"), makeValueButtonRow(ci05BackgroundAutoCombo_, applyBackgroundAuto, this));
+    advancedRoot->addWidget(integrationGroup);
 
     connect(applyIntegration, &QPushButton::clicked, this, [this, writeCb]() {
         dev_->ir()->ci05SetIntegrationMsX10(this, static_cast<quint16>(ci05IntegrationMsSpin_->value()), writeCb);
     });
+    connect(integrationIncrease, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->ci05IntegrationIncrease0p1Ms(this, writeCb);
+    });
+    connect(integrationDecrease, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->ci05IntegrationDecrease0p1Ms(this, writeCb);
+    });
     connect(applyFrameRate, &QPushButton::clicked, this, [this, writeCb]() {
         dev_->ir()->ci05SetFrameRateHzX100(this, static_cast<quint16>(ci05FrameRateSpin_->value()), writeCb);
+    });
+    connect(applyIntegrationMc, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->ci05SetIntegrationMc(this, static_cast<quint32>(ci05IntegrationMcSpin_->value()), writeCb);
+    });
+    connect(applyIntegrationGear, &QPushButton::clicked, this, [this, comboValue, writeCb]() {
+        dev_->ir()->ci05SetIntegrationGear(this, comboValue(ci05IntegrationGearCombo_), writeCb);
+    });
+    connect(applyIntegrationAuto, &QPushButton::clicked, this, [this, comboValue, writeCb]() {
+        dev_->ir()->ci05SetIntegrationGearAuto(this, comboValue(ci05IntegrationAutoCombo_), writeCb);
+    });
+    connect(applyBackgroundGear, &QPushButton::clicked, this, [this, comboValue, writeCb]() {
+        dev_->ir()->ci05SetBackgroundGear(this, comboValue(ci05BackgroundGearCombo_), writeCb);
+    });
+    connect(applyBackgroundAuto, &QPushButton::clicked, this, [this, comboValue, writeCb]() {
+        dev_->ir()->ci05SetBackgroundGearAuto(this, comboValue(ci05BackgroundAutoCombo_), writeCb);
     });
     connect(readFrameRate, &QPushButton::clicked, this, [this, frameRateReadout]() {
         dev_->ir()->ci05ReadFrameRateHz(this, [this, frameRateReadout](bool ok, const nlohmann::json& data, const QString& err) {
@@ -339,23 +538,24 @@ void IrPanel::setupCi05Page(QVBoxLayout* root)
         });
     });
 
-    auto* compensationGroup = new QGroupBox(QString::fromUtf8("CI05 补偿 / 校正"), this);
+    auto* compensationGroup = new QGroupBox(QString::fromUtf8("CI05 高级补偿"), this);
     auto* compensationLayout = new QVBoxLayout(compensationGroup);
-    auto* shutterCompensation = new QPushButton(QString::fromUtf8("快门补偿"), this);
-    shutterCompensation->setObjectName(QStringLiteral("irCi05TriggerShutterCompensationButton"));
-    auto* sceneCompensation = new QPushButton(QString::fromUtf8("场景补偿"), this);
-    sceneCompensation->setObjectName(QStringLiteral("irCi05TriggerSceneCompensationButton"));
     auto* defocusCompensation = new QPushButton(QString::fromUtf8("离焦补偿"), this);
     defocusCompensation->setObjectName(QStringLiteral("irCi05TriggerDefocusCompensationButton"));
     auto* integrationCorrection = new QPushButton(QString::fromUtf8("积分时间校正"), this);
     integrationCorrection->setObjectName(QStringLiteral("irCi05TriggerIntegrationCorrectionButton"));
-    compensationLayout->addLayout(makeGrid2Col({shutterCompensation, sceneCompensation,
-                                                 defocusCompensation, integrationCorrection}));
-    auto* sceneHint = new QLabel(QString::fromUtf8("场景补偿前请确保画面为均匀场景。"), this);
-    sceneHint->setWordWrap(true);
-    sceneHint->setProperty("secondary", true);
-    compensationLayout->addWidget(sceneHint);
-    root->addWidget(compensationGroup);
+    compensationLayout->addLayout(makeGrid2Col({defocusCompensation, integrationCorrection}));
+    auto* compensationForm = new QFormLayout();
+    ci05BootCompensationModeCombo_ = makeCombo(QStringLiteral("irCi05BootCompensationModeCombo"));
+    addRangeItems(ci05BootCompensationModeCombo_, QString::fromUtf8("模式 "), 0, 3);
+    auto* applyBootCompensationMode = new QPushButton(QString::fromUtf8("设开机补偿"), this);
+    compensationForm->addRow(QString::fromUtf8("开机补偿模式"), makeValueButtonRow(ci05BootCompensationModeCombo_, applyBootCompensationMode, this));
+    ci05GearSwitchCompensationModeCombo_ = makeCombo(QStringLiteral("irCi05GearSwitchCompensationModeCombo"));
+    addRangeItems(ci05GearSwitchCompensationModeCombo_, QString::fromUtf8("模式 "), 0, 4);
+    auto* applyGearSwitchCompensationMode = new QPushButton(QString::fromUtf8("设换档补偿"), this);
+    compensationForm->addRow(QString::fromUtf8("换档补偿模式"), makeValueButtonRow(ci05GearSwitchCompensationModeCombo_, applyGearSwitchCompensationMode, this));
+    compensationLayout->addLayout(compensationForm);
+    advancedRoot->addWidget(compensationGroup);
 
     connect(shutterCompensation, &QPushButton::clicked, this, [this, writeCb]() {
         dev_->ir()->ci05TriggerShutterCompensation(this, writeCb);
@@ -369,6 +569,107 @@ void IrPanel::setupCi05Page(QVBoxLayout* root)
     connect(integrationCorrection, &QPushButton::clicked, this, [this, writeCb]() {
         dev_->ir()->ci05TriggerIntegrationCorrection(this, writeCb);
     });
+    connect(applyBootCompensationMode, &QPushButton::clicked, this, [this, comboValue, writeCb]() {
+        dev_->ir()->ci05SetBootCompensationMode(this, comboValue(ci05BootCompensationModeCombo_), writeCb);
+    });
+    connect(applyGearSwitchCompensationMode, &QPushButton::clicked, this, [this, comboValue, writeCb]() {
+        dev_->ir()->ci05SetGearSwitchCompensationMode(this, comboValue(ci05GearSwitchCompensationModeCombo_), writeCb);
+    });
+
+    auto* outputGroup = new QGroupBox(QString::fromUtf8("CI05 同步 / 输出"), this);
+    auto* outputForm = new QFormLayout(outputGroup);
+    ci05SyncModeCombo_ = makeCombo(QStringLiteral("irCi05SyncModeCombo"));
+    addRangeItems(ci05SyncModeCombo_, QString::fromUtf8("模式 "), 0, 2);
+    auto* applySyncMode = new QPushButton(QString::fromUtf8("设同步模式"), this);
+    applySyncMode->setObjectName(QStringLiteral("irCi05ApplySyncModeButton"));
+    outputForm->addRow(QString::fromUtf8("同步模式"), makeValueButtonRow(ci05SyncModeCombo_, applySyncMode, this));
+    ci05VideoSourceCombo_ = makeCombo(QStringLiteral("irCi05VideoSourceCombo"));
+    addOffOnItems(ci05VideoSourceCombo_);
+    auto* applyVideoSource = new QPushButton(QString::fromUtf8("设视频源"), this);
+    outputForm->addRow(QString::fromUtf8("视频源"), makeValueButtonRow(ci05VideoSourceCombo_, applyVideoSource, this));
+    ci05ParamLineCombo_ = makeCombo(QStringLiteral("irCi05ParamLineCombo"));
+    addOffOnItems(ci05ParamLineCombo_);
+    auto* applyParamLine = new QPushButton(QString::fromUtf8("设参数行"), this);
+    outputForm->addRow(QString::fromUtf8("参数行"), makeValueButtonRow(ci05ParamLineCombo_, applyParamLine, this));
+    ci05DigitalFormatCombo_ = makeCombo(QStringLiteral("irCi05DigitalFormatCombo"));
+    addRangeItems(ci05DigitalFormatCombo_, QString::fromUtf8("格式 "), 0, 2);
+    auto* applyDigitalFormat = new QPushButton(QString::fromUtf8("设数字格式"), this);
+    outputForm->addRow(QString::fromUtf8("数字格式"), makeValueButtonRow(ci05DigitalFormatCombo_, applyDigitalFormat, this));
+    ci05TestPatternCombo_ = makeCombo(QStringLiteral("irCi05TestPatternCombo"));
+    addRangeItems(ci05TestPatternCombo_, QString::fromUtf8("测试图 "), 0, 6);
+    auto* applyTestPattern = new QPushButton(QString::fromUtf8("设测试图"), this);
+    outputForm->addRow(QString::fromUtf8("测试图"), makeValueButtonRow(ci05TestPatternCombo_, applyTestPattern, this));
+    ci05ImageModeCombo_ = makeCombo(QStringLiteral("irCi05ImageModeCombo"));
+    addRangeItems(ci05ImageModeCombo_, QString::fromUtf8("模式 "), 0, 3);
+    auto* applyImageMode = new QPushButton(QString::fromUtf8("设图像模式"), this);
+    outputForm->addRow(QString::fromUtf8("图像模式"), makeValueButtonRow(ci05ImageModeCombo_, applyImageMode, this));
+    ci05StatusOutputModeCombo_ = makeCombo(QStringLiteral("irCi05StatusOutputModeCombo"));
+    addRangeItems(ci05StatusOutputModeCombo_, QString::fromUtf8("模式 "), 0, 2);
+    auto* applyStatusOutputMode = new QPushButton(QString::fromUtf8("设状态输出"), this);
+    outputForm->addRow(QString::fromUtf8("状态输出"), makeValueButtonRow(ci05StatusOutputModeCombo_, applyStatusOutputMode, this));
+    ci05TmodFilterSpin_ = makeSpin(0, 94, QStringLiteral("irCi05TmodFilterSpin"));
+    auto* applyTmodFilter = new QPushButton(QString::fromUtf8("设 TMOD"), this);
+    outputForm->addRow(QString::fromUtf8("TMOD 滤波"), makeValueButtonRow(ci05TmodFilterSpin_, applyTmodFilter, this));
+    ci05NtmFilterSpin_ = makeSpin(0, 10, QStringLiteral("irCi05NtmFilterSpin"));
+    auto* applyNtmFilter = new QPushButton(QString::fromUtf8("设 nTM"), this);
+    outputForm->addRow(QString::fromUtf8("nTM 滤波"), makeValueButtonRow(ci05NtmFilterSpin_, applyNtmFilter, this));
+    ci05VerticalStripeRemovalCombo_ = makeCombo(QStringLiteral("irCi05VerticalStripeRemovalCombo"));
+    addOffOnItems(ci05VerticalStripeRemovalCombo_);
+    auto* applyVerticalStripeRemoval = new QPushButton(QString::fromUtf8("设去竖条"), this);
+    outputForm->addRow(QString::fromUtf8("去竖条"), makeValueButtonRow(ci05VerticalStripeRemovalCombo_, applyVerticalStripeRemoval, this));
+    advancedRoot->addWidget(outputGroup);
+
+    connect(applySyncMode, &QPushButton::clicked, this, [this, comboValue, writeCb]() {
+        dev_->ir()->ci05SetSyncMode(this, comboValue(ci05SyncModeCombo_), writeCb);
+    });
+    connect(applyVideoSource, &QPushButton::clicked, this, [this, comboValue, writeCb]() {
+        dev_->ir()->ci05SetVideoSource(this, comboValue(ci05VideoSourceCombo_), writeCb);
+    });
+    connect(applyParamLine, &QPushButton::clicked, this, [this, comboValue, writeCb]() {
+        dev_->ir()->ci05SetParamLine(this, comboValue(ci05ParamLineCombo_), writeCb);
+    });
+    connect(applyDigitalFormat, &QPushButton::clicked, this, [this, comboValue, writeCb]() {
+        dev_->ir()->ci05SetDigitalFormat(this, comboValue(ci05DigitalFormatCombo_), writeCb);
+    });
+    connect(applyTestPattern, &QPushButton::clicked, this, [this, comboValue, writeCb]() {
+        dev_->ir()->ci05SetTestPattern(this, comboValue(ci05TestPatternCombo_), writeCb);
+    });
+    connect(applyImageMode, &QPushButton::clicked, this, [this, comboValue, writeCb]() {
+        dev_->ir()->ci05SetImageMode(this, comboValue(ci05ImageModeCombo_), writeCb);
+    });
+    connect(applyStatusOutputMode, &QPushButton::clicked, this, [this, comboValue, writeCb]() {
+        dev_->ir()->ci05SetStatusOutputMode(this, comboValue(ci05StatusOutputModeCombo_), writeCb);
+    });
+    connect(applyTmodFilter, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->ci05SetTmodFilter(this, static_cast<quint8>(ci05TmodFilterSpin_->value()), writeCb);
+    });
+    connect(applyNtmFilter, &QPushButton::clicked, this, [this, writeCb]() {
+        dev_->ir()->ci05SetNtmFilter(this, static_cast<quint8>(ci05NtmFilterSpin_->value()), writeCb);
+    });
+    connect(applyVerticalStripeRemoval, &QPushButton::clicked, this, [this, comboValue, writeCb]() {
+        dev_->ir()->ci05SetVerticalStripeRemoval(this, comboValue(ci05VerticalStripeRemovalCombo_), writeCb);
+    });
+
+    auto* menuGroup = new QGroupBox(QString::fromUtf8("CI05 菜单 / OSD"), this);
+    auto* menuLayout = new QVBoxLayout(menuGroup);
+    auto* menuUser = new QPushButton(QString::fromUtf8("用户键"), this);
+    auto* menuLeft = new QPushButton(QString::fromUtf8("左"), this);
+    auto* menuRight = new QPushButton(QString::fromUtf8("右"), this);
+    auto* menuParamInc = new QPushButton(QString::fromUtf8("参数 +"), this);
+    auto* menuParamDec = new QPushButton(QString::fromUtf8("参数 -"), this);
+    auto* promptOn = new QPushButton(QString::fromUtf8("提示打开"), this);
+    auto* promptOff = new QPushButton(QString::fromUtf8("提示关闭"), this);
+    menuLayout->addLayout(makeGrid2Col({menuUser, menuLeft, menuRight, menuParamInc,
+                                        menuParamDec, promptOn, promptOff}));
+    advancedRoot->addWidget(menuGroup);
+
+    connect(menuUser, &QPushButton::clicked, this, [this, writeCb]() { dev_->ir()->ci05MenuUser(this, writeCb); });
+    connect(menuLeft, &QPushButton::clicked, this, [this, writeCb]() { dev_->ir()->ci05MenuLeft(this, writeCb); });
+    connect(menuRight, &QPushButton::clicked, this, [this, writeCb]() { dev_->ir()->ci05MenuRight(this, writeCb); });
+    connect(menuParamInc, &QPushButton::clicked, this, [this, writeCb]() { dev_->ir()->ci05MenuParamInc(this, writeCb); });
+    connect(menuParamDec, &QPushButton::clicked, this, [this, writeCb]() { dev_->ir()->ci05MenuParamDec(this, writeCb); });
+    connect(promptOn, &QPushButton::clicked, this, [this, writeCb]() { dev_->ir()->ci05PromptOn(this, writeCb); });
+    connect(promptOff, &QPushButton::clicked, this, [this, writeCb]() { dev_->ir()->ci05PromptOff(this, writeCb); });
 
     auto* statusGroup = new QGroupBox(QString::fromUtf8("CI05 状态读取"), this);
     auto* statusLayout = new QVBoxLayout(statusGroup);
@@ -394,8 +695,29 @@ void IrPanel::setupCi05Page(QVBoxLayout* root)
     auto* readStatus4 = new QPushButton(QStringLiteral("读 Status4"), this);
     readStatus4->setObjectName(QStringLiteral("irCi05ReadStatus4Button"));
     statusLayout->addWidget(makeReadoutButtonRow(status4Readout, readStatus4, this));
+    auto* serialReadout = makeReadoutLabel(QString::fromUtf8("序列号"), this);
+    auto* readSerial = new QPushButton(QString::fromUtf8("读序列号"), this);
+    statusLayout->addWidget(makeReadoutButtonRow(serialReadout, readSerial, this));
+    auto* workMinutesReadout = makeReadoutLabel(QString::fromUtf8("工作时长"), this);
+    auto* readWorkMinutes = new QPushButton(QString::fromUtf8("读工作时长"), this);
+    statusLayout->addWidget(makeReadoutButtonRow(workMinutesReadout, readWorkMinutes, this));
+    auto* coolingDoneReadout = makeReadoutLabel(QString::fromUtf8("制冷完成"), this);
+    auto* readCoolingDone = new QPushButton(QString::fromUtf8("读制冷完成"), this);
+    statusLayout->addWidget(makeReadoutButtonRow(coolingDoneReadout, readCoolingDone, this));
+    auto* ci05SelfCheckReadout = makeReadoutLabel(QString::fromUtf8("自检"), this);
+    auto* readCi05SelfCheck = new QPushButton(QString::fromUtf8("读自检"), this);
+    statusLayout->addWidget(makeReadoutButtonRow(ci05SelfCheckReadout, readCi05SelfCheck, this));
+    auto* focalLengthReadout = makeReadoutLabel(QString::fromUtf8("焦距"), this);
+    auto* readFocalLength = new QPushButton(QString::fromUtf8("读焦距"), this);
+    statusLayout->addWidget(makeReadoutButtonRow(focalLengthReadout, readFocalLength, this));
+    auto* zoomMotorReadout = makeReadoutLabel(QString::fromUtf8("变倍电机"), this);
+    auto* readZoomMotor = new QPushButton(QString::fromUtf8("读变倍电机"), this);
+    statusLayout->addWidget(makeReadoutButtonRow(zoomMotorReadout, readZoomMotor, this));
+    auto* focusMotorReadout = makeReadoutLabel(QString::fromUtf8("调焦电机"), this);
+    auto* readFocusMotor = new QPushButton(QString::fromUtf8("读调焦电机"), this);
+    statusLayout->addWidget(makeReadoutButtonRow(focusMotorReadout, readFocusMotor, this));
     statusLayout->addWidget(ci05ActionStatusLabel_);
-    root->addWidget(statusGroup);
+    advancedRoot->addWidget(statusGroup);
 
     connect(readWorkState, &QPushButton::clicked, this, [this, workStateReadout]() {
         dev_->ir()->ci05ReadWorkState(this, [this, workStateReadout](bool ok, const nlohmann::json& data, const QString& err) {
@@ -422,7 +744,43 @@ void IrPanel::setupCi05Page(QVBoxLayout* root)
             updateReadoutLabel(status4Readout, QStringLiteral("Status4"), ok, data, err);
         });
     });
+    connect(readSerial, &QPushButton::clicked, this, [this, serialReadout]() {
+        dev_->ir()->ci05ReadSerialNumber(this, [this, serialReadout](bool ok, const nlohmann::json& data, const QString& err) {
+            updateReadoutLabel(serialReadout, QString::fromUtf8("序列号"), ok, data, err);
+        });
+    });
+    connect(readWorkMinutes, &QPushButton::clicked, this, [this, workMinutesReadout]() {
+        dev_->ir()->ci05ReadWorkMinutes(this, [this, workMinutesReadout](bool ok, const nlohmann::json& data, const QString& err) {
+            updateReadoutLabel(workMinutesReadout, QString::fromUtf8("工作时长"), ok, data, err);
+        });
+    });
+    connect(readCoolingDone, &QPushButton::clicked, this, [this, coolingDoneReadout]() {
+        dev_->ir()->ci05ReadCoolingDoneSeconds(this, [this, coolingDoneReadout](bool ok, const nlohmann::json& data, const QString& err) {
+            updateReadoutLabel(coolingDoneReadout, QString::fromUtf8("制冷完成"), ok, data, err, QStringLiteral("s"));
+        });
+    });
+    connect(readCi05SelfCheck, &QPushButton::clicked, this, [this, ci05SelfCheckReadout]() {
+        dev_->ir()->ci05ReadSelfCheck(this, [this, ci05SelfCheckReadout](bool ok, const nlohmann::json& data, const QString& err) {
+            updateReadoutLabel(ci05SelfCheckReadout, QString::fromUtf8("自检"), ok, data, err);
+        });
+    });
+    connect(readFocalLength, &QPushButton::clicked, this, [this, focalLengthReadout]() {
+        dev_->ir()->ci05QueryFocalLength(this, [this, focalLengthReadout](bool ok, const nlohmann::json& data, const QString& err) {
+            updateReadoutLabel(focalLengthReadout, QString::fromUtf8("焦距"), ok, data, err);
+        });
+    });
+    connect(readZoomMotor, &QPushButton::clicked, this, [this, zoomMotorReadout]() {
+        dev_->ir()->ci05QueryZoomMotorPosition(this, [this, zoomMotorReadout](bool ok, const nlohmann::json& data, const QString& err) {
+            updateReadoutLabel(zoomMotorReadout, QString::fromUtf8("变倍电机"), ok, data, err);
+        });
+    });
+    connect(readFocusMotor, &QPushButton::clicked, this, [this, focusMotorReadout]() {
+        dev_->ir()->ci05QueryFocusMotorPosition(this, [this, focusMotorReadout](bool ok, const nlohmann::json& data, const QString& err) {
+            updateReadoutLabel(focusMotorReadout, QString::fromUtf8("调焦电机"), ok, data, err);
+        });
+    });
 
+    root->addWidget(advancedGroup);
     root->addStretch();
 }
 
@@ -765,7 +1123,6 @@ void IrPanel::setupQueries(QVBoxLayout* root)
     actionStatusLabel_->setWordWrap(true);
     actionStatusLabel_->setProperty("secondary", true);
 
-    auto* calibBtn     = new QPushButton(QString::fromUtf8("触发标定"), this);
     auto* forceShutterBtn = new QPushButton(QString::fromUtf8("强制制冷"), this);
     auto* versionBtn   = new QPushButton(QString::fromUtf8("版本"), this);
     auto* selfChkBtn   = new QPushButton(QString::fromUtf8("自检"), this);
@@ -777,7 +1134,6 @@ void IrPanel::setupQueries(QVBoxLayout* root)
     auto* readBadBtn   = new QPushButton(QString::fromUtf8("读坏元数"), this);
 
     auto* actionRow = new QHBoxLayout();
-    actionRow->addWidget(calibBtn);
     actionRow->addWidget(forceShutterBtn);
     vb->addLayout(actionRow);
 
@@ -807,12 +1163,6 @@ void IrPanel::setupQueries(QVBoxLayout* root)
         };
     };
 
-    connect(calibBtn, &QPushButton::clicked, this, [this]() {
-        dev_->ir()->triggerCalibration(this, [this](bool ok, const QString& err) {
-            if (!ok) QMessageBox::warning(this, "IR", err);
-            setActionStatus(ok ? "OK" : err);
-        });
-    });
     connect(forceShutterBtn, &QPushButton::clicked, this, [this]() {
         dev_->ir()->forceShutter(this, [this](bool ok, const QString& err) {
             if (!ok) QMessageBox::warning(this, "IR", err);
@@ -1132,15 +1482,37 @@ void IrPanel::loadSettings()
     const QString c = p + QStringLiteral("ci05/");
     ci05BrightnessSpin_->setValue(s.value(c + QStringLiteral("brightness"), ci05BrightnessSpin_->value()).toInt());
     ci05ContrastSpin_->setValue(s.value(c + QStringLiteral("contrast"), ci05ContrastSpin_->value()).toInt());
+    ci05OverallBrightnessSpin_->setValue(s.value(c + QStringLiteral("overallBrightness"), ci05OverallBrightnessSpin_->value()).toInt());
+    ci05OverallContrastSpin_->setValue(s.value(c + QStringLiteral("overallContrast"), ci05OverallContrastSpin_->value()).toInt());
     ci05SharpnessSpin_->setValue(s.value(c + QStringLiteral("sharpness"), ci05SharpnessSpin_->value()).toInt());
     ci05FocusSpeedSpin_->setValue(s.value(c + QStringLiteral("focusSpeed"), ci05FocusSpeedSpin_->value()).toInt());
     ci05ZoomSpeedSpin_->setValue(s.value(c + QStringLiteral("zoomSpeed"), ci05ZoomSpeedSpin_->value()).toInt());
     ci05IntegrationMsSpin_->setValue(s.value(c + QStringLiteral("integrationMsX10"), ci05IntegrationMsSpin_->value()).toInt());
+    ci05IntegrationMcSpin_->setValue(s.value(c + QStringLiteral("integrationMc"), ci05IntegrationMcSpin_->value()).toInt());
     ci05FrameRateSpin_->setValue(s.value(c + QStringLiteral("frameRateHzX100"), ci05FrameRateSpin_->value()).toInt());
     PanelSettings::setComboByData(ci05EzoomCombo_, s.value(c + QStringLiteral("ezoom"), ci05EzoomCombo_->currentData()), 0);
     PanelSettings::setComboByData(ci05FreezeCombo_, s.value(c + QStringLiteral("freeze"), ci05FreezeCombo_->currentData()), 0);
     PanelSettings::setComboByData(ci05AgcCombo_, s.value(c + QStringLiteral("agc"), ci05AgcCombo_->currentData()), 0);
     PanelSettings::setComboByData(ci05FovCombo_, s.value(c + QStringLiteral("fov"), ci05FovCombo_->currentData()), 0);
+    PanelSettings::setComboByData(ci05MirrorCombo_, s.value(c + QStringLiteral("mirror"), ci05MirrorCombo_->currentData()), 0);
+    PanelSettings::setComboByData(ci05PaletteCombo_, s.value(c + QStringLiteral("palette"), ci05PaletteCombo_->currentData()), 0);
+    PanelSettings::setComboByData(ci05IntegrationGearCombo_, s.value(c + QStringLiteral("integrationGear"), ci05IntegrationGearCombo_->currentData()), 0);
+    PanelSettings::setComboByData(ci05IntegrationAutoCombo_, s.value(c + QStringLiteral("integrationAuto"), ci05IntegrationAutoCombo_->currentData()), 0);
+    PanelSettings::setComboByData(ci05BackgroundGearCombo_, s.value(c + QStringLiteral("backgroundGear"), ci05BackgroundGearCombo_->currentData()), 0);
+    PanelSettings::setComboByData(ci05BackgroundAutoCombo_, s.value(c + QStringLiteral("backgroundAuto"), ci05BackgroundAutoCombo_->currentData()), 0);
+    PanelSettings::setComboByData(ci05SyncModeCombo_, s.value(c + QStringLiteral("syncMode"), ci05SyncModeCombo_->currentData()), 0);
+    PanelSettings::setComboByData(ci05Y8LevelCombo_, s.value(c + QStringLiteral("y8Level"), ci05Y8LevelCombo_->currentData()), 0);
+    PanelSettings::setComboByData(ci05BootCompensationModeCombo_, s.value(c + QStringLiteral("bootCompensationMode"), ci05BootCompensationModeCombo_->currentData()), 0);
+    PanelSettings::setComboByData(ci05GearSwitchCompensationModeCombo_, s.value(c + QStringLiteral("gearSwitchCompensationMode"), ci05GearSwitchCompensationModeCombo_->currentData()), 0);
+    PanelSettings::setComboByData(ci05VideoSourceCombo_, s.value(c + QStringLiteral("videoSource"), ci05VideoSourceCombo_->currentData()), 0);
+    PanelSettings::setComboByData(ci05ParamLineCombo_, s.value(c + QStringLiteral("paramLine"), ci05ParamLineCombo_->currentData()), 0);
+    PanelSettings::setComboByData(ci05DigitalFormatCombo_, s.value(c + QStringLiteral("digitalFormat"), ci05DigitalFormatCombo_->currentData()), 0);
+    PanelSettings::setComboByData(ci05TestPatternCombo_, s.value(c + QStringLiteral("testPattern"), ci05TestPatternCombo_->currentData()), 0);
+    PanelSettings::setComboByData(ci05ImageModeCombo_, s.value(c + QStringLiteral("imageMode"), ci05ImageModeCombo_->currentData()), 0);
+    PanelSettings::setComboByData(ci05StatusOutputModeCombo_, s.value(c + QStringLiteral("statusOutputMode"), ci05StatusOutputModeCombo_->currentData()), 0);
+    ci05TmodFilterSpin_->setValue(s.value(c + QStringLiteral("tmodFilter"), ci05TmodFilterSpin_->value()).toInt());
+    ci05NtmFilterSpin_->setValue(s.value(c + QStringLiteral("ntmFilter"), ci05NtmFilterSpin_->value()).toInt());
+    PanelSettings::setComboByData(ci05VerticalStripeRemovalCombo_, s.value(c + QStringLiteral("verticalStripeRemoval"), ci05VerticalStripeRemovalCombo_->currentData()), 0);
 }
 
 void IrPanel::saveSettings() const
@@ -1189,15 +1561,37 @@ void IrPanel::saveSettings() const
     const QString c = p + QStringLiteral("ci05/");
     s.setValue(c + QStringLiteral("brightness"), ci05BrightnessSpin_->value());
     s.setValue(c + QStringLiteral("contrast"), ci05ContrastSpin_->value());
+    s.setValue(c + QStringLiteral("overallBrightness"), ci05OverallBrightnessSpin_->value());
+    s.setValue(c + QStringLiteral("overallContrast"), ci05OverallContrastSpin_->value());
     s.setValue(c + QStringLiteral("sharpness"), ci05SharpnessSpin_->value());
     s.setValue(c + QStringLiteral("focusSpeed"), ci05FocusSpeedSpin_->value());
     s.setValue(c + QStringLiteral("zoomSpeed"), ci05ZoomSpeedSpin_->value());
     s.setValue(c + QStringLiteral("integrationMsX10"), ci05IntegrationMsSpin_->value());
+    s.setValue(c + QStringLiteral("integrationMc"), ci05IntegrationMcSpin_->value());
     s.setValue(c + QStringLiteral("frameRateHzX100"), ci05FrameRateSpin_->value());
     s.setValue(c + QStringLiteral("ezoom"), ci05EzoomCombo_->currentData());
     s.setValue(c + QStringLiteral("freeze"), ci05FreezeCombo_->currentData());
     s.setValue(c + QStringLiteral("agc"), ci05AgcCombo_->currentData());
     s.setValue(c + QStringLiteral("fov"), ci05FovCombo_->currentData());
+    s.setValue(c + QStringLiteral("mirror"), ci05MirrorCombo_->currentData());
+    s.setValue(c + QStringLiteral("palette"), ci05PaletteCombo_->currentData());
+    s.setValue(c + QStringLiteral("integrationGear"), ci05IntegrationGearCombo_->currentData());
+    s.setValue(c + QStringLiteral("integrationAuto"), ci05IntegrationAutoCombo_->currentData());
+    s.setValue(c + QStringLiteral("backgroundGear"), ci05BackgroundGearCombo_->currentData());
+    s.setValue(c + QStringLiteral("backgroundAuto"), ci05BackgroundAutoCombo_->currentData());
+    s.setValue(c + QStringLiteral("syncMode"), ci05SyncModeCombo_->currentData());
+    s.setValue(c + QStringLiteral("y8Level"), ci05Y8LevelCombo_->currentData());
+    s.setValue(c + QStringLiteral("bootCompensationMode"), ci05BootCompensationModeCombo_->currentData());
+    s.setValue(c + QStringLiteral("gearSwitchCompensationMode"), ci05GearSwitchCompensationModeCombo_->currentData());
+    s.setValue(c + QStringLiteral("videoSource"), ci05VideoSourceCombo_->currentData());
+    s.setValue(c + QStringLiteral("paramLine"), ci05ParamLineCombo_->currentData());
+    s.setValue(c + QStringLiteral("digitalFormat"), ci05DigitalFormatCombo_->currentData());
+    s.setValue(c + QStringLiteral("testPattern"), ci05TestPatternCombo_->currentData());
+    s.setValue(c + QStringLiteral("imageMode"), ci05ImageModeCombo_->currentData());
+    s.setValue(c + QStringLiteral("statusOutputMode"), ci05StatusOutputModeCombo_->currentData());
+    s.setValue(c + QStringLiteral("tmodFilter"), ci05TmodFilterSpin_->value());
+    s.setValue(c + QStringLiteral("ntmFilter"), ci05NtmFilterSpin_->value());
+    s.setValue(c + QStringLiteral("verticalStripeRemoval"), ci05VerticalStripeRemovalCombo_->currentData());
 }
 
 void IrPanel::connectSettingSignals()
@@ -1248,15 +1642,37 @@ void IrPanel::connectSettingSignals()
 
     connectSpin(ci05BrightnessSpin_);
     connectSpin(ci05ContrastSpin_);
+    connectSpin(ci05OverallBrightnessSpin_);
+    connectSpin(ci05OverallContrastSpin_);
     connectSpin(ci05SharpnessSpin_);
     connectSpin(ci05FocusSpeedSpin_);
     connectSpin(ci05ZoomSpeedSpin_);
     connectSpin(ci05IntegrationMsSpin_);
+    connectSpin(ci05IntegrationMcSpin_);
     connectSpin(ci05FrameRateSpin_);
     connectCombo(ci05EzoomCombo_);
     connectCombo(ci05FreezeCombo_);
     connectCombo(ci05AgcCombo_);
     connectCombo(ci05FovCombo_);
+    connectCombo(ci05MirrorCombo_);
+    connectCombo(ci05PaletteCombo_);
+    connectCombo(ci05IntegrationGearCombo_);
+    connectCombo(ci05IntegrationAutoCombo_);
+    connectCombo(ci05BackgroundGearCombo_);
+    connectCombo(ci05BackgroundAutoCombo_);
+    connectCombo(ci05SyncModeCombo_);
+    connectCombo(ci05Y8LevelCombo_);
+    connectCombo(ci05BootCompensationModeCombo_);
+    connectCombo(ci05GearSwitchCompensationModeCombo_);
+    connectCombo(ci05VideoSourceCombo_);
+    connectCombo(ci05ParamLineCombo_);
+    connectCombo(ci05DigitalFormatCombo_);
+    connectCombo(ci05TestPatternCombo_);
+    connectCombo(ci05ImageModeCombo_);
+    connectCombo(ci05StatusOutputModeCombo_);
+    connectSpin(ci05TmodFilterSpin_);
+    connectSpin(ci05NtmFilterSpin_);
+    connectCombo(ci05VerticalStripeRemovalCombo_);
 }
 
 void IrPanel::setActionStatus(const QString& text)

@@ -65,8 +65,12 @@ private slots:
     void spectralPanelKeepsSavedBandsWhenStatsAreEmpty();
     void irPanelRestoresSavedUserInputs();
     void irPanelPlacesCommonDetectorControlsOutsideAdvancedGroup();
+    void irPanelLegacyBackgroundCorrectionIsTopCommonControl();
     void irPanelSwitchesBetweenSeparateLegacyAndCi05Pages();
     void irPanelCi05PageUsesSeparateCi05Controls();
+    void irPanelCi05PlacesCommonControlsOutsideAdvancedGroup();
+    void irPanelCi05AdvancedSettingsExposeDocumentedControls();
+    void irPanelCi05AdvancedControlsSendDocumentedCommands();
     void irPanelCi05PageReadsAllStatusRegisters();
     void irPanelCi05PageTriggersAllCompensations();
 };
@@ -96,6 +100,8 @@ CapturedControlRequest readControlRequest(QTcpSocket* socket)
 {
     using namespace cli::proto;
 
+    CapturedControlRequest req;
+    req.payload = nlohmann::json::object();
     const int headerSize = static_cast<int>(sizeof(CtrlHeader));
     QElapsedTimer timer;
     timer.start();
@@ -103,9 +109,8 @@ CapturedControlRequest readControlRequest(QTcpSocket* socket)
         QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
         socket->waitForReadyRead(50);
     }
-    if (socket->bytesAvailable() < headerSize) return CapturedControlRequest();
+    if (socket->bytesAvailable() < headerSize) return req;
 
-    CapturedControlRequest req;
     const QByteArray headerBytes = socket->read(sizeof(CtrlHeader));
     std::memcpy(&req.header, headerBytes.constData(), sizeof(CtrlHeader));
     timer.restart();
@@ -115,7 +120,9 @@ CapturedControlRequest readControlRequest(QTcpSocket* socket)
         if (timer.elapsed() >= 1000) return req;
     }
     const QByteArray payloadBytes = socket->read(req.header.payload_len);
-    req.payload = nlohmann::json::parse(payloadBytes.constData());
+    req.payload = nlohmann::json::parse(payloadBytes.constData(), nullptr, false);
+    if (req.payload.is_discarded() || !req.payload.is_object())
+        req.payload = nlohmann::json::object();
     return req;
 }
 
@@ -827,6 +834,27 @@ void PanelSettingsTest::irPanelPlacesCommonDetectorControlsOutsideAdvancedGroup(
     QVERIFY(advanced->findChild<QSpinBox*>(QStringLiteral("irBrightnessSpin")));
 }
 
+void PanelSettingsTest::irPanelLegacyBackgroundCorrectionIsTopCommonControl()
+{
+    DeviceClient device;
+    IrPanel panel(&device);
+
+    auto* common = panel.findChild<QGroupBox*>(QStringLiteral("irLegacyCommonGroup"));
+    auto* advanced = panel.findChild<QGroupBox*>(QStringLiteral("detectorAdvancedGroup"));
+    auto* backgroundCorrection = panel.findChild<QPushButton*>(QStringLiteral("irLegacyBackgroundCorrectionButton"));
+
+    QVERIFY(common);
+    QVERIFY(advanced);
+    QVERIFY(backgroundCorrection);
+    QCOMPARE(backgroundCorrection->text(), QStringLiteral("\u80cc\u666f\u77eb\u6b63"));
+    QVERIFY(common->findChild<QPushButton*>(QStringLiteral("irLegacyBackgroundCorrectionButton")));
+    QVERIFY(!advanced->findChild<QPushButton*>(QStringLiteral("irLegacyBackgroundCorrectionButton")));
+
+    auto* commonLayout = qobject_cast<QVBoxLayout*>(common->layout());
+    QVERIFY(commonLayout);
+    QCOMPARE(commonLayout->itemAt(0)->widget(), backgroundCorrection);
+}
+
 void PanelSettingsTest::irPanelSwitchesBetweenSeparateLegacyAndCi05Pages()
 {
     QTcpServer server;
@@ -865,11 +893,13 @@ void PanelSettingsTest::irPanelCi05PageUsesSeparateCi05Controls()
 
     DeviceClient device;
     IrPanel panel(&device);
+    auto* advanced = panel.findChild<QGroupBox*>(QStringLiteral("irCi05AdvancedGroup"));
     auto* ci05Brightness = panel.findChild<QSpinBox*>(QStringLiteral("irCi05BrightnessSpin"));
     auto* legacyBrightness = panel.findChild<QSpinBox*>(QStringLiteral("irBrightnessSpin"));
     auto* applyCi05Brightness = panel.findChild<QPushButton*>(QStringLiteral("irCi05ApplyBrightnessButton"));
     auto* applyCi05FrameRate = panel.findChild<QPushButton*>(QStringLiteral("irCi05ApplyFrameRateButton"));
     auto* currentModel = panel.findChild<QLabel*>(QStringLiteral("irCurrentModelLabel"));
+    QVERIFY(advanced);
     QVERIFY(ci05Brightness);
     QVERIFY(legacyBrightness);
     QVERIFY(applyCi05Brightness);
@@ -891,13 +921,155 @@ void PanelSettingsTest::irPanelCi05PageUsesSeparateCi05Controls()
     writeControlResponse(socket, modelReq.header.seq, {{"model", "ci05"}});
     QTRY_COMPARE(currentModel->text(), QStringLiteral("\u5f53\u524d\u673a\u82af: ci05"));
 
+    advanced->setChecked(true);
     ci05Brightness->setValue(50);
     applyCi05Brightness->click();
 
     const CapturedControlRequest brightnessReq = readControlRequest(socket);
     QCOMPARE(QString::fromStdString(brightnessReq.payload.value("cmd", std::string())),
              QStringLiteral("ir.ci05.set_brightness"));
+    QVERIFY(brightnessReq.payload.contains("params"));
+    QVERIFY(brightnessReq.payload["params"].is_object());
     QCOMPARE(brightnessReq.payload["params"].value("value", -1), 50);
+}
+
+void PanelSettingsTest::irPanelCi05PlacesCommonControlsOutsideAdvancedGroup()
+{
+    DeviceClient device;
+    IrPanel panel(&device);
+
+    auto* common = panel.findChild<QGroupBox*>(QStringLiteral("irCi05CommonGroup"));
+    auto* advanced = panel.findChild<QGroupBox*>(QStringLiteral("irCi05AdvancedGroup"));
+    auto* shutter = panel.findChild<QPushButton*>(QStringLiteral("irCi05TriggerShutterCompensationButton"));
+    auto* scene = panel.findChild<QPushButton*>(QStringLiteral("irCi05TriggerSceneCompensationButton"));
+    auto* integration = panel.findChild<QSpinBox*>(QStringLiteral("irCi05IntegrationMsSpin"));
+    auto* defocus = panel.findChild<QPushButton*>(QStringLiteral("irCi05TriggerDefocusCompensationButton"));
+    auto* frameRate = panel.findChild<QSpinBox*>(QStringLiteral("irCi05FrameRateSpin"));
+
+    QVERIFY(common);
+    QVERIFY(advanced);
+    QVERIFY(shutter);
+    QVERIFY(scene);
+    QVERIFY(integration);
+    QVERIFY(defocus);
+    QVERIFY(frameRate);
+
+    QVERIFY(common->findChild<QPushButton*>(QStringLiteral("irCi05TriggerShutterCompensationButton")));
+    QVERIFY(common->findChild<QPushButton*>(QStringLiteral("irCi05TriggerSceneCompensationButton")));
+    QVERIFY(common->findChild<QSpinBox*>(QStringLiteral("irCi05IntegrationMsSpin")));
+    QVERIFY(!advanced->findChild<QPushButton*>(QStringLiteral("irCi05TriggerShutterCompensationButton")));
+    QVERIFY(!advanced->findChild<QPushButton*>(QStringLiteral("irCi05TriggerSceneCompensationButton")));
+    QVERIFY(!advanced->findChild<QSpinBox*>(QStringLiteral("irCi05IntegrationMsSpin")));
+
+    QVERIFY(advanced->findChild<QPushButton*>(QStringLiteral("irCi05TriggerDefocusCompensationButton")));
+    QVERIFY(advanced->findChild<QSpinBox*>(QStringLiteral("irCi05FrameRateSpin")));
+}
+
+void PanelSettingsTest::irPanelCi05AdvancedSettingsExposeDocumentedControls()
+{
+    DeviceClient device;
+    IrPanel panel(&device);
+
+    auto* advanced = panel.findChild<QGroupBox*>(QStringLiteral("irCi05AdvancedGroup"));
+    QVERIFY(advanced);
+    QVERIFY(advanced->isCheckable());
+    QVERIFY(!advanced->isChecked());
+
+    QVERIFY(advanced->findChild<QSpinBox*>(QStringLiteral("irCi05OverallBrightnessSpin")));
+    QVERIFY(advanced->findChild<QSpinBox*>(QStringLiteral("irCi05OverallContrastSpin")));
+    QVERIFY(advanced->findChild<QComboBox*>(QStringLiteral("irCi05MirrorCombo")));
+    QVERIFY(advanced->findChild<QComboBox*>(QStringLiteral("irCi05PaletteCombo")));
+    QVERIFY(advanced->findChild<QSpinBox*>(QStringLiteral("irCi05IntegrationMcSpin")));
+    QVERIFY(advanced->findChild<QComboBox*>(QStringLiteral("irCi05IntegrationGearCombo")));
+    QVERIFY(advanced->findChild<QComboBox*>(QStringLiteral("irCi05IntegrationAutoCombo")));
+    QVERIFY(advanced->findChild<QComboBox*>(QStringLiteral("irCi05BackgroundGearCombo")));
+    QVERIFY(advanced->findChild<QComboBox*>(QStringLiteral("irCi05BackgroundAutoCombo")));
+    QVERIFY(advanced->findChild<QComboBox*>(QStringLiteral("irCi05SyncModeCombo")));
+    QVERIFY(advanced->findChild<QComboBox*>(QStringLiteral("irCi05VideoSourceCombo")));
+    QVERIFY(advanced->findChild<QComboBox*>(QStringLiteral("irCi05DigitalFormatCombo")));
+    QVERIFY(advanced->findChild<QComboBox*>(QStringLiteral("irCi05ImageModeCombo")));
+    QVERIFY(advanced->findChild<QSpinBox*>(QStringLiteral("irCi05TmodFilterSpin")));
+    QVERIFY(advanced->findChild<QSpinBox*>(QStringLiteral("irCi05NtmFilterSpin")));
+    QVERIFY(advanced->findChild<QComboBox*>(QStringLiteral("irCi05VerticalStripeRemovalCombo")));
+    QVERIFY(advanced->findChild<QPushButton*>(QStringLiteral("irCi05SaveParamsButton")));
+}
+
+void PanelSettingsTest::irPanelCi05AdvancedControlsSendDocumentedCommands()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+
+    DeviceClient device;
+    IrPanel panel(&device);
+    auto* advanced = panel.findChild<QGroupBox*>(QStringLiteral("irCi05AdvancedGroup"));
+    auto* currentModel = panel.findChild<QLabel*>(QStringLiteral("irCurrentModelLabel"));
+    auto* overallBrightness = panel.findChild<QSpinBox*>(QStringLiteral("irCi05OverallBrightnessSpin"));
+    auto* applyOverallBrightness = panel.findChild<QPushButton*>(QStringLiteral("irCi05ApplyOverallBrightnessButton"));
+    auto* mirror = panel.findChild<QComboBox*>(QStringLiteral("irCi05MirrorCombo"));
+    auto* applyMirror = panel.findChild<QPushButton*>(QStringLiteral("irCi05ApplyMirrorButton"));
+    auto* integrationGear = panel.findChild<QComboBox*>(QStringLiteral("irCi05IntegrationGearCombo"));
+    auto* applyIntegrationGear = panel.findChild<QPushButton*>(QStringLiteral("irCi05ApplyIntegrationGearButton"));
+    auto* syncMode = panel.findChild<QComboBox*>(QStringLiteral("irCi05SyncModeCombo"));
+    auto* applySyncMode = panel.findChild<QPushButton*>(QStringLiteral("irCi05ApplySyncModeButton"));
+    QVERIFY(advanced);
+    QVERIFY(currentModel);
+    QVERIFY(overallBrightness);
+    QVERIFY(applyOverallBrightness);
+    QVERIFY(mirror);
+    QVERIFY(applyMirror);
+    QVERIFY(integrationGear);
+    QVERIFY(applyIntegrationGear);
+    QVERIFY(syncMode);
+    QVERIFY(applySyncMode);
+
+    device.connectTo(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(server.waitForNewConnection(1000));
+    QTcpSocket* socket = server.nextPendingConnection();
+    QVERIFY(socket);
+    QTRY_VERIFY(device.isConnected());
+
+    const CapturedControlRequest modelReq = readControlRequest(socket);
+    QCOMPARE(QString::fromStdString(modelReq.payload.value("cmd", std::string())),
+             QStringLiteral("ir.core.current"));
+    writeControlResponse(socket, modelReq.header.seq, {{"model", "ci05"}});
+    QTRY_COMPARE(currentModel->text(), QStringLiteral("\u5f53\u524d\u673a\u82af: ci05"));
+
+    advanced->setChecked(true);
+    overallBrightness->setValue(66);
+    applyOverallBrightness->click();
+    CapturedControlRequest request = readControlRequest(socket);
+    QCOMPARE(QString::fromStdString(request.payload.value("cmd", std::string())),
+             QStringLiteral("ir.ci05.set_overall_brightness"));
+    QVERIFY(request.payload.contains("params"));
+    QVERIFY(request.payload["params"].is_object());
+    QCOMPARE(request.payload["params"].value("value", -1), 66);
+
+    mirror->setCurrentIndex(3);
+    applyMirror->click();
+    request = readControlRequest(socket);
+    QCOMPARE(QString::fromStdString(request.payload.value("cmd", std::string())),
+             QStringLiteral("ir.ci05.set_mirror_mode"));
+    QVERIFY(request.payload.contains("params"));
+    QVERIFY(request.payload["params"].is_object());
+    QCOMPARE(request.payload["params"].value("value", -1), 3);
+
+    integrationGear->setCurrentIndex(2);
+    applyIntegrationGear->click();
+    request = readControlRequest(socket);
+    QCOMPARE(QString::fromStdString(request.payload.value("cmd", std::string())),
+             QStringLiteral("ir.ci05.set_integration_gear"));
+    QVERIFY(request.payload.contains("params"));
+    QVERIFY(request.payload["params"].is_object());
+    QCOMPARE(request.payload["params"].value("value", -1), 2);
+
+    syncMode->setCurrentIndex(2);
+    applySyncMode->click();
+    request = readControlRequest(socket);
+    QCOMPARE(QString::fromStdString(request.payload.value("cmd", std::string())),
+             QStringLiteral("ir.ci05.set_sync_mode"));
+    QVERIFY(request.payload.contains("params"));
+    QVERIFY(request.payload["params"].is_object());
+    QCOMPARE(request.payload["params"].value("value", -1), 2);
 }
 
 void PanelSettingsTest::irPanelCi05PageReadsAllStatusRegisters()
@@ -907,11 +1079,13 @@ void PanelSettingsTest::irPanelCi05PageReadsAllStatusRegisters()
 
     DeviceClient device;
     IrPanel panel(&device);
+    auto* advanced = panel.findChild<QGroupBox*>(QStringLiteral("irCi05AdvancedGroup"));
     auto* currentModel = panel.findChild<QLabel*>(QStringLiteral("irCurrentModelLabel"));
     auto* readStatus1 = panel.findChild<QPushButton*>(QStringLiteral("irCi05ReadStatus1Button"));
     auto* readStatus2 = panel.findChild<QPushButton*>(QStringLiteral("irCi05ReadStatus2Button"));
     auto* readStatus3 = panel.findChild<QPushButton*>(QStringLiteral("irCi05ReadStatus3Button"));
     auto* readStatus4 = panel.findChild<QPushButton*>(QStringLiteral("irCi05ReadStatus4Button"));
+    QVERIFY(advanced);
     QVERIFY(currentModel);
     QVERIFY(readStatus1);
     QVERIFY(readStatus2);
@@ -930,6 +1104,7 @@ void PanelSettingsTest::irPanelCi05PageReadsAllStatusRegisters()
     writeControlResponse(socket, modelReq.header.seq, {{"model", "ci05"}});
     QTRY_COMPARE(currentModel->text(), QStringLiteral("\u5f53\u524d\u673a\u82af: ci05"));
 
+    advanced->setChecked(true);
     readStatus2->click();
     CapturedControlRequest statusReq = readControlRequest(socket);
     QCOMPARE(QString::fromStdString(statusReq.payload.value("cmd", std::string())),
@@ -953,11 +1128,13 @@ void PanelSettingsTest::irPanelCi05PageTriggersAllCompensations()
 
     DeviceClient device;
     IrPanel panel(&device);
+    auto* advanced = panel.findChild<QGroupBox*>(QStringLiteral("irCi05AdvancedGroup"));
     auto* currentModel = panel.findChild<QLabel*>(QStringLiteral("irCurrentModelLabel"));
     auto* shutter = panel.findChild<QPushButton*>(QStringLiteral("irCi05TriggerShutterCompensationButton"));
     auto* scene = panel.findChild<QPushButton*>(QStringLiteral("irCi05TriggerSceneCompensationButton"));
     auto* defocus = panel.findChild<QPushButton*>(QStringLiteral("irCi05TriggerDefocusCompensationButton"));
     auto* integration = panel.findChild<QPushButton*>(QStringLiteral("irCi05TriggerIntegrationCorrectionButton"));
+    QVERIFY(advanced);
     QVERIFY(currentModel);
     QVERIFY(shutter);
     QVERIFY(scene);
@@ -986,6 +1163,7 @@ void PanelSettingsTest::irPanelCi05PageTriggersAllCompensations()
     QCOMPARE(QString::fromStdString(request.payload.value("cmd", std::string())),
              QStringLiteral("ir.ci05.trigger_scene_compensation"));
 
+    advanced->setChecked(true);
     defocus->click();
     request = readControlRequest(socket);
     QCOMPARE(QString::fromStdString(request.payload.value("cmd", std::string())),
