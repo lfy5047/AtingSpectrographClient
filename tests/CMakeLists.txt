@@ -230,8 +230,11 @@ add_executable(PanelSettingsTest
     ${PROJECT_SOURCE_DIR}/src/Client/services/SystemService.cpp
     ${PROJECT_SOURCE_DIR}/src/Client/services/TempControlService.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/panels/CameraPanel.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/panels/AdvancedSettingsPanel.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/panels/CalibrationPanel.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/panels/CollectPanel.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/panels/ConnectionPanel.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/panels/DataAcquisitionPanel.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/panels/IrPanel.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/panels/MirrorPanel.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/panels/SpectralPanel.cpp

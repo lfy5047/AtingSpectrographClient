@@ -2,6 +2,10 @@
 
 #include <QImage>
 #include <QPainter>
+#include <QPushButton>
+#include <QFrame>
+
+#include <algorithm>
 
 #include "ThemeManager.h"
 #include "widgets/TopBarWidget.h"
@@ -15,6 +19,8 @@ private slots:
     void outdoorThemeUsesLightNoSignalBackground();
     void outdoorThemePaintsTopBarBackground();
     void outdoorThemePaintsViewerSpacingBackground();
+    void topBarExposesConnectionToggleButton();
+    void topBarCombinesFpsAndDropped();
 };
 
 void ImageViewThemeTest::outdoorThemeUsesLightNoSignalBackground()
@@ -82,6 +88,42 @@ void ImageViewThemeTest::outdoorThemePaintsViewerSpacingBackground()
                  .arg(pixel.blue(), 2, 16, QLatin1Char('0'))));
 
     ThemeManager::setCurrentThemeForTesting(ThemeManager::Theme::IndustrialDark);
+}
+
+void ImageViewThemeTest::topBarExposesConnectionToggleButton()
+{
+    TopBarWidget topBar;
+    auto* button = topBar.findChild<QPushButton*>(QStringLiteral("topBarConnectionButton"));
+    QVERIFY(button);
+    auto* parentCard = qobject_cast<QFrame*>(button->parentWidget());
+    QVERIFY(parentCard);
+    QVERIFY(parentCard->property("connectionCard").toBool());
+    QVERIFY(button->property("compactAction").toBool());
+    QVERIFY(button->maximumWidth() <= 72);
+    QCOMPARE(button->text(), QStringLiteral("\u8fde\u63a5"));
+
+    QSignalSpy spy(&topBar, SIGNAL(connectToggleRequested()));
+    button->click();
+    QCOMPARE(spy.count(), 1);
+
+    topBar.setConnected(true, QStringLiteral("10.0.0.42"));
+    QCOMPARE(button->text(), QStringLiteral("\u65ad\u5f00"));
+
+    topBar.setConnected(false);
+    QCOMPARE(button->text(), QStringLiteral("\u8fde\u63a5"));
+}
+
+void ImageViewThemeTest::topBarCombinesFpsAndDropped()
+{
+    TopBarWidget topBar;
+    topBar.setFps(12.3);
+    topBar.setDropped(4);
+
+    const auto labels = topBar.findChildren<QLabel*>();
+    const bool hasCombinedMetric = std::any_of(labels.begin(), labels.end(), [](const QLabel* label) {
+        return label->text() == QStringLiteral("12.3 / 4");
+    });
+    QVERIFY(hasCombinedMetric);
 }
 
 QTEST_MAIN(ImageViewThemeTest)

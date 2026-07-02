@@ -23,11 +23,44 @@ int WindowSettingsStore::restore(QMainWindow* window, QSplitter* splitter, Sideb
         if (panel == 7) panel = 8;
         else if (panel == 8) panel = 9;
     }
-    if (panelVersion < MainWindowPanelRegistry::PanelVersion) {
-        if (panel == 9) panel = MainWindowPanelRegistry::Log;
-    }
-    if (panelVersion < 4 && panel >= 5 && panel != MainWindowPanelRegistry::Log) {
+    if (panelVersion < 4 && panel >= 5) {
         panel += 1;
+    }
+
+    if (panelVersion < 5) {
+        switch (panel) {
+        case 0:
+            panel = MainWindowPanelRegistry::Dashboard;
+            break;
+        case 1:
+        case 2:
+            panel = MainWindowPanelRegistry::AdvancedSettings;
+            break;
+        case 3:
+        case 6:
+        case 7:
+        case 8:
+            panel = MainWindowPanelRegistry::DataAcquisition;
+            break;
+        case 4:
+            panel = MainWindowPanelRegistry::DetectorSettings;
+            break;
+        case 5:
+            panel = MainWindowPanelRegistry::TempControl;
+            break;
+        case 9:
+            panel = MainWindowPanelRegistry::RecordPlayback;
+            break;
+        case 10:
+            panel = MainWindowPanelRegistry::SpectrumAnalysis;
+            break;
+        case 11:
+            panel = MainWindowPanelRegistry::Log;
+            break;
+        default:
+            panel = MainWindowPanelRegistry::Dashboard;
+            break;
+        }
     }
     if (panel < MainWindowPanelRegistry::Dashboard || panel > MainWindowPanelRegistry::Log) {
         panel = MainWindowPanelRegistry::Dashboard;

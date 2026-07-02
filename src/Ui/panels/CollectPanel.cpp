@@ -8,9 +8,13 @@
 #include <QSettings>
 #include <QSignalBlocker>
 #include <QSpinBox>
-#include <QTimer>
 
 CollectPanel::CollectPanel(DeviceClient* dev, QWidget* parent)
+    : CollectPanel(dev, Full, parent)
+{
+}
+
+CollectPanel::CollectPanel(DeviceClient* dev, Mode mode, QWidget* parent)
     : QWidget(parent), dev_(dev)
 {
     auto* root = new QVBoxLayout(this);
@@ -19,118 +23,115 @@ CollectPanel::CollectPanel(DeviceClient* dev, QWidget* parent)
     auto* grp = new QGroupBox(QString::fromUtf8("运动采集门控"), this);
     auto* fl = new QFormLayout(grp);
 
-    statusLabel_ = new QLabel(QString::fromUtf8("未知"), this);
-    statusLabel_->setProperty("readout", true);
-    fl->addRow(QString::fromUtf8("状态"), statusLabel_);
+    if (mode == Full) {
+        statusLabel_ = new QLabel(QString::fromUtf8("未知"), this);
+        statusLabel_->setProperty("readout", true);
+        fl->addRow(QString::fromUtf8("状态"), statusLabel_);
 
-    oversampleFactorSpin_ = new QSpinBox(this);
-    oversampleFactorSpin_->setObjectName(QStringLiteral("collectOversampleFactorSpin"));
-    oversampleFactorSpin_->setRange(1, 1024);
-    oversampleFactorSpin_->setValue(1);
-    applyOversamplingBtn_ = new QPushButton(QString::fromUtf8("应用"), this);
-    auto* oversamplingRow = new QHBoxLayout();
-    oversamplingRow->addWidget(oversampleFactorSpin_, 1);
-    oversamplingRow->addWidget(applyOversamplingBtn_);
-    fl->addRow(QString::fromUtf8("超采样倍率"), oversamplingRow);
+        oversampleFactorSpin_ = new QSpinBox(this);
+        oversampleFactorSpin_->setObjectName(QStringLiteral("collectOversampleFactorSpin"));
+        oversampleFactorSpin_->setRange(1, 1024);
+        oversampleFactorSpin_->setValue(1);
+        applyOversamplingBtn_ = new QPushButton(QString::fromUtf8("应用"), this);
+        applyOversamplingBtn_->setObjectName(QStringLiteral("collectApplyOversamplingButton"));
+        auto* oversamplingRow = new QHBoxLayout();
+        oversamplingRow->addWidget(oversampleFactorSpin_, 1);
+        oversamplingRow->addWidget(applyOversamplingBtn_);
+        fl->addRow(QString::fromUtf8("超采样倍率"), oversamplingRow);
 
-    effectiveSSpeedLabel_ = new QLabel(QString::fromUtf8("-"), this);
-    effectiveSSpeedLabel_->setProperty("readout", true);
-    effectiveFSpeedLabel_ = new QLabel(QString::fromUtf8("-"), this);
-    effectiveFSpeedLabel_->setProperty("readout", true);
-    fl->addRow(QString::fromUtf8("有效 S 速度"), effectiveSSpeedLabel_);
-    fl->addRow(QString::fromUtf8("有效 F 速度"), effectiveFSpeedLabel_);
+        effectiveSSpeedLabel_ = new QLabel(QString::fromUtf8("-"), this);
+        effectiveSSpeedLabel_->setProperty("readout", true);
+        effectiveFSpeedLabel_ = new QLabel(QString::fromUtf8("-"), this);
+        effectiveFSpeedLabel_->setProperty("readout", true);
+        fl->addRow(QString::fromUtf8("有效 S 速度"), effectiveSSpeedLabel_);
+        fl->addRow(QString::fromUtf8("有效 F 速度"), effectiveFSpeedLabel_);
 
-    discardFrontMsSpin_ = new QSpinBox(this);
-    discardFrontMsSpin_->setObjectName(QStringLiteral("collectDiscardFrontMsSpin"));
-    discardFrontMsSpin_->setRange(0, 600000);
-    discardFrontMsSpin_->setSuffix(QStringLiteral(" ms"));
-    discardBackMsSpin_ = new QSpinBox(this);
-    discardBackMsSpin_->setObjectName(QStringLiteral("collectDiscardBackMsSpin"));
-    discardBackMsSpin_->setRange(0, 600000);
-    discardBackMsSpin_->setSuffix(QStringLiteral(" ms"));
-    forwardOffsetFramesSpin_ = new QSpinBox(this);
-    forwardOffsetFramesSpin_->setObjectName(QStringLiteral("collectForwardOffsetFramesSpin"));
-    forwardOffsetFramesSpin_->setRange(-100000, 100000);
-    reverseOffsetFramesSpin_ = new QSpinBox(this);
-    reverseOffsetFramesSpin_->setObjectName(QStringLiteral("collectReverseOffsetFramesSpin"));
-    reverseOffsetFramesSpin_->setRange(-100000, 100000);
+        discardFrontMsSpin_ = new QSpinBox(this);
+        discardFrontMsSpin_->setObjectName(QStringLiteral("collectDiscardFrontMsSpin"));
+        discardFrontMsSpin_->setRange(0, 600000);
+        discardFrontMsSpin_->setSuffix(QStringLiteral(" ms"));
+        discardBackMsSpin_ = new QSpinBox(this);
+        discardBackMsSpin_->setObjectName(QStringLiteral("collectDiscardBackMsSpin"));
+        discardBackMsSpin_->setRange(0, 600000);
+        discardBackMsSpin_->setSuffix(QStringLiteral(" ms"));
+        forwardOffsetFramesSpin_ = new QSpinBox(this);
+        forwardOffsetFramesSpin_->setObjectName(QStringLiteral("collectForwardOffsetFramesSpin"));
+        forwardOffsetFramesSpin_->setRange(-100000, 100000);
+        reverseOffsetFramesSpin_ = new QSpinBox(this);
+        reverseOffsetFramesSpin_->setObjectName(QStringLiteral("collectReverseOffsetFramesSpin"));
+        reverseOffsetFramesSpin_->setRange(-100000, 100000);
 
-    gateCollectingLabel_ = new QLabel(QString::fromUtf8("未知"), this);
-    gateCollectingLabel_->setProperty("readout", true);
-    gatePendingLabel_ = new QLabel(QString::fromUtf8("未知"), this);
-    gatePendingLabel_->setProperty("readout", true);
-    fl->addRow(QString::fromUtf8("前段丢弃时间"), discardFrontMsSpin_);
-    fl->addRow(QString::fromUtf8("后段过扫时间"), discardBackMsSpin_);
-    fl->addRow(QString::fromUtf8("正向补偿帧"), forwardOffsetFramesSpin_);
-    fl->addRow(QString::fromUtf8("反向补偿帧"), reverseOffsetFramesSpin_);
-    fl->addRow(QString::fromUtf8("门控采集状态"), gateCollectingLabel_);
-    fl->addRow(QString::fromUtf8("门控配置状态"), gatePendingLabel_);
+        gateCollectingLabel_ = new QLabel(QString::fromUtf8("未知"), this);
+        gateCollectingLabel_->setProperty("readout", true);
+        gatePendingLabel_ = new QLabel(QString::fromUtf8("未知"), this);
+        gatePendingLabel_->setProperty("readout", true);
+        fl->addRow(QString::fromUtf8("前段丢弃时间"), discardFrontMsSpin_);
+        fl->addRow(QString::fromUtf8("后段过扫时间"), discardBackMsSpin_);
+        fl->addRow(QString::fromUtf8("正向补偿帧"), forwardOffsetFramesSpin_);
+        fl->addRow(QString::fromUtf8("反向补偿帧"), reverseOffsetFramesSpin_);
+        fl->addRow(QString::fromUtf8("门控采集状态"), gateCollectingLabel_);
+        fl->addRow(QString::fromUtf8("门控配置状态"), gatePendingLabel_);
 
-    auto* gateRow = new QHBoxLayout();
-    refreshGateConfigBtn_ = new QPushButton(QString::fromUtf8("读取门控"), this);
-    applyGateConfigBtn_ = new QPushButton(QString::fromUtf8("应用门控"), this);
-    gateRow->addWidget(refreshGateConfigBtn_);
-    gateRow->addWidget(applyGateConfigBtn_);
-    fl->addRow(gateRow);
+        auto* gateRow = new QHBoxLayout();
+        refreshGateConfigBtn_ = new QPushButton(QString::fromUtf8("读取门控"), this);
+        refreshGateConfigBtn_->setObjectName(QStringLiteral("collectRefreshGateConfigButton"));
+        applyGateConfigBtn_ = new QPushButton(QString::fromUtf8("应用门控"), this);
+        applyGateConfigBtn_->setObjectName(QStringLiteral("collectApplyGateConfigButton"));
+        gateRow->addWidget(refreshGateConfigBtn_);
+        gateRow->addWidget(applyGateConfigBtn_);
+        fl->addRow(gateRow);
+    }
 
     auto* row = new QHBoxLayout();
     startBtn_ = new QPushButton(QString::fromUtf8("开始"), this);
+    startBtn_->setObjectName(QStringLiteral("collectStartButton"));
     startBtn_->setProperty("primary", true);
     stopBtn_ = new QPushButton(QString::fromUtf8("停止"), this);
+    stopBtn_->setObjectName(QStringLiteral("collectStopButton"));
     stopBtn_->setProperty("danger", true);
-    refreshBtn_ = new QPushButton(QString::fromUtf8("刷新"), this);
     row->addWidget(startBtn_);
     row->addWidget(stopBtn_);
-    row->addWidget(refreshBtn_);
+    if (mode == Full) {
+        refreshBtn_ = new QPushButton(QString::fromUtf8("刷新"), this);
+        refreshBtn_->setObjectName(QStringLiteral("collectRefreshButton"));
+        row->addWidget(refreshBtn_);
+    }
     fl->addRow(row);
 
     root->addWidget(grp);
 
-    auto* backgroundCalibrationGroup = new QGroupBox(QString::fromUtf8("背景矫正"), this);
-    auto* backgroundCalibrationForm = new QFormLayout(backgroundCalibrationGroup);
-    backgroundCalibrationStatusLabel_ = new QLabel(QString::fromUtf8("未启动"), this);
-    backgroundCalibrationStatusLabel_->setObjectName(QStringLiteral("collectBackgroundCalibrationStatusLabel"));
-    backgroundCalibrationStatusLabel_->setProperty("readout", true);
-    backgroundCalibrationBtn_ = new QPushButton(QString::fromUtf8("开始背景矫正"), this);
-    backgroundCalibrationBtn_->setObjectName(QStringLiteral("collectBackgroundCalibrationButton"));
-    backgroundCalibrationBtn_->setProperty("primary", true);
-    backgroundCalibrationForm->addRow(QString::fromUtf8("状态"), backgroundCalibrationStatusLabel_);
-    backgroundCalibrationForm->addRow(backgroundCalibrationBtn_);
-    root->addWidget(backgroundCalibrationGroup);
     root->addStretch();
 
     loadSettings();
 
     auto cb = [this](bool ok, const QString& err) {
         if (!ok) QMessageBox::warning(this, "Collect", err);
-        else refreshStatus();
+        else if (statusLabel_) refreshStatus();
     };
 
     connect(startBtn_, &QPushButton::clicked, this, [this, cb]() { dev_->collect()->start(this, cb); });
     connect(stopBtn_, &QPushButton::clicked, this, [this, cb]() { dev_->collect()->stop(this, cb); });
-    connect(refreshBtn_, &QPushButton::clicked, this, &CollectPanel::refreshStatus);
-    connect(applyOversamplingBtn_, &QPushButton::clicked, this, &CollectPanel::applyOversampling);
-    connect(refreshGateConfigBtn_, &QPushButton::clicked, this, &CollectPanel::refreshGateConfig);
-    connect(applyGateConfigBtn_, &QPushButton::clicked, this, &CollectPanel::applyGateConfig);
-    connect(backgroundCalibrationBtn_, &QPushButton::clicked, this, &CollectPanel::startBackgroundCalibration);
-    connect(oversampleFactorSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) { saveSettings(); });
-    connect(discardFrontMsSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) { saveSettings(); });
-    connect(discardBackMsSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) { saveSettings(); });
-    connect(forwardOffsetFramesSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) { saveSettings(); });
-    connect(reverseOffsetFramesSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) { saveSettings(); });
+    if (mode == Full) {
+        connect(refreshBtn_, &QPushButton::clicked, this, &CollectPanel::refreshStatus);
+        connect(applyOversamplingBtn_, &QPushButton::clicked, this, &CollectPanel::applyOversampling);
+        connect(refreshGateConfigBtn_, &QPushButton::clicked, this, &CollectPanel::refreshGateConfig);
+        connect(applyGateConfigBtn_, &QPushButton::clicked, this, &CollectPanel::applyGateConfig);
+        connect(oversampleFactorSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) { saveSettings(); });
+        connect(discardFrontMsSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) { saveSettings(); });
+        connect(discardBackMsSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) { saveSettings(); });
+        connect(forwardOffsetFramesSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) { saveSettings(); });
+        connect(reverseOffsetFramesSpin_, QOverload<int>::of(&QSpinBox::valueChanged), this, [this](int) { saveSettings(); });
+    }
 
     connect(dev, &DeviceClient::connectionChanged, this, [this](bool c, const QString&) {
-        if (c) refreshStatus();
+        if (c && statusLabel_) refreshStatus();
     });
 
-    backgroundCalibrationTimer_ = new QTimer(this);
-    backgroundCalibrationTimer_->setSingleShot(true);
-    connect(backgroundCalibrationTimer_, &QTimer::timeout,
-            this, &CollectPanel::pollBackgroundCalibrationStatus);
 }
 
 void CollectPanel::loadSettings()
 {
+    if (!oversampleFactorSpin_) return;
     QSettings s;
     const QString p = QStringLiteral("panels/collect/");
     oversampleFactorSpin_->setValue(s.value(p + QStringLiteral("oversampleFactor"), oversampleFactorSpin_->value()).toInt());
@@ -142,6 +143,7 @@ void CollectPanel::loadSettings()
 
 void CollectPanel::saveSettings() const
 {
+    if (!oversampleFactorSpin_) return;
     QSettings s;
     const QString p = QStringLiteral("panels/collect/");
     s.setValue(p + QStringLiteral("oversampleFactor"), oversampleFactorSpin_->value());
@@ -153,6 +155,7 @@ void CollectPanel::saveSettings() const
 
 void CollectPanel::refreshStatus()
 {
+    if (!statusLabel_) return;
     dev_->collect()->getOversampling(this, [this](bool ok, const CollectOversamplingInfo& info, const QString&) {
         if (ok) {
             updateOversamplingUi(info);
@@ -167,6 +170,7 @@ void CollectPanel::refreshStatus()
 
 void CollectPanel::applyOversampling()
 {
+    if (!oversampleFactorSpin_ || !applyOversamplingBtn_) return;
     const int factor = oversampleFactorSpin_->value();
     applyOversamplingBtn_->setEnabled(false);
     dev_->collect()->setOversampling(this, factor,
@@ -183,6 +187,7 @@ void CollectPanel::applyOversampling()
 
 void CollectPanel::refreshGateConfig()
 {
+    if (!refreshGateConfigBtn_) return;
     refreshGateConfigBtn_->setEnabled(false);
     dev_->collect()->getGateConfig(this, [this](bool ok, const CollectGateConfig& config, const QString& err) {
         refreshGateConfigBtn_->setEnabled(true);
@@ -197,6 +202,7 @@ void CollectPanel::refreshGateConfig()
 
 void CollectPanel::applyGateConfig()
 {
+    if (!discardFrontMsSpin_ || !applyGateConfigBtn_) return;
     CollectGateConfig config;
     config.discardFrontMs = discardFrontMsSpin_->value();
     config.discardBackMs = discardBackMsSpin_->value();
@@ -217,6 +223,7 @@ void CollectPanel::applyGateConfig()
 
 void CollectPanel::updateOversamplingUi(const CollectOversamplingInfo& info)
 {
+    if (!statusLabel_) return;
     statusLabel_->setText(info.collecting
         ? QString::fromUtf8("采集中")
         : QString::fromUtf8("已停止"));
@@ -232,6 +239,7 @@ void CollectPanel::updateOversamplingUi(const CollectOversamplingInfo& info)
 
 void CollectPanel::updateGateConfigUi(const CollectGateConfig& config)
 {
+    if (!discardFrontMsSpin_) return;
     {
         const QSignalBlocker blocker(discardFrontMsSpin_);
         discardFrontMsSpin_->setValue(config.discardFrontMs);
@@ -256,71 +264,4 @@ void CollectPanel::updateGateConfigUi(const CollectGateConfig& config)
         ? QString::fromUtf8("下一段生效")
         : QString::fromUtf8("已生效"));
     applyGateConfigBtn_->setEnabled(true);
-}
-
-void CollectPanel::startBackgroundCalibration()
-{
-    const auto answer = QMessageBox::question(
-        this, QString::fromUtf8("背景矫正"),
-        QString::fromUtf8("背景矫正会移动转镜并触发红外机芯校正，是否继续？"),
-        QMessageBox::Yes | QMessageBox::No, QMessageBox::No);
-    if (answer != QMessageBox::Yes) return;
-
-    backgroundCalibrationBtn_->setEnabled(false);
-    dev_->systemApi()->startBackgroundCalibration(
-        this, [this](bool ok, const BackgroundCalibrationStart& result, const QString& err) {
-            if (!ok) {
-                backgroundCalibrationBtn_->setEnabled(true);
-                QMessageBox::warning(this, QString::fromUtf8("背景矫正"), err);
-                return;
-            }
-            setBackgroundCalibrationStage(result.stage);
-            backgroundCalibrationTimer_->start(300);
-        });
-}
-
-void CollectPanel::pollBackgroundCalibrationStatus()
-{
-    dev_->systemApi()->backgroundCalibrationStatus(
-        this, [this](bool ok, const BackgroundCalibrationStatus& status, const QString& err) {
-            if (!ok) {
-                backgroundCalibrationBtn_->setEnabled(true);
-                backgroundCalibrationStatusLabel_->setText(
-                    err.isEmpty() ? QString::fromUtf8("状态查询失败") : err);
-                QMessageBox::warning(this, QString::fromUtf8("背景矫正"), err);
-                return;
-            }
-
-            setBackgroundCalibrationStage(status.stage, status.error);
-            if (status.running) {
-                backgroundCalibrationTimer_->start(300);
-            } else {
-                finishBackgroundCalibration(status);
-            }
-        });
-}
-
-void CollectPanel::finishBackgroundCalibration(const BackgroundCalibrationStatus& status)
-{
-    backgroundCalibrationTimer_->stop();
-    backgroundCalibrationBtn_->setEnabled(true);
-    if (status.stage == QStringLiteral("failed")) {
-        QMessageBox::warning(this, QString::fromUtf8("背景矫正"),
-                             status.error.isEmpty() ? QString::fromUtf8("背景矫正失败") : status.error);
-    }
-}
-
-void CollectPanel::setBackgroundCalibrationStage(const QString& stage, const QString& error)
-{
-    QString text;
-    if (stage == QStringLiteral("idle")) text = QString::fromUtf8("未启动");
-    else if (stage == QStringLiteral("moving_to_background")) text = QString::fromUtf8("正在前往背景位");
-    else if (stage == QStringLiteral("calibrating")) text = QString::fromUtf8("正在背景矫正");
-    else if (stage == QStringLiteral("restoring")) text = QString::fromUtf8("正在复位");
-    else if (stage == QStringLiteral("completed")) text = QString::fromUtf8("背景矫正完成");
-    else if (stage == QStringLiteral("failed")) text = QString::fromUtf8("背景矫正失败");
-    else text = stage;
-
-    if (!error.isEmpty()) text += QStringLiteral(": ") + error;
-    backgroundCalibrationStatusLabel_->setText(text);
 }

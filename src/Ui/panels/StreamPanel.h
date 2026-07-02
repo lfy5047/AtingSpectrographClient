@@ -41,9 +41,6 @@ private:
     QPushButton* unsubBtn_   = nullptr;
 
     QLabel* statusLabel_     = nullptr;
-    QLabel* framesLabel_     = nullptr;
-    QLabel* droppedLabel_    = nullptr;
-
     QTimer* pollTimer_       = nullptr;
     quint16 udpPort_         = 9001;
 };

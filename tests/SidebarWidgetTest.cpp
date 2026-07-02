@@ -17,14 +17,36 @@ class SidebarWidgetTest : public QObject {
     Q_OBJECT
 
 private slots:
+    void exposesRefactoredNavigation()
+    {
+        SidebarWidget sidebar;
+        const QList<QPushButton*> buttons = sidebar.findChildren<QPushButton*>("navItem");
+        const QStringList expected = {
+            QString::fromUtf8("仪表盘"),
+            QString::fromUtf8("数据采集"),
+            QString::fromUtf8("探测器设置"),
+            QString::fromUtf8("校正"),
+            QString::fromUtf8("温控控制"),
+            QString::fromUtf8("录制回放"),
+            QString::fromUtf8("光谱分析"),
+            QString::fromUtf8("高级设置"),
+            QString::fromUtf8("系统日志"),
+        };
+
+        QCOMPARE(buttons.size(), expected.size());
+        for (int i = 0; i < expected.size(); ++i) {
+            QCOMPARE(buttons.at(i)->property("fullText").toString(), expected.at(i));
+        }
+    }
+
     void tempControlIconDiffersFromIrIcon()
     {
         SidebarWidget sidebar;
         const QList<QPushButton*> buttons = sidebar.findChildren<QPushButton*>("navItem");
 
-        QVERIFY2(buttons.size() >= 6, "Sidebar should expose IR and temperature control nav buttons");
-        const QImage irIcon = buttonIconImage(buttons.at(4));
-        const QImage tempControlIcon = buttonIconImage(buttons.at(5));
+        QVERIFY2(buttons.size() >= 5, "Sidebar should expose detector and temperature control nav buttons");
+        const QImage irIcon = buttonIconImage(buttons.at(2));
+        const QImage tempControlIcon = buttonIconImage(buttons.at(4));
 
         QVERIFY2(!irIcon.isNull(), "IR nav icon should render");
         QVERIFY2(!tempControlIcon.isNull(), "Temperature control nav icon should render");

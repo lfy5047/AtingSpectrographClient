@@ -13,6 +13,9 @@ MirrorPanel::MirrorPanel(DeviceClient* dev, QWidget* parent)
 {
     auto* root = new QVBoxLayout(this);
     root->setContentsMargins(8, 8, 8, 8);
+    auto* controlGroup = new QGroupBox(QString::fromUtf8("转镜控制"), this);
+    controlGroup->setObjectName(QStringLiteral("mirrorControlGroup"));
+    auto* controlLayout = new QVBoxLayout(controlGroup);
 
     auto simpleCb = [this](bool ok, const QString& err) {
         if (!ok) QMessageBox::warning(this, "Mirror", err);
@@ -26,7 +29,7 @@ MirrorPanel::MirrorPanel(DeviceClient* dev, QWidget* parent)
     movingLabel_ = new QLabel("-", this);
     stForm->addRow(QString::fromUtf8("角度"), angleLabel_);
     stForm->addRow(QString::fromUtf8("运动"), movingLabel_);
-    root->addWidget(stGrp);
+    controlLayout->addWidget(stGrp);
 
     // target
     auto* tgGrp = new QGroupBox(QString::fromUtf8("目标角度"), this);
@@ -49,7 +52,7 @@ MirrorPanel::MirrorPanel(DeviceClient* dev, QWidget* parent)
     tgRow->addWidget(startBtn_);
     tgRow->addWidget(stopBtn_);
     tgForm->addRow(tgRow);
-    root->addWidget(tgGrp);
+    controlLayout->addWidget(tgGrp);
 
     // speed
     auto* spGrp = new QGroupBox(QString::fromUtf8("速度"), this);
@@ -60,7 +63,7 @@ MirrorPanel::MirrorPanel(DeviceClient* dev, QWidget* parent)
     spForm->addRow("S Speed", sSpeedSpin_);
     spForm->addRow("F Speed", fSpeedSpin_);
     spForm->addRow(applySpeedBtn_);
-    root->addWidget(spGrp);
+    controlLayout->addWidget(spGrp);
 
     // home
     auto* homeRow = new QHBoxLayout();
@@ -68,7 +71,7 @@ MirrorPanel::MirrorPanel(DeviceClient* dev, QWidget* parent)
     setHomeBtn_ = new QPushButton(QString::fromUtf8("设为原点"), this);
     homeRow->addWidget(homeBtn_);
     homeRow->addWidget(setHomeBtn_);
-    root->addLayout(homeRow);
+    controlLayout->addLayout(homeRow);
 
     // preset
     auto* preRow = new QHBoxLayout();
@@ -80,11 +83,12 @@ MirrorPanel::MirrorPanel(DeviceClient* dev, QWidget* parent)
     gotoPresetBtn_->setProperty("primary", true);
     preRow->addWidget(presetCombo_, 1);
     preRow->addWidget(gotoPresetBtn_);
-    root->addLayout(preRow);
+    controlLayout->addLayout(preRow);
 
     // query
     queryBtn_ = new QPushButton(QString::fromUtf8("查询角度"), this);
-    root->addWidget(queryBtn_);
+    controlLayout->addWidget(queryBtn_);
+    root->addWidget(controlGroup);
     root->addStretch();
 
     loadSettings();

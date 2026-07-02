@@ -6,25 +6,25 @@
 
 class DeviceClient;
 class QSpinBox;
-class QTimer;
 struct CollectOversamplingInfo;
 struct CollectGateConfig;
-struct BackgroundCalibrationStatus;
 
 class CollectPanel : public QWidget {
     Q_OBJECT
 public:
+    enum Mode {
+        Full,
+        OperationOnly,
+    };
+
     explicit CollectPanel(DeviceClient* dev, QWidget* parent = nullptr);
+    CollectPanel(DeviceClient* dev, Mode mode, QWidget* parent = nullptr);
 
 private slots:
     void refreshStatus();
     void applyOversampling();
     void refreshGateConfig();
     void applyGateConfig();
-    void startBackgroundCalibration();
-    void pollBackgroundCalibrationStatus();
-    void finishBackgroundCalibration(const BackgroundCalibrationStatus& status);
-    void setBackgroundCalibrationStage(const QString& stage, const QString& error = QString());
 
 private:
     void loadSettings();
@@ -33,23 +33,20 @@ private:
     void updateGateConfigUi(const CollectGateConfig& config);
 
     DeviceClient* dev_;
-    QLabel*      statusLabel_;
-    QLabel*      effectiveSSpeedLabel_;
-    QLabel*      effectiveFSpeedLabel_;
-    QLabel*      gateCollectingLabel_;
-    QLabel*      gatePendingLabel_;
-    QSpinBox*    oversampleFactorSpin_;
-    QSpinBox*    discardFrontMsSpin_;
-    QSpinBox*    discardBackMsSpin_;
-    QSpinBox*    forwardOffsetFramesSpin_;
-    QSpinBox*    reverseOffsetFramesSpin_;
-    QPushButton* applyOversamplingBtn_;
-    QPushButton* refreshGateConfigBtn_;
-    QPushButton* applyGateConfigBtn_;
-    QPushButton* startBtn_;
-    QPushButton* stopBtn_;
-    QPushButton* refreshBtn_;
-    QLabel* backgroundCalibrationStatusLabel_ = nullptr;
-    QPushButton* backgroundCalibrationBtn_ = nullptr;
-    QTimer* backgroundCalibrationTimer_ = nullptr;
+    QLabel*      statusLabel_ = nullptr;
+    QLabel*      effectiveSSpeedLabel_ = nullptr;
+    QLabel*      effectiveFSpeedLabel_ = nullptr;
+    QLabel*      gateCollectingLabel_ = nullptr;
+    QLabel*      gatePendingLabel_ = nullptr;
+    QSpinBox*    oversampleFactorSpin_ = nullptr;
+    QSpinBox*    discardFrontMsSpin_ = nullptr;
+    QSpinBox*    discardBackMsSpin_ = nullptr;
+    QSpinBox*    forwardOffsetFramesSpin_ = nullptr;
+    QSpinBox*    reverseOffsetFramesSpin_ = nullptr;
+    QPushButton* applyOversamplingBtn_ = nullptr;
+    QPushButton* refreshGateConfigBtn_ = nullptr;
+    QPushButton* applyGateConfigBtn_ = nullptr;
+    QPushButton* startBtn_ = nullptr;
+    QPushButton* stopBtn_ = nullptr;
+    QPushButton* refreshBtn_ = nullptr;
 };

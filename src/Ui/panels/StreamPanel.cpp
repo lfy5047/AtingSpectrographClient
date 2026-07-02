@@ -13,6 +13,7 @@ StreamPanel::StreamPanel(DeviceClient* dev, QWidget* parent)
 
     // channel selection
     auto* grp = new QGroupBox(QString::fromUtf8("通道订阅"), this); // 通道订阅
+    grp->setObjectName(QStringLiteral("streamSubscriptionGroup"));
     auto* vb = new QVBoxLayout(grp);
 
     chkRaw16_          = new QCheckBox("Raw16", this);
@@ -42,19 +43,13 @@ StreamPanel::StreamPanel(DeviceClient* dev, QWidget* parent)
     btnRow->addWidget(applyBtn_);
     btnRow->addWidget(unsubBtn_);
     vb->addLayout(btnRow);
+    auto* statusForm = new QFormLayout();
+    statusLabel_ = new QLabel("-", this);
+    statusLabel_->setObjectName(QStringLiteral("streamSubscribedStatusLabel"));
+    statusLabel_->setProperty("readout", true);
+    statusForm->addRow(QString::fromUtf8("已订阅"), statusLabel_);
+    vb->addLayout(statusForm);
     root->addWidget(grp);
-
-    {
-        auto* sgrp = new QGroupBox(QString::fromUtf8("状态"), this);
-        auto* fl = new QFormLayout(sgrp);
-        statusLabel_  = new QLabel("-", this);
-        framesLabel_  = new QLabel("0", this);
-        droppedLabel_ = new QLabel("0", this);
-        fl->addRow(QString::fromUtf8("已订阅"), statusLabel_);
-        fl->addRow(QString::fromUtf8("已发帧"), framesLabel_);
-        fl->addRow(QString::fromUtf8("丢帧"), droppedLabel_);
-        root->addWidget(sgrp);
-    }
 
     root->addStretch();
 
@@ -132,7 +127,5 @@ void StreamPanel::refreshStatus()
         QStringList sl;
         for (auto& c : chs) sl << QString::fromStdString(c);
         statusLabel_->setText(sl.isEmpty() ? "-" : sl.join(", "));
-        framesLabel_->setText(QString::number(data.value("frames_sent", (uint64_t)0)));
-        droppedLabel_->setText(QString::number(data.value("frames_dropped", (uint64_t)0)));
     });
 }

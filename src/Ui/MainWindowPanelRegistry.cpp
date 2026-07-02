@@ -3,17 +3,14 @@
 #include "DeviceClient.h"
 #include "MainWindowChrome.h"
 #include "SpectrumAnalysisCoordinator.h"
-#include "panels/CameraPanel.h"
-#include "panels/CollectPanel.h"
-#include "panels/ConnectionPanel.h"
+#include "panels/AdvancedSettingsPanel.h"
+#include "panels/CalibrationPanel.h"
 #include "panels/DashboardPanel.h"
+#include "panels/DataAcquisitionPanel.h"
 #include "panels/IrPanel.h"
 #include "panels/LogPanel.h"
-#include "panels/MirrorPanel.h"
 #include "panels/RecordPlaybackPanel.h"
-#include "panels/SpectralPanel.h"
 #include "panels/SpectrumAnalysisPanel.h"
-#include "panels/StreamPanel.h"
 #include "panels/TempControlPanel.h"
 #include "widgets/ViewerAreaWidget.h"
 
@@ -25,16 +22,13 @@
 namespace {
 const char* kPanelNames[] = {
     "仪表盘",
-    "设备连接",
-    "相机设置",
-    "转镜控制",
-    "红外热像",
-    "温控控制",
     "数据采集",
-    "流通道",
-    "光谱显示",
+    "探测器设置",
+    "校正",
+    "温控控制",
     "录制回放",
     "光谱分析",
+    "高级设置",
     "系统日志",
 };
 
@@ -80,9 +74,7 @@ void MainWindowPanelRegistry::selectPanel(int index)
     }
 
     chrome_->panelStack()->setCurrentIndex(index);
-    chrome_->panelTitle()->setText(index == SpectrumAnalysis
-                                       ? QString::fromUtf8("光谱分析")
-                                       : QString::fromUtf8(kPanelNames[index]));
+    chrome_->panelTitle()->setText(QString::fromUtf8(kPanelNames[index]));
     chrome_->panelTitle()->setCursor(index == SpectrumAnalysis ? Qt::PointingHandCursor : Qt::ArrowCursor);
 
     selectAssociatedViewerChannel(index);
@@ -107,28 +99,52 @@ void MainWindowPanelRegistry::setupPanels()
 {
     auto* stack = chrome_->panelStack();
     dashPanel_ = new DashboardPanel(stack);
-    connPanel_ = new ConnectionPanel(device_, stack);
-    cameraPanel_ = new CameraPanel(device_, stack);
-    mirrorPanel_ = new MirrorPanel(device_, stack);
-    irPanel_ = new IrPanel(device_, stack);
+    dataAcquisitionPanel_ = new DataAcquisitionPanel(device_, stack);
+    detectorPanel_ = new IrPanel(device_, stack);
+    calibrationPanel_ = new CalibrationPanel(device_, stack);
     tempControlPanel_ = new TempControlPanel(device_, stack);
-    collectPanel_ = new CollectPanel(device_, stack);
-    streamPanel_ = new StreamPanel(device_, stack);
-    spectralPanel_ = new SpectralPanel(stack);
     recordPlaybackPanel_ = new RecordPlaybackPanel(device_, stack);
     spectrumAnalysisPanel_ = new SpectrumAnalysisPanel(stack);
+    advancedSettingsPanel_ = new AdvancedSettingsPanel(device_, stack);
 
     stack->addWidget(wrapInScroll(dashPanel_));
-    stack->addWidget(wrapInScroll(connPanel_));
-    stack->addWidget(wrapInScroll(cameraPanel_));
-    stack->addWidget(wrapInScroll(mirrorPanel_));
-    stack->addWidget(wrapInScroll(irPanel_));
+    stack->addWidget(wrapInScroll(dataAcquisitionPanel_));
+    stack->addWidget(wrapInScroll(detectorPanel_));
+    stack->addWidget(wrapInScroll(calibrationPanel_));
     stack->addWidget(wrapInScroll(tempControlPanel_));
-    stack->addWidget(wrapInScroll(collectPanel_));
-    stack->addWidget(wrapInScroll(streamPanel_));
-    stack->addWidget(wrapInScroll(spectralPanel_));
     stack->addWidget(wrapInScroll(recordPlaybackPanel_));
     stack->addWidget(wrapInScroll(spectrumAnalysisPanel_));
+    stack->addWidget(wrapInScroll(advancedSettingsPanel_));
+}
+
+ConnectionPanel* MainWindowPanelRegistry::connection() const
+{
+    return advancedSettingsPanel_ ? advancedSettingsPanel_->connection() : nullptr;
+}
+
+CameraPanel* MainWindowPanelRegistry::camera() const
+{
+    return advancedSettingsPanel_ ? advancedSettingsPanel_->camera() : nullptr;
+}
+
+CollectPanel* MainWindowPanelRegistry::collect() const
+{
+    return dataAcquisitionPanel_ ? dataAcquisitionPanel_->collect() : nullptr;
+}
+
+MirrorPanel* MainWindowPanelRegistry::mirror() const
+{
+    return dataAcquisitionPanel_ ? dataAcquisitionPanel_->mirror() : nullptr;
+}
+
+StreamPanel* MainWindowPanelRegistry::stream() const
+{
+    return dataAcquisitionPanel_ ? dataAcquisitionPanel_->stream() : nullptr;
+}
+
+SpectralPanel* MainWindowPanelRegistry::spectral() const
+{
+    return dataAcquisitionPanel_ ? dataAcquisitionPanel_->spectral() : nullptr;
 }
 
 int MainWindowPanelRegistry::preferredStreamViewerChannel() const
@@ -147,11 +163,8 @@ void MainWindowPanelRegistry::selectAssociatedViewerChannel(int panelIndex)
 {
     auto* viewer = chrome_->viewerArea();
     switch (panelIndex) {
-    case Stream:
+    case DataAcquisition:
         viewer->setCurrentChannel(preferredStreamViewerChannel());
-        break;
-    case Spectral:
-        viewer->setCurrentChannel(ViewerAreaWidget::SpectralView);
         break;
     case RecordPlayback:
         viewer->setCurrentChannel(ViewerAreaWidget::PlaybackView);

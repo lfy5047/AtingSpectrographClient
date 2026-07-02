@@ -76,12 +76,6 @@ SpectralPanel::SpectralPanel(QWidget* parent)
 
     root->addWidget(modeGroup);
 
-    auto* statsGroup = new QGroupBox(QString::fromUtf8("扫描状态"), this);
-    auto* statsLayout = new QVBoxLayout(statsGroup);
-    statsLabel_ = new QLabel("-", this);
-    statsLabel_->setWordWrap(true);
-    statsLayout->addWidget(statsLabel_);
-    root->addWidget(statsGroup);
     root->addStretch();
 
     loadSettings();
@@ -162,14 +156,13 @@ void SpectralPanel::setBandCount(int bands)
 void SpectralPanel::setStats(const QString& activeSource, int scanWidth, int height, int bands,
                              bool tailSeen, bool active, quint64 gapFillColumns)
 {
-    statsLabel_->setText(QString("source=%1\ncols=%2\nheight=%3\nbands=%4\ntail=%5\nactive=%6\ngapFill=%7")
-                             .arg(activeSource)
-                             .arg(scanWidth)
-                             .arg(height)
-                             .arg(bands)
-                             .arg(tailSeen ? "yes" : "no")
-                             .arg(active ? "yes" : "no")
-                             .arg(gapFillColumns));
+    Q_UNUSED(activeSource);
+    Q_UNUSED(scanWidth);
+    Q_UNUSED(height);
+    Q_UNUSED(bands);
+    Q_UNUSED(tailSeen);
+    Q_UNUSED(active);
+    Q_UNUSED(gapFillColumns);
 }
 
 void SpectralPanel::updateModeVisibility()

@@ -6,7 +6,6 @@
 
 class QComboBox;
 class QSpinBox;
-class QLabel;
 class QString;
 
 enum class SpectralSourceMode {
@@ -48,5 +47,4 @@ private:
     QSpinBox* rBandSpin_ = nullptr;
     QSpinBox* gBandSpin_ = nullptr;
     QSpinBox* bBandSpin_ = nullptr;
-    QLabel* statsLabel_ = nullptr;
 };

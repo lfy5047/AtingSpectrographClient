@@ -135,15 +135,31 @@ IrPanel::IrPanel(DeviceClient* dev, QWidget* parent)
 
 void IrPanel::setupLegacyPage(QVBoxLayout* root)
 {
-    setupImageParams(root);
-    setupIntegration(root);
-    setupImageDisplay(root);
-    setupFilters(root);
-    setupFlipSync(root);
-    setupModeControl(root);
-    setupQueries(root);
-    setupMaintenance(root);
-    setupBadPixel(root);
+    auto* commonGroup = new QGroupBox(QString::fromUtf8("常用参数"), this);
+    auto* commonRoot = new QVBoxLayout(commonGroup);
+    setupIntegration(commonRoot);
+    setupImageDisplay(commonRoot);
+    setupFlipSync(commonRoot);
+    setupModeControl(commonRoot);
+    root->addWidget(commonGroup);
+
+    auto* advancedGroup = new QGroupBox(QString::fromUtf8("高级设置"), this);
+    advancedGroup->setObjectName(QStringLiteral("detectorAdvancedGroup"));
+    advancedGroup->setCheckable(true);
+    advancedGroup->setChecked(false);
+    auto* advancedLayout = new QVBoxLayout(advancedGroup);
+    auto* advancedContent = new QWidget(advancedGroup);
+    auto* advancedRoot = new QVBoxLayout(advancedContent);
+    advancedRoot->setContentsMargins(0, 0, 0, 0);
+    setupImageParams(advancedRoot);
+    setupFilters(advancedRoot);
+    setupQueries(advancedRoot);
+    setupMaintenance(advancedRoot);
+    setupBadPixel(advancedRoot);
+    advancedLayout->addWidget(advancedContent);
+    advancedContent->setVisible(false);
+    connect(advancedGroup, &QGroupBox::toggled, advancedContent, &QWidget::setVisible);
+    root->addWidget(advancedGroup);
     root->addStretch();
 }
 

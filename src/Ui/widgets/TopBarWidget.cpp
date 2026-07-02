@@ -1,11 +1,12 @@
 #include "TopBarWidget.h"
-#include <QVariant>
+
 #include <QComboBox>
 #include <QHBoxLayout>
-#include <QVBoxLayout>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPen>
+#include <QPushButton>
+#include <QVBoxLayout>
 
 static QPixmap makeTopbarIcon(int type, int size = 14)
 {
@@ -23,11 +24,10 @@ static QPixmap makeTopbarIcon(int type, int size = 14)
     p.scale(s, s);
 
     switch (type) {
-    case 0: // connection — circle
+    case 0:
         p.drawEllipse(QPointF(7, 7), 5, 5);
         break;
-    case 1: // FPS — lightning
-    {
+    case 1: {
         QPainterPath path;
         path.moveTo(8, 1);
         path.lineTo(3, 7);
@@ -37,24 +37,24 @@ static QPixmap makeTopbarIcon(int type, int size = 14)
         path.lineTo(6, 7);
         path.closeSubpath();
         p.drawPath(path);
-    }
         break;
-    case 2: // Frames — grid/image
+    }
+    case 2:
         p.drawRoundedRect(1, 1, 12, 12, 2, 2);
         p.drawEllipse(QPointF(5, 5), 1.5, 1.5);
         p.drawPolyline(QPolygonF() << QPointF(1, 9) << QPointF(9, 5) << QPointF(13, 9));
         break;
-    case 3: // Dropped — circle with exclamation
+    case 3:
         p.drawEllipse(QPointF(7, 7), 5.5, 5.5);
         p.drawLine(7, 4, 7, 8);
         p.drawPoint(7, 10);
         break;
-    case 4: // Mirror angle — clock with arrow
+    case 4:
         p.drawEllipse(QPointF(7, 7), 5.5, 5.5);
         p.drawLine(7, 7, 7, 3);
         p.drawLine(7, 7, 10, 8);
         break;
-    case 5: // IP — server/network
+    case 5:
         p.drawRoundedRect(1, 1, 12, 12, 2, 2);
         p.drawLine(1, 5, 13, 5);
         p.drawLine(5, 5, 5, 13);
@@ -67,7 +67,8 @@ static QPixmap makeTopbarIcon(int type, int size = 14)
 }
 
 MetricCard::MetricCard(int iconType, const QString& label, QWidget* parent)
-    : QFrame(parent), iconType_(iconType)
+    : QFrame(parent)
+    , iconType_(iconType)
 {
     setObjectName("metricCard");
     setMinimumWidth(86);
@@ -76,18 +77,18 @@ MetricCard::MetricCard(int iconType, const QString& label, QWidget* parent)
     root->setContentsMargins(12, 8, 12, 8);
     root->setSpacing(3);
 
-    auto* header = new QHBoxLayout();
-    header->setSpacing(6);
+    headerLayout_ = new QHBoxLayout();
+    headerLayout_->setSpacing(6);
 
     iconLabel_ = new QLabel(this);
     iconLabel_->setFixedSize(14, 14);
     iconLabel_->setPixmap(makeTopbarIcon(iconType));
-    header->addWidget(iconLabel_);
+    headerLayout_->addWidget(iconLabel_);
 
     labelLabel_ = new QLabel(label, this);
     labelLabel_->setObjectName("metricLabel");
-    header->addWidget(labelLabel_, 1);
-    root->addLayout(header);
+    headerLayout_->addWidget(labelLabel_, 1);
+    root->addLayout(headerLayout_);
 
     valueLabel_ = new QLabel("--", this);
     valueLabel_->setObjectName("metricValue");
@@ -123,7 +124,12 @@ void MetricCard::setOnline(bool online)
     }
 }
 
-// ── TopBarWidget ──
+void MetricCard::addHeaderAction(QWidget* widget)
+{
+    if (headerLayout_ && widget) {
+        headerLayout_->addWidget(widget);
+    }
+}
 
 TopBarWidget::TopBarWidget(QWidget* parent)
     : QWidget(parent)
@@ -136,14 +142,26 @@ TopBarWidget::TopBarWidget(QWidget* parent)
     lay->setContentsMargins(14, 10, 14, 10);
     lay->setSpacing(8);
 
-    connCard_  = new MetricCard(0, QString::fromUtf8("连接状态"), this);
-    fpsCard_   = new MetricCard(1, "FPS", this);
+    connCard_ = new MetricCard(0, QString::fromUtf8("连接状态"), this);
+    connCard_->setProperty("connectionCard", true);
+    fpsCard_ = new MetricCard(1, QString::fromUtf8("FPS / 丢帧"), this);
     frameCard_ = new MetricCard(2, QString::fromUtf8("总帧数"), this);
-    dropCard_  = new MetricCard(3, QString::fromUtf8("丢帧"), this);
     angleCard_ = new MetricCard(4, QString::fromUtf8("转镜角度"), this);
-    ipCard_    = new MetricCard(5, QString::fromUtf8("设备 IP"), this);
+    ipCard_ = new MetricCard(5, QString::fromUtf8("设备 IP"), this);
 
     fpsCard_->setSub("Raw16 / Slice");
+
+    connectionButton_ = new QPushButton(QString::fromUtf8("连接"), connCard_);
+    connectionButton_->setObjectName(QStringLiteral("topBarConnectionButton"));
+    connectionButton_->setCursor(Qt::PointingHandCursor);
+    connectionButton_->setProperty("compactAction", true);
+    connectionButton_->setProperty("primary", true);
+    connectionButton_->setMinimumWidth(52);
+    connectionButton_->setMaximumWidth(64);
+    connectionButton_->setFixedHeight(26);
+    connCard_->addHeaderAction(connectionButton_);
+    connect(connectionButton_, &QPushButton::clicked,
+            this, &TopBarWidget::connectToggleRequested);
 
     themeCard_ = new QFrame(this);
     themeCard_->setObjectName("themeCard");
@@ -175,7 +193,6 @@ TopBarWidget::TopBarWidget(QWidget* parent)
     lay->addWidget(connCard_, 1);
     lay->addWidget(fpsCard_, 1);
     lay->addWidget(frameCard_, 1);
-    lay->addWidget(dropCard_, 1);
     lay->addWidget(angleCard_, 1);
     lay->addWidget(ipCard_, 1);
     lay->addWidget(themeCard_);
@@ -204,16 +221,20 @@ void TopBarWidget::setTheme(ThemeManager::Theme theme)
 
 void TopBarWidget::setConnected(bool connected, const QString& ip)
 {
-    connCard_->setValue(connected
-        ? QString::fromUtf8("已连接")
-        : QString::fromUtf8("未连接"));
+    connected_ = connected;
+    connCard_->setValue(connected ? QString::fromUtf8("已连接") : QString::fromUtf8("未连接"));
     connCard_->setOnline(connected);
     ipCard_->setValue(connected ? ip : "---");
+    connectionButton_->setText(connected ? QString::fromUtf8("断开") : QString::fromUtf8("连接"));
+    connectionButton_->setProperty("danger", connected);
+    connectionButton_->setProperty("primary", !connected);
+    connectionButton_->style()->polish(connectionButton_);
 }
 
 void TopBarWidget::setFps(double fps)
 {
-    fpsCard_->setValue(fps > 0 ? QString::number(fps, 'f', 1) : "--");
+    currentFps_ = fps;
+    updateFpsDropped();
 }
 
 void TopBarWidget::setFrames(quint64 n)
@@ -223,10 +244,18 @@ void TopBarWidget::setFrames(quint64 n)
 
 void TopBarWidget::setDropped(quint64 n)
 {
-    dropCard_->setValue(QString::number(n));
+    currentDropped_ = n;
+    updateFpsDropped();
 }
 
 void TopBarWidget::setMirrorAngle(double deg)
 {
-    angleCard_->setValue(deg >= 0 ? QString::number(deg, 'f', 3) + "°" : "--°");
+    angleCard_->setValue(deg >= 0 ? QString::number(deg, 'f', 3) + QString::fromUtf8("°")
+                                  : QString::fromUtf8("--°"));
+}
+
+void TopBarWidget::updateFpsDropped()
+{
+    const QString fpsText = currentFps_ > 0 ? QString::number(currentFps_, 'f', 1) : "--";
+    fpsCard_->setValue(QStringLiteral("%1 / %2").arg(fpsText).arg(currentDropped_));
 }

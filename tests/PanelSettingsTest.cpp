@@ -6,7 +6,9 @@
 #include <QDir>
 #include <QDoubleSpinBox>
 #include <QElapsedTimer>
+#include <QGroupBox>
 #include <QLabel>
+#include <QLayout>
 #include <QLineEdit>
 #include <QPushButton>
 #include <QSettings>
@@ -18,9 +20,12 @@
 #include <algorithm>
 #include <cstring>
 
+#include "AdvancedSettingsPanel.h"
+#include "CalibrationPanel.h"
 #include "CameraPanel.h"
 #include "CollectPanel.h"
 #include "ConnectionPanel.h"
+#include "DataAcquisitionPanel.h"
 #include "DeviceClient.h"
 #include "IrPanel.h"
 #include "MirrorPanel.h"
@@ -43,15 +48,23 @@ private slots:
     void cameraPanelRestoresSavedResolution();
     void mirrorPanelRestoresSavedMotionInputs();
     void collectPanelRestoresSavedInputs();
-    void collectPanelProvidesBackgroundCalibrationControls();
+    void collectPanelDoesNotExposeBackgroundCalibrationControls();
+    void dataAcquisitionPanelOrdersSubPanels();
+    void dataAcquisitionPanelKeepsOnlyOperationalCollectionControls();
+    void calibrationPanelProvidesBackgroundCalibrationControls();
+    void advancedSettingsPanelProvidesConnectionAndCameraSettings();
+    void advancedSettingsPanelProvidesCollectionSettings();
     void tempControlPanelRestoresSavedUserInputs();
     void tempControlStatusRefreshKeepsTargetInput();
     void tempControlCommonSaveButtonsSendSaveCommands();
     void streamPanelRestoresSavedChannels();
+    void streamPanelShowsSubscribedChannelsInsideSubscriptionGroup();
     void spectralPanelRestoresSavedRenderInputs();
+    void spectralPanelDoesNotExposeScanStatusGroup();
     void spectralPanelShowsSavedBandsBeforeStreamMetadata();
     void spectralPanelKeepsSavedBandsWhenStatsAreEmpty();
     void irPanelRestoresSavedUserInputs();
+    void irPanelPlacesCommonDetectorControlsOutsideAdvancedGroup();
     void irPanelSwitchesBetweenSeparateLegacyAndCi05Pages();
     void irPanelCi05PageUsesSeparateCi05Controls();
     void irPanelCi05PageReadsAllStatusRegisters();
@@ -266,6 +279,136 @@ void PanelSettingsTest::collectPanelRestoresSavedInputs()
     QCOMPARE(reverse->value(), 4);
 }
 
+void PanelSettingsTest::collectPanelDoesNotExposeBackgroundCalibrationControls()
+{
+    DeviceClient device;
+    CollectPanel panel(&device);
+
+    QVERIFY(!panel.findChild<QPushButton*>(QStringLiteral("collectBackgroundCalibrationButton")));
+    QVERIFY(!panel.findChild<QLabel*>(QStringLiteral("collectBackgroundCalibrationStatusLabel")));
+}
+
+void PanelSettingsTest::dataAcquisitionPanelOrdersSubPanels()
+{
+    DeviceClient device;
+    DataAcquisitionPanel panel(&device);
+
+    auto* stream = panel.findChild<StreamPanel*>(QStringLiteral("dataAcquisitionStreamPanel"));
+    auto* collect = panel.findChild<CollectPanel*>(QStringLiteral("dataAcquisitionCollectPanel"));
+    auto* spectral = panel.findChild<SpectralPanel*>(QStringLiteral("dataAcquisitionSpectralPanel"));
+    auto* mirror = panel.findChild<MirrorPanel*>(QStringLiteral("dataAcquisitionMirrorPanel"));
+
+    QVERIFY(stream);
+    QVERIFY(collect);
+    QVERIFY(spectral);
+    QVERIFY(mirror);
+
+    QCOMPARE(panel.layout()->indexOf(stream), 0);
+    QCOMPARE(panel.layout()->indexOf(collect), 1);
+    QCOMPARE(panel.layout()->indexOf(spectral), 2);
+    QCOMPARE(panel.layout()->indexOf(mirror), 3);
+
+    auto* mirrorGroup = mirror->findChild<QGroupBox*>(QStringLiteral("mirrorControlGroup"));
+    auto* target = mirror->findChild<QDoubleSpinBox*>(QStringLiteral("mirrorTargetSpin"));
+    QVERIFY(mirrorGroup);
+    QVERIFY(target);
+    QVERIFY(mirrorGroup->isAncestorOf(target));
+}
+
+void PanelSettingsTest::dataAcquisitionPanelKeepsOnlyOperationalCollectionControls()
+{
+    DeviceClient device;
+    DataAcquisitionPanel panel(&device);
+
+    auto* collect = panel.findChild<CollectPanel*>(QStringLiteral("dataAcquisitionCollectPanel"));
+    QVERIFY(collect);
+
+    QVERIFY(collect->findChild<QPushButton*>(QStringLiteral("collectStartButton")));
+    QVERIFY(collect->findChild<QPushButton*>(QStringLiteral("collectStopButton")));
+    QVERIFY(!collect->findChild<QSpinBox*>(QStringLiteral("collectOversampleFactorSpin")));
+    QVERIFY(!collect->findChild<QSpinBox*>(QStringLiteral("collectDiscardFrontMsSpin")));
+    QVERIFY(!collect->findChild<QSpinBox*>(QStringLiteral("collectDiscardBackMsSpin")));
+    QVERIFY(!collect->findChild<QSpinBox*>(QStringLiteral("collectForwardOffsetFramesSpin")));
+    QVERIFY(!collect->findChild<QSpinBox*>(QStringLiteral("collectReverseOffsetFramesSpin")));
+    QVERIFY(!collect->findChild<QPushButton*>(QStringLiteral("collectRefreshButton")));
+    QVERIFY(!collect->findChild<QPushButton*>(QStringLiteral("collectApplyOversamplingButton")));
+    QVERIFY(!collect->findChild<QPushButton*>(QStringLiteral("collectRefreshGateConfigButton")));
+    QVERIFY(!collect->findChild<QPushButton*>(QStringLiteral("collectApplyGateConfigButton")));
+}
+
+void PanelSettingsTest::calibrationPanelProvidesBackgroundCalibrationControls()
+{
+    DeviceClient device;
+    CalibrationPanel panel(&device);
+    auto* button = panel.findChild<QPushButton*>(QStringLiteral("calibrationBackgroundCalibrationButton"));
+    auto* status = panel.findChild<QLabel*>(QStringLiteral("calibrationBackgroundCalibrationStatusLabel"));
+    QVERIFY(button);
+    QVERIFY(status);
+    QCOMPARE(button->text(), QStringLiteral("\u5f00\u59cb\u80cc\u666f\u6821\u6b63"));
+    QCOMPARE(status->text(), QStringLiteral("\u672a\u542f\u52a8"));
+}
+
+void PanelSettingsTest::advancedSettingsPanelProvidesConnectionAndCameraSettings()
+{
+    QSettings settings;
+    settings.setValue(QStringLiteral("panels/connection/host"), QStringLiteral("10.0.0.42"));
+    settings.setValue(QStringLiteral("panels/connection/tcpPort"), 9100);
+    settings.setValue(QStringLiteral("panels/connection/udpPort"), 1500);
+    settings.setValue(QStringLiteral("panels/camera/width"), 2048);
+    settings.setValue(QStringLiteral("panels/camera/height"), 1536);
+
+    DeviceClient device;
+    AdvancedSettingsPanel panel(&device);
+
+    auto* connection = panel.connection();
+    auto* camera = panel.camera();
+    auto* host = panel.findChild<QLineEdit*>(QStringLiteral("connectionHostEdit"));
+    auto* tcp = panel.findChild<QSpinBox*>(QStringLiteral("connectionTcpPortSpin"));
+    auto* udp = panel.findChild<QSpinBox*>(QStringLiteral("connectionUdpPortSpin"));
+    auto* width = panel.findChild<QSpinBox*>(QStringLiteral("cameraWidthSpin"));
+    auto* height = panel.findChild<QSpinBox*>(QStringLiteral("cameraHeightSpin"));
+    auto* connectButton = panel.findChild<QPushButton*>(QStringLiteral("connectionConnectButton"));
+    auto* disconnectButton = panel.findChild<QPushButton*>(QStringLiteral("connectionDisconnectButton"));
+    auto* pingButton = panel.findChild<QPushButton*>(QStringLiteral("connectionPingButton"));
+
+    QVERIFY(connection);
+    QVERIFY(camera);
+    QVERIFY(host);
+    QVERIFY(tcp);
+    QVERIFY(udp);
+    QVERIFY(width);
+    QVERIFY(height);
+    QVERIFY(connectButton);
+    QVERIFY(!disconnectButton);
+    QVERIFY(!pingButton);
+    QCOMPARE(connectButton->text(), QStringLiteral("\u8fde\u63a5"));
+    QCOMPARE(host->text(), QStringLiteral("10.0.0.42"));
+    QCOMPARE(tcp->value(), 9100);
+    QCOMPARE(udp->value(), 1500);
+    QCOMPARE(width->value(), 2048);
+    QCOMPARE(height->value(), 1536);
+
+    QSignalSpy connectSpy(connection, SIGNAL(connectToggleRequested()));
+    connectButton->click();
+    QCOMPARE(connectSpy.count(), 1);
+}
+
+void PanelSettingsTest::advancedSettingsPanelProvidesCollectionSettings()
+{
+    DeviceClient device;
+    AdvancedSettingsPanel panel(&device);
+
+    auto* collect = panel.findChild<CollectPanel*>(QStringLiteral("advancedCollectPanel"));
+    QVERIFY(collect);
+    QVERIFY(collect->findChild<QPushButton*>(QStringLiteral("collectStartButton")));
+    QVERIFY(collect->findChild<QPushButton*>(QStringLiteral("collectStopButton")));
+    QVERIFY(collect->findChild<QSpinBox*>(QStringLiteral("collectOversampleFactorSpin")));
+    QVERIFY(collect->findChild<QSpinBox*>(QStringLiteral("collectDiscardFrontMsSpin")));
+    QVERIFY(collect->findChild<QSpinBox*>(QStringLiteral("collectDiscardBackMsSpin")));
+    QVERIFY(collect->findChild<QSpinBox*>(QStringLiteral("collectForwardOffsetFramesSpin")));
+    QVERIFY(collect->findChild<QSpinBox*>(QStringLiteral("collectReverseOffsetFramesSpin")));
+}
+
 void PanelSettingsTest::tempControlPanelRestoresSavedUserInputs()
 {
     QSettings settings;
@@ -412,6 +555,27 @@ void PanelSettingsTest::streamPanelRestoresSavedChannels()
                           QStringLiteral("spectral_preview")}));
 }
 
+void PanelSettingsTest::streamPanelShowsSubscribedChannelsInsideSubscriptionGroup()
+{
+    DeviceClient device;
+    StreamPanel panel(&device);
+
+    auto* subscriptionGroup = panel.findChild<QGroupBox*>(QStringLiteral("streamSubscriptionGroup"));
+    auto* subscribedStatus = panel.findChild<QLabel*>(QStringLiteral("streamSubscribedStatusLabel"));
+    QVERIFY(subscriptionGroup);
+    QVERIFY(subscribedStatus);
+    QVERIFY(subscriptionGroup->isAncestorOf(subscribedStatus));
+    QVERIFY(!panel.findChild<QGroupBox*>(QStringLiteral("streamStatusGroup")));
+    QVERIFY(!panel.findChild<QLabel*>(QStringLiteral("streamFramesSentLabel")));
+    QVERIFY(!panel.findChild<QLabel*>(QStringLiteral("streamFramesDroppedLabel")));
+
+    const auto groups = panel.findChildren<QGroupBox*>();
+    const bool hasStatusGroup = std::any_of(groups.begin(), groups.end(), [](const QGroupBox* group) {
+        return group->title() == QStringLiteral("\u72b6\u6001");
+    });
+    QVERIFY(!hasStatusGroup);
+}
+
 void PanelSettingsTest::spectralPanelRestoresSavedRenderInputs()
 {
     QSettings settings;
@@ -447,6 +611,20 @@ void PanelSettingsTest::spectralPanelRestoresSavedRenderInputs()
     QCOMPARE(rBand->value(), 8);
     QCOMPARE(gBand->value(), 9);
     QCOMPARE(bBand->value(), 10);
+}
+
+void PanelSettingsTest::spectralPanelDoesNotExposeScanStatusGroup()
+{
+    SpectralPanel panel;
+
+    QVERIFY(!panel.findChild<QGroupBox*>(QStringLiteral("spectralStatsGroup")));
+    QVERIFY(!panel.findChild<QLabel*>(QStringLiteral("spectralStatsLabel")));
+
+    const auto groups = panel.findChildren<QGroupBox*>();
+    const bool hasScanStatusGroup = std::any_of(groups.begin(), groups.end(), [](const QGroupBox* group) {
+        return group->title() == QStringLiteral("\u626b\u63cf\u72b6\u6001");
+    });
+    QVERIFY(!hasScanStatusGroup);
 }
 
 void PanelSettingsTest::spectralPanelShowsSavedBandsBeforeStreamMetadata()
@@ -624,6 +802,31 @@ void PanelSettingsTest::irPanelRestoresSavedUserInputs()
     QCOMPARE(badPixelPos3->value(), 40);
 }
 
+void PanelSettingsTest::irPanelPlacesCommonDetectorControlsOutsideAdvancedGroup()
+{
+    DeviceClient device;
+    IrPanel panel(&device);
+
+    auto* advanced = panel.findChild<QGroupBox*>(QStringLiteral("detectorAdvancedGroup"));
+    auto* integration = panel.findChild<QSpinBox*>(QStringLiteral("irIntegrationSpin"));
+    auto* imageType = panel.findChild<QComboBox*>(QStringLiteral("irImageTypeCombo"));
+    auto* flipH = panel.findChild<QComboBox*>(QStringLiteral("irFlipHCombo"));
+    auto* autoCalib = panel.findChild<QComboBox*>(QStringLiteral("irAutoCalibCombo"));
+    auto* brightness = panel.findChild<QSpinBox*>(QStringLiteral("irBrightnessSpin"));
+
+    QVERIFY(advanced);
+    QVERIFY(integration);
+    QVERIFY(imageType);
+    QVERIFY(flipH);
+    QVERIFY(autoCalib);
+    QVERIFY(brightness);
+    QVERIFY(!advanced->findChild<QSpinBox*>(QStringLiteral("irIntegrationSpin")));
+    QVERIFY(!advanced->findChild<QComboBox*>(QStringLiteral("irImageTypeCombo")));
+    QVERIFY(!advanced->findChild<QComboBox*>(QStringLiteral("irFlipHCombo")));
+    QVERIFY(!advanced->findChild<QComboBox*>(QStringLiteral("irAutoCalibCombo")));
+    QVERIFY(advanced->findChild<QSpinBox*>(QStringLiteral("irBrightnessSpin")));
+}
+
 void PanelSettingsTest::irPanelSwitchesBetweenSeparateLegacyAndCi05Pages()
 {
     QTcpServer server;
@@ -651,7 +854,7 @@ void PanelSettingsTest::irPanelSwitchesBetweenSeparateLegacyAndCi05Pages()
     QCOMPARE(QString::fromStdString(modelReq.payload.value("cmd", std::string())),
              QStringLiteral("ir.core.current"));
     writeControlResponse(socket, modelReq.header.seq, {{"model", "ci05"}});
-    QTRY_COMPARE(currentModel->text(), QString::fromUtf8("当前机芯: ci05"));
+    QTRY_COMPARE(currentModel->text(), QStringLiteral("\u5f53\u524d\u673a\u82af: ci05"));
     QCOMPARE(stack->currentWidget(), ci05Page);
 }
 
@@ -686,7 +889,7 @@ void PanelSettingsTest::irPanelCi05PageUsesSeparateCi05Controls()
     QCOMPARE(QString::fromStdString(modelReq.payload.value("cmd", std::string())),
              QStringLiteral("ir.core.current"));
     writeControlResponse(socket, modelReq.header.seq, {{"model", "ci05"}});
-    QTRY_COMPARE(currentModel->text(), QString::fromUtf8("当前机芯: ci05"));
+    QTRY_COMPARE(currentModel->text(), QStringLiteral("\u5f53\u524d\u673a\u82af: ci05"));
 
     ci05Brightness->setValue(50);
     applyCi05Brightness->click();
@@ -725,7 +928,7 @@ void PanelSettingsTest::irPanelCi05PageReadsAllStatusRegisters()
     QCOMPARE(QString::fromStdString(modelReq.payload.value("cmd", std::string())),
              QStringLiteral("ir.core.current"));
     writeControlResponse(socket, modelReq.header.seq, {{"model", "ci05"}});
-    QTRY_COMPARE(currentModel->text(), QString::fromUtf8("当前机芯: ci05"));
+    QTRY_COMPARE(currentModel->text(), QStringLiteral("\u5f53\u524d\u673a\u82af: ci05"));
 
     readStatus2->click();
     CapturedControlRequest statusReq = readControlRequest(socket);
@@ -771,7 +974,7 @@ void PanelSettingsTest::irPanelCi05PageTriggersAllCompensations()
     QCOMPARE(QString::fromStdString(modelReq.payload.value("cmd", std::string())),
              QStringLiteral("ir.core.current"));
     writeControlResponse(socket, modelReq.header.seq, {{"model", "ci05"}});
-    QTRY_COMPARE(currentModel->text(), QString::fromUtf8("当前机芯: ci05"));
+    QTRY_COMPARE(currentModel->text(), QStringLiteral("\u5f53\u524d\u673a\u82af: ci05"));
 
     shutter->click();
     CapturedControlRequest request = readControlRequest(socket);
@@ -792,18 +995,6 @@ void PanelSettingsTest::irPanelCi05PageTriggersAllCompensations()
     request = readControlRequest(socket);
     QCOMPARE(QString::fromStdString(request.payload.value("cmd", std::string())),
              QStringLiteral("ir.ci05.trigger_integration_correction"));
-}
-
-void PanelSettingsTest::collectPanelProvidesBackgroundCalibrationControls()
-{
-    DeviceClient device;
-    CollectPanel panel(&device);
-    auto* button = panel.findChild<QPushButton*>(QStringLiteral("collectBackgroundCalibrationButton"));
-    auto* status = panel.findChild<QLabel*>(QStringLiteral("collectBackgroundCalibrationStatusLabel"));
-    QVERIFY(button);
-    QVERIFY(status);
-    QCOMPARE(button->text(), QString::fromUtf8("开始背景矫正"));
-    QCOMPARE(status->text(), QString::fromUtf8("未启动"));
 }
 
 QTEST_MAIN(PanelSettingsTest)

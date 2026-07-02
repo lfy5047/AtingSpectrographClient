@@ -2,10 +2,13 @@
 
 #include <QObject>
 
+class AdvancedSettingsPanel;
+class CalibrationPanel;
 class CameraPanel;
 class CollectPanel;
 class ConnectionPanel;
 class DashboardPanel;
+class DataAcquisitionPanel;
 class DeviceClient;
 class IrPanel;
 class MainWindowChrome;
@@ -22,19 +25,16 @@ class MainWindowPanelRegistry : public QObject {
 public:
     enum PanelIndex {
         Dashboard = 0,
-        Connection = 1,
-        Camera = 2,
-        Mirror = 3,
-        Ir = 4,
-        TempControl = 5,
-        Collect = 6,
-        Stream = 7,
-        Spectral = 8,
-        RecordPlayback = 9,
-        SpectrumAnalysis = 10,
-        Log = 11,
+        DataAcquisition = 1,
+        DetectorSettings = 2,
+        Calibration = 3,
+        TempControl = 4,
+        RecordPlayback = 5,
+        SpectrumAnalysis = 6,
+        AdvancedSettings = 7,
+        Log = 8,
     };
-    static const int PanelVersion = 4;
+    static const int PanelVersion = 5;
 
     MainWindowPanelRegistry(DeviceClient* device, MainWindowChrome* chrome, QObject* parent = nullptr);
 
@@ -43,11 +43,20 @@ public:
     int currentPanel() const { return currentPanel_; }
 
     DashboardPanel* dashboard() const { return dashPanel_; }
-    ConnectionPanel* connection() const { return connPanel_; }
-    StreamPanel* stream() const { return streamPanel_; }
-    SpectralPanel* spectral() const { return spectralPanel_; }
+    DataAcquisitionPanel* dataAcquisition() const { return dataAcquisitionPanel_; }
+    IrPanel* detectorSettings() const { return detectorPanel_; }
+    CalibrationPanel* calibration() const { return calibrationPanel_; }
+    TempControlPanel* tempControl() const { return tempControlPanel_; }
     RecordPlaybackPanel* recordPlayback() const { return recordPlaybackPanel_; }
     SpectrumAnalysisPanel* spectrumAnalysis() const { return spectrumAnalysisPanel_; }
+    AdvancedSettingsPanel* advancedSettings() const { return advancedSettingsPanel_; }
+
+    ConnectionPanel* connection() const;
+    CameraPanel* camera() const;
+    CollectPanel* collect() const;
+    MirrorPanel* mirror() const;
+    StreamPanel* stream() const;
+    SpectralPanel* spectral() const;
 
 protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
@@ -63,14 +72,11 @@ private:
     int currentPanel_ = Dashboard;
 
     DashboardPanel* dashPanel_ = nullptr;
-    ConnectionPanel* connPanel_ = nullptr;
-    CameraPanel* cameraPanel_ = nullptr;
-    MirrorPanel* mirrorPanel_ = nullptr;
-    IrPanel* irPanel_ = nullptr;
+    DataAcquisitionPanel* dataAcquisitionPanel_ = nullptr;
+    IrPanel* detectorPanel_ = nullptr;
+    CalibrationPanel* calibrationPanel_ = nullptr;
     TempControlPanel* tempControlPanel_ = nullptr;
-    CollectPanel* collectPanel_ = nullptr;
-    StreamPanel* streamPanel_ = nullptr;
-    SpectralPanel* spectralPanel_ = nullptr;
     RecordPlaybackPanel* recordPlaybackPanel_ = nullptr;
     SpectrumAnalysisPanel* spectrumAnalysisPanel_ = nullptr;
+    AdvancedSettingsPanel* advancedSettingsPanel_ = nullptr;
 };

@@ -153,6 +153,24 @@ void DeviceUiCoordinator::setupConnections()
         }
     });
 
+    auto toggleConnection = [this]() {
+        if (device_->isConnected()) {
+            device_->disconnect();
+            return;
+        }
+
+        auto* connection = registry_->connection();
+        hostIp_ = connection->host();
+        tcpPort_ = connection->tcpPort();
+        udpPort_ = connection->udpPort();
+        registry_->stream()->setUdpPort(udpPort_);
+        device_->connectTo(hostIp_, tcpPort_);
+        refreshConnectionDashboard();
+    };
+
+    connect(chrome_->topBar(), &TopBarWidget::connectToggleRequested, this, toggleConnection);
+    connect(registry_->connection(), &ConnectionPanel::connectToggleRequested, this, toggleConnection);
+
     connect(device_, &DeviceClient::connectionChanged, this,
             [this](bool connected, const QString& ip) {
         hostIp_ = connected ? ip : QString();
