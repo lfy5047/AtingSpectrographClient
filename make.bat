@@ -1,7 +1,7 @@
 @echo off
 
 :: 包含配置文件
-call config.bat
+call config.bat %1
 
 :: 编译类型
 set BUILD_TYPE=Debug

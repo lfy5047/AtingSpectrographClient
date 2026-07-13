@@ -1,7 +1,7 @@
 @echo off
 
 :: 包含配置文件
-call config.bat
+call config.bat %1
 
 @REM if exist "%INSTALL_DIR%" (
 @REM     echo Removing existing installation...
