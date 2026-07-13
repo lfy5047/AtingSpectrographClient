@@ -215,6 +215,27 @@ target_link_libraries(SidebarWidgetTest PRIVATE
 )
 add_test(NAME SidebarWidgetTest COMMAND SidebarWidgetTest)
 
+add_executable(SpectralSegmentTest
+    SpectralSegmentTest.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/ImageFrameUtils.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/ThemeManager.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/panels/SpectralSegmentTestPanel.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/widgets/ImageView.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/widgets/ViewerAreaWidget.cpp
+    ${TEST_RESOURCES}
+)
+target_include_directories(SpectralSegmentTest PRIVATE
+    ${PROJECT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/src/Client/rpc
+    ${PROJECT_SOURCE_DIR}/src/Ui
+)
+target_link_libraries(SpectralSegmentTest PRIVATE
+    Qt5::Test
+    Qt5::Widgets
+)
+add_test(NAME SpectralSegmentTest COMMAND SpectralSegmentTest)
+
 add_executable(PanelSettingsTest
     PanelSettingsTest.cpp
     ${PROJECT_SOURCE_DIR}/src/Client/core/DeviceClient.cpp

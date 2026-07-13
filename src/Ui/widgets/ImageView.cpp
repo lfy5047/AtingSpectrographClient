@@ -50,6 +50,26 @@ void ImageView::setAnalysisLines(const QVector<SpectrumSampleLine>& lines)
     update();
 }
 
+void ImageView::setSpectralSegmentTestEnabled(bool enabled)
+{
+    if (spectralSegmentTestEnabled_ == enabled) return;
+    spectralSegmentTestEnabled_ = enabled;
+    interactionMode_ = InteractionMode::Normal;
+    dragging_ = false;
+    activeLineIndex_ = -1;
+    if (!enabled) {
+        unsetCursor();
+    }
+    update();
+}
+
+void ImageView::setSpectralSegmentLines(int firstX, int secondX)
+{
+    spectralSegmentLineXs_[0] = firstX;
+    spectralSegmentLineXs_[1] = secondX;
+    update();
+}
+
 QRectF ImageView::imageRect() const
 {
     if (noSignal_ || image_.isNull()) return QRectF();
@@ -99,6 +119,13 @@ double ImageView::widgetYForImageY(int y) const
     return r.top() + (static_cast<double>(y) + 0.5) * r.height() / image_.height();
 }
 
+double ImageView::widgetXForImageX(int x) const
+{
+    const QRectF r = imageRect();
+    if (r.isNull() || image_.width() <= 0) return -1.0;
+    return r.left() + (static_cast<double>(x) + 0.5) * r.width() / image_.width();
+}
+
 int ImageView::hitAnalysisLine(const QPoint& widgetPos) const
 {
     if (!analysisOverlayEnabled_ || noSignal_ || image_.isNull()) return -1;
@@ -120,6 +147,43 @@ int ImageView::hitAnalysisLine(const QPoint& widgetPos) const
         }
     }
     return bestIndex;
+}
+
+int ImageView::hitSpectralSegmentLine(const QPoint& widgetPos) const
+{
+    if (!spectralSegmentTestEnabled_ || noSignal_ || image_.isNull()) return -1;
+    const QRectF r = imageRect();
+    if (r.isNull()) return -1;
+    const QPointF p(widgetPos);
+    if (p.x() < r.left() || p.x() >= r.right() || p.y() < r.top() || p.y() >= r.bottom()) {
+        return -1;
+    }
+
+    int bestIndex = -1;
+    double bestDistance = 7.0;
+    for (int i = 0; i < 2; ++i) {
+        if (spectralSegmentLineXs_[i] < 0 || spectralSegmentLineXs_[i] >= image_.width()) continue;
+        const double lineX = widgetXForImageX(spectralSegmentLineXs_[i]);
+        const double distance = std::abs(lineX - p.x());
+        if (distance <= 6.0 && distance < bestDistance) {
+            bestDistance = distance;
+            bestIndex = i;
+        }
+    }
+    return bestIndex;
+}
+
+void ImageView::updateSpectralSegmentCursor(const QPoint& widgetPos)
+{
+    const bool overMovableLine = spectralSegmentTestEnabled_
+        && (interactionMode_ == InteractionMode::SegmentLineDragging
+            || (interactionMode_ == InteractionMode::Normal
+                && hitSpectralSegmentLine(widgetPos) >= 0));
+    if (overMovableLine) {
+        setCursor(Qt::SizeHorCursor);
+    } else {
+        unsetCursor();
+    }
 }
 
 void ImageView::beginPan(const QPoint& pos)
@@ -206,6 +270,38 @@ void ImageView::drawAnalysisOverlay(QPainter& p, const QRectF& r)
     p.restore();
 }
 
+void ImageView::drawSpectralSegmentOverlay(QPainter& p, const QRectF& r)
+{
+    if (!spectralSegmentTestEnabled_ || noSignal_ || image_.isNull() || r.isNull()) return;
+
+    static const QColor colors[] = {QColor(0xF9, 0x73, 0x16), QColor(0x22, 0xC5, 0x5E)};
+    p.save();
+    p.setRenderHint(QPainter::Antialiasing, true);
+    p.setClipRect(r);
+
+    for (int i = 0; i < 2; ++i) {
+        const int x = spectralSegmentLineXs_[i];
+        if (x < 0 || x >= image_.width()) continue;
+
+        const double wx = widgetXForImageX(x);
+        const QColor color = colors[i];
+        p.setPen(QPen(color, i == activeLineIndex_ ? 3 : 2));
+        p.drawLine(QPointF(wx, r.top()), QPointF(wx, r.bottom()));
+
+        QRectF labelRect(wx + 6, r.top() + 8, 76, 22);
+        if (labelRect.right() > r.right() - 2) {
+            labelRect.moveRight(wx - 6);
+        }
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(0x0A, 0x0E, 0x14, 210));
+        p.drawRoundedRect(labelRect, 4, 4);
+        p.setPen(color);
+        p.drawText(labelRect, Qt::AlignCenter, QStringLiteral("X%1: %2").arg(i + 1).arg(x));
+    }
+
+    p.restore();
+}
+
 void ImageView::syncCursorFromWidgetPos(const QPoint& widgetPos)
 {
     emit cursorImagePosChanged(imagePosFromWidgetPos(widgetPos));
@@ -268,6 +364,7 @@ void ImageView::paintEvent(QPaintEvent*)
     const QRectF imageRectF = imageRect();
     p.drawImage(imageRectF, image_);
     drawAnalysisOverlay(p, imageRectF);
+    drawSpectralSegmentOverlay(p, imageRectF);
 
     p.setPen(outdoor ? QColor(0x4B, 0x55, 0x63) : QColor(0x7D, 0x85, 0x90));
     QFont f("Consolas", 9);
@@ -302,7 +399,13 @@ void ImageView::mousePressEvent(QMouseEvent* e)
         interactionMode_ = InteractionMode::Panning;
         beginPan(e->pos());
     } else if (e->button() == Qt::LeftButton) {
-        if (analysisOverlayEnabled_) {
+        const int segmentHit = hitSpectralSegmentLine(e->pos());
+        if (segmentHit >= 0) {
+            interactionMode_ = InteractionMode::SegmentLineDragging;
+            activeLineIndex_ = segmentHit;
+            updateSpectralSegmentCursor(e->pos());
+            update();
+        } else if (analysisOverlayEnabled_) {
             const int hit = hitAnalysisLine(e->pos());
             if (hit >= 0) {
                 interactionMode_ = InteractionMode::LineDragging;
@@ -324,7 +427,12 @@ void ImageView::mousePressEvent(QMouseEvent* e)
 
 void ImageView::mouseMoveEvent(QMouseEvent* e)
 {
-    if (interactionMode_ == InteractionMode::LineDragging && activeLineIndex_ >= 0) {
+    if (interactionMode_ == InteractionMode::SegmentLineDragging && activeLineIndex_ >= 0) {
+        const QPoint pos = imagePosFromWidgetPos(e->pos());
+        if (pos.x() >= 0) {
+            emit spectralSegmentLineMoveRequested(activeLineIndex_, pos.x());
+        }
+    } else if (interactionMode_ == InteractionMode::LineDragging && activeLineIndex_ >= 0) {
         const QPoint pos = imagePosFromWidgetPos(e->pos());
         if (pos.y() >= 0) {
             emit analysisLineMoveRequested(activeLineIndex_, pos.y());
@@ -340,6 +448,7 @@ void ImageView::mouseMoveEvent(QMouseEvent* e)
         offset_ = dragOffset_ + (e->pos() - dragStart_);
         update();
     }
+    updateSpectralSegmentCursor(e->pos());
     syncCursorFromWidgetPos(e->pos());
 }
 
@@ -355,6 +464,7 @@ void ImageView::mouseReleaseEvent(QMouseEvent* e)
     dragging_ = false;
     interactionMode_ = InteractionMode::Normal;
     activeLineIndex_ = -1;
+    updateSpectralSegmentCursor(e->pos());
     update();
     syncCursorFromWidgetPos(e->pos());
 }
@@ -369,6 +479,7 @@ void ImageView::mouseDoubleClickEvent(QMouseEvent* e)
 
 void ImageView::leaveEvent(QEvent*)
 {
+    unsetCursor();
     emit cursorImagePosChanged(QPoint(-1, -1));
 }
 

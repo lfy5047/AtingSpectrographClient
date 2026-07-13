@@ -24,12 +24,15 @@ public:
     QImage currentImage() const { return image_; }
     void setAnalysisOverlayEnabled(bool enabled);
     void setAnalysisLines(const QVector<SpectrumSampleLine>& lines);
+    void setSpectralSegmentTestEnabled(bool enabled);
+    void setSpectralSegmentLines(int firstX, int secondX);
 
 signals:
     void cursorImagePosChanged(const QPoint& pos);
     void analysisLineAddRequested(int y);
     void analysisLineMoveRequested(int index, int y);
     void analysisLineDeleteRequested(int index);
+    void spectralSegmentLineMoveRequested(int index, int x);
 
 protected:
     void changeEvent(QEvent*) override;
@@ -47,8 +50,12 @@ private:
     QRectF imageRect() const;
     QPoint imagePosFromWidgetPos(const QPoint& widgetPos) const;
     double widgetYForImageY(int y) const;
+    double widgetXForImageX(int x) const;
     int hitAnalysisLine(const QPoint& widgetPos) const;
+    int hitSpectralSegmentLine(const QPoint& widgetPos) const;
     void drawAnalysisOverlay(QPainter& p, const QRectF& r);
+    void drawSpectralSegmentOverlay(QPainter& p, const QRectF& r);
+    void updateSpectralSegmentCursor(const QPoint& widgetPos);
     void beginPan(const QPoint& pos);
     void syncCursorFromWidgetPos(const QPoint& widgetPos);
     void syncCursorFromGlobalPos();
@@ -57,6 +64,7 @@ private:
     enum class InteractionMode {
         Normal,
         LineDragging,
+        SegmentLineDragging,
         PendingClick,
         Panning,
     };
@@ -70,6 +78,8 @@ private:
     bool    noSignal_ = true;
     bool    analysisOverlayEnabled_ = false;
     QVector<SpectrumSampleLine> analysisLines_;
+    bool    spectralSegmentTestEnabled_ = false;
+    int     spectralSegmentLineXs_[2] = {-1, -1};
     InteractionMode interactionMode_ = InteractionMode::Normal;
     int     activeLineIndex_ = -1;
 };

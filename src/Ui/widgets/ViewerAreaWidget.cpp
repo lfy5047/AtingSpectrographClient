@@ -144,6 +144,17 @@ void ViewerAreaWidget::setupUi()
             this, &ViewerAreaWidget::sliceAnalysisLineMoveRequested);
     connect(imageViewSlice_, &ImageView::analysisLineDeleteRequested,
             this, &ViewerAreaWidget::sliceAnalysisLineDeleteRequested);
+    connect(imageViewRaw_, &ImageView::spectralSegmentLineMoveRequested,
+            this, [this](int index, int x) {
+        if (!spectralSegmentTestEnabled_ || index < 0 || index >= 2) return;
+        const int width = imageViewRaw_->currentImage().width();
+        if (width <= 0) return;
+        const int boundedX = qBound(0, x, width - 1);
+        if (spectralSegmentLineXs_[static_cast<std::size_t>(index)] == boundedX) return;
+        spectralSegmentLineXs_[static_cast<std::size_t>(index)] = boundedX;
+        imageViewRaw_->setSpectralSegmentLines(spectralSegmentLineXs_[0], spectralSegmentLineXs_[1]);
+        emit spectralSegmentPositionsChanged(spectralSegmentLineXs_[0], spectralSegmentLineXs_[1]);
+    });
 
     updateChannelTabStyle();
     refreshImageStatsOverlay();
@@ -190,6 +201,9 @@ void ViewerAreaWidget::renderFrame(int channel, int width, int height, int pixfm
     const QImage img = makeDisplayImage(width, height, pixfmt, data);
     if (!img.isNull()) {
         target->setImage(img);
+        if (channel == Raw16View) {
+            syncSpectralSegmentLinesWithRawImage();
+        }
     } else {
         static qint64 lastWarnMs = 0;
         const qint64 nowMs = QDateTime::currentMSecsSinceEpoch();
@@ -210,6 +224,9 @@ void ViewerAreaWidget::setChannelImage(int channel, const QImage& image)
     ImageView* target = imageView(channel);
     if (!target || image.isNull()) return;
     target->setImage(image);
+    if (channel == Raw16View) {
+        syncSpectralSegmentLinesWithRawImage();
+    }
 }
 
 void ViewerAreaWidget::setImageStats(int channel, const ChannelImageStats& stats)
@@ -257,6 +274,45 @@ void ViewerAreaWidget::setSliceAnalysisOverlay(bool enabled, const QVector<Spect
     if (!imageViewSlice_) return;
     imageViewSlice_->setAnalysisOverlayEnabled(enabled);
     imageViewSlice_->setAnalysisLines(lines);
+}
+
+void ViewerAreaWidget::setSpectralSegmentTestEnabled(bool enabled)
+{
+    spectralSegmentTestEnabled_ = enabled;
+    if (!imageViewRaw_) return;
+    imageViewRaw_->setSpectralSegmentTestEnabled(enabled);
+    if (enabled) {
+        syncSpectralSegmentLinesWithRawImage();
+    }
+}
+
+void ViewerAreaWidget::syncSpectralSegmentLinesWithRawImage()
+{
+    if (!spectralSegmentTestEnabled_ || !imageViewRaw_) return;
+
+    const int width = imageViewRaw_->currentImage().width();
+    if (width <= 0) {
+        spectralSegmentImageWidth_ = 0;
+        spectralSegmentLineXs_ = {{-1, -1}};
+        imageViewRaw_->setSpectralSegmentLines(-1, -1);
+        emit spectralSegmentPositionsChanged(-1, -1);
+        return;
+    }
+
+    const bool positionsInvalid = spectralSegmentLineXs_[0] < 0
+        || spectralSegmentLineXs_[0] >= width
+        || spectralSegmentLineXs_[1] < 0
+        || spectralSegmentLineXs_[1] >= width;
+    if (spectralSegmentImageWidth_ != width || positionsInvalid) {
+        const int lastX = width - 1;
+        spectralSegmentLineXs_[0] = lastX / 3;
+        spectralSegmentLineXs_[1] = (lastX * 2) / 3;
+        spectralSegmentImageWidth_ = width;
+        imageViewRaw_->setSpectralSegmentLines(spectralSegmentLineXs_[0], spectralSegmentLineXs_[1]);
+        emit spectralSegmentPositionsChanged(spectralSegmentLineXs_[0], spectralSegmentLineXs_[1]);
+    } else {
+        imageViewRaw_->setSpectralSegmentLines(spectralSegmentLineXs_[0], spectralSegmentLineXs_[1]);
+    }
 }
 
 bool ViewerAreaWidget::eventFilter(QObject* obj, QEvent* event)

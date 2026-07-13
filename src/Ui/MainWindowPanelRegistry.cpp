@@ -11,6 +11,7 @@
 #include "panels/LogPanel.h"
 #include "panels/RecordPlaybackPanel.h"
 #include "panels/SpectrumAnalysisPanel.h"
+#include "panels/SpectralSegmentTestPanel.h"
 #include "panels/TempControlPanel.h"
 #include "widgets/ViewerAreaWidget.h"
 
@@ -29,6 +30,7 @@ const char* kPanelNames[] = {
     "录制回放",
     "光谱分析",
     "高级设置",
+    "光谱段测试",
     "系统日志",
 };
 
@@ -67,6 +69,7 @@ void MainWindowPanelRegistry::selectPanel(int index)
     if (spectrumAnalysisCoordinator_) {
         spectrumAnalysisCoordinator_->setActive(index == SpectrumAnalysis);
     }
+    chrome_->viewerArea()->setSpectralSegmentTestEnabled(index == SpectralSegmentTest);
 
     if (index == Log) {
         chrome_->logPanel()->toggleExpanded();
@@ -106,6 +109,7 @@ void MainWindowPanelRegistry::setupPanels()
     recordPlaybackPanel_ = new RecordPlaybackPanel(device_, stack);
     spectrumAnalysisPanel_ = new SpectrumAnalysisPanel(stack);
     advancedSettingsPanel_ = new AdvancedSettingsPanel(device_, stack);
+    spectralSegmentTestPanel_ = new SpectralSegmentTestPanel(stack);
 
     stack->addWidget(wrapInScroll(dashPanel_));
     stack->addWidget(wrapInScroll(dataAcquisitionPanel_));
@@ -115,6 +119,10 @@ void MainWindowPanelRegistry::setupPanels()
     stack->addWidget(wrapInScroll(recordPlaybackPanel_));
     stack->addWidget(wrapInScroll(spectrumAnalysisPanel_));
     stack->addWidget(wrapInScroll(advancedSettingsPanel_));
+    stack->addWidget(wrapInScroll(spectralSegmentTestPanel_));
+
+    connect(chrome_->viewerArea(), &ViewerAreaWidget::spectralSegmentPositionsChanged,
+            spectralSegmentTestPanel_, &SpectralSegmentTestPanel::setLinePositions);
 }
 
 ConnectionPanel* MainWindowPanelRegistry::connection() const
@@ -171,6 +179,9 @@ void MainWindowPanelRegistry::selectAssociatedViewerChannel(int panelIndex)
         break;
     case SpectrumAnalysis:
         viewer->setCurrentChannel(ViewerAreaWidget::SliceStitch16View);
+        break;
+    case SpectralSegmentTest:
+        viewer->setCurrentChannel(ViewerAreaWidget::Raw16View);
         break;
     default:
         break;

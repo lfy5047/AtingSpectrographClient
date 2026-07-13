@@ -29,6 +29,7 @@ private slots:
             QString::fromUtf8("温控控制"),
             QString::fromUtf8("录制回放"),
             QString::fromUtf8("光谱分析"),
+            QString::fromUtf8("光谱段测试"),
             QString::fromUtf8("高级设置"),
             QString::fromUtf8("系统日志"),
         };
@@ -36,6 +37,14 @@ private slots:
         QCOMPARE(buttons.size(), expected.size());
         for (int i = 0; i < expected.size(); ++i) {
             QCOMPARE(buttons.at(i)->property("fullText").toString(), expected.at(i));
+        }
+
+        const QList<int> expectedPanelIndices = {0, 1, 2, 3, 4, 5, 6, 8, 7, 9};
+        QSignalSpy panelSpy(&sidebar, &SidebarWidget::panelSelected);
+        for (int i = 0; i < buttons.size(); ++i) {
+            buttons.at(i)->click();
+            QCOMPARE(panelSpy.count(), 1);
+            QCOMPARE(panelSpy.takeFirst().at(0).toInt(), expectedPanelIndices.at(i));
         }
     }
 

@@ -62,6 +62,9 @@ int WindowSettingsStore::restore(QMainWindow* window, QSplitter* splitter, Sideb
             break;
         }
     }
+    if (panelVersion < 6 && panel == 8) {
+        panel = MainWindowPanelRegistry::Log;
+    }
     if (panel < MainWindowPanelRegistry::Dashboard || panel > MainWindowPanelRegistry::Log) {
         panel = MainWindowPanelRegistry::Dashboard;
     }

@@ -38,12 +38,14 @@ public:
     void setSpectralNoSignal();
     void setSpectralProgressVisible(bool visible, int percent, const QString& text);
     void setSliceAnalysisOverlay(bool enabled, const QVector<SpectrumSampleLine>& lines);
+    void setSpectralSegmentTestEnabled(bool enabled);
 
 signals:
     void channelChanged(int channel);
     void sliceAnalysisLineAddRequested(int y);
     void sliceAnalysisLineMoveRequested(int index, int y);
     void sliceAnalysisLineDeleteRequested(int index);
+    void spectralSegmentPositionsChanged(int firstX, int secondX);
 
 protected:
     bool eventFilter(QObject* obj, QEvent* event) override;
@@ -54,6 +56,7 @@ private:
     void refreshImageStatsOverlay();
     void positionImageStatsOverlay();
     void positionSpectralProgressOverlay();
+    void syncSpectralSegmentLinesWithRawImage();
     QString formatImageStatsText(const QPoint& cursorPos, const ChannelImageStats* stats) const;
 
     QWidget* channelTabBar_ = nullptr;
@@ -87,4 +90,7 @@ private:
     ChannelImageStats rawImageStats_;
     ChannelImageStats sliceImageStats_;
     ChannelImageStats playbackImageStats_;
+    bool spectralSegmentTestEnabled_ = false;
+    int spectralSegmentImageWidth_ = 0;
+    std::array<int, 2> spectralSegmentLineXs_ = {{-1, -1}};
 };
