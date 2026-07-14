@@ -25,6 +25,12 @@ QString statsText(const RoiSnapshot& snapshot, bool valid)
         .arg(snapshot.stats.max);
 }
 
+QString coordinateText(const QPoint& pos)
+{
+    if (pos.x() < 0 || pos.y() < 0) return QString::fromUtf8("坐标: --");
+    return QStringLiteral("X: %1  Y: %2").arg(pos.x()).arg(pos.y());
+}
+
 } // namespace
 
 RoiCompareWidget::RoiCompareWidget(QWidget* parent)
@@ -42,7 +48,8 @@ RoiCompareWidget::RoiCompareWidget(QWidget* parent)
     commonRangeCheck_->setChecked(true);
     toolbar->addWidget(commonRangeCheck_);
     auto* hint = new QLabel(
-        QString::fromUtf8("对照全幅图与 ROI 图的尺寸和内容，人工确认开窗区域是否正确。"), this);
+        QString::fromUtf8("对照全幅图与 ROI 图的尺寸和内容；移动鼠标可查看以各图左上角为原点的像素坐标。"),
+        this);
     hint->setWordWrap(true);
     toolbar->addWidget(hint, 1);
     root->addLayout(toolbar);
@@ -52,6 +59,7 @@ RoiCompareWidget::RoiCompareWidget(QWidget* parent)
 
     auto createCard = [this, cards](const QString& title, const QString& prefix,
                                     QLabel** sizeLabel, QLabel** statsLabel,
+                                    QLabel** coordinateLabel,
                                     ImageView** view) {
         auto* group = new QGroupBox(title, this);
         group->setObjectName(prefix + QStringLiteral("Card"));
@@ -67,24 +75,38 @@ RoiCompareWidget::RoiCompareWidget(QWidget* parent)
         (*statsLabel)->setAlignment(Qt::AlignCenter);
         (*statsLabel)->setWordWrap(true);
         (*statsLabel)->setProperty("readoutSm", true);
+        *coordinateLabel = new QLabel(QString::fromUtf8("坐标: --"), group);
+        (*coordinateLabel)->setObjectName(prefix + QStringLiteral("CoordinateLabel"));
+        (*coordinateLabel)->setAlignment(Qt::AlignCenter);
+        (*coordinateLabel)->setProperty("readoutSm", true);
         *view = new ImageView(group);
         (*view)->setObjectName(prefix + QStringLiteral("ImageView"));
         (*view)->setMinimumSize(220, 220);
 
         layout->addWidget(*sizeLabel);
         layout->addWidget(*statsLabel);
+        layout->addWidget(*coordinateLabel);
         layout->addWidget(*view, 1);
         cards->addWidget(group, 1);
     };
 
     createCard(QString::fromUtf8("全幅基准"), QStringLiteral("roiFullFrame"),
-               &fullFrameSizeLabel_, &fullFrameStatsLabel_, &fullFrameView_);
+               &fullFrameSizeLabel_, &fullFrameStatsLabel_, &fullFrameCoordinateLabel_,
+               &fullFrameView_);
     createCard(QString::fromUtf8("ROI 区域"), QStringLiteral("roiTarget"),
-               &roiSizeLabel_, &roiStatsLabel_, &roiView_);
+               &roiSizeLabel_, &roiStatsLabel_, &roiCoordinateLabel_, &roiView_);
     root->addLayout(cards, 1);
 
     connect(commonRangeCheck_, &QCheckBox::toggled,
             this, [this](bool) { renderSnapshots(); });
+    connect(fullFrameView_, &ImageView::cursorImagePosChanged,
+            this, [this](const QPoint& pos) {
+                fullFrameCoordinateLabel_->setText(coordinateText(pos));
+            });
+    connect(roiView_, &ImageView::cursorImagePosChanged,
+            this, [this](const QPoint& pos) {
+                roiCoordinateLabel_->setText(coordinateText(pos));
+            });
     clearSnapshots();
 }
 

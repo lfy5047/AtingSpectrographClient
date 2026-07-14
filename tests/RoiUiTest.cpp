@@ -8,6 +8,7 @@
 #include "Ui/widgets/RoiCompareWidget.h"
 #include "Ui/widgets/ViewerAreaWidget.h"
 
+#include <QLabel>
 #include <QSpinBox>
 #include <cstring>
 
@@ -17,6 +18,7 @@ class RoiUiTest : public QObject {
 private slots:
     void panelProvidesRequestedDefaults();
     void compareViewUsesCommonDisplayRange();
+    void compareViewShowsHoverCoordinates();
     void viewerProvidesDedicatedRoiComparePage();
 };
 
@@ -84,6 +86,39 @@ void RoiUiTest::compareViewUsesCommonDisplayRange()
     QCOMPARE(full->currentImage().pixelColor(0, 0).red(), 0);
     QVERIFY(qAbs(full->currentImage().pixelColor(1, 0).red() - 128) <= 1);
     QCOMPARE(roi->currentImage().pixelColor(0, 0).red(), 255);
+}
+
+void RoiUiTest::compareViewShowsHoverCoordinates()
+{
+    RoiCompareWidget compare;
+    compare.setFullFrameSnapshot(snapshot(4, 2, {0, 1, 2, 3, 4, 5, 6, 7}));
+    compare.setRoiSnapshot(snapshot(2, 2, {8, 9, 10, 11}));
+
+    auto* fullCoordinate = compare.findChild<QLabel*>(
+        QStringLiteral("roiFullFrameCoordinateLabel"));
+    auto* roiCoordinate = compare.findChild<QLabel*>(
+        QStringLiteral("roiTargetCoordinateLabel"));
+    QVERIFY(fullCoordinate);
+    QVERIFY(roiCoordinate);
+    QCOMPARE(fullCoordinate->text(), QString::fromUtf8("坐标: --"));
+    QCOMPARE(roiCoordinate->text(), QString::fromUtf8("坐标: --"));
+
+    QVERIFY(QMetaObject::invokeMethod(compare.fullFrameView(), "cursorImagePosChanged",
+                                      Qt::DirectConnection,
+                                      Q_ARG(QPoint, QPoint(3, 1))));
+    QCOMPARE(fullCoordinate->text(), QStringLiteral("X: 3  Y: 1"));
+    QCOMPARE(roiCoordinate->text(), QString::fromUtf8("坐标: --"));
+
+    QVERIFY(QMetaObject::invokeMethod(compare.roiView(), "cursorImagePosChanged",
+                                      Qt::DirectConnection,
+                                      Q_ARG(QPoint, QPoint(1, 0))));
+    QCOMPARE(roiCoordinate->text(), QStringLiteral("X: 1  Y: 0"));
+
+    QVERIFY(QMetaObject::invokeMethod(compare.fullFrameView(), "cursorImagePosChanged",
+                                      Qt::DirectConnection,
+                                      Q_ARG(QPoint, QPoint(-1, -1))));
+    QCOMPARE(fullCoordinate->text(), QString::fromUtf8("坐标: --"));
+    QCOMPARE(roiCoordinate->text(), QStringLiteral("X: 1  Y: 0"));
 }
 
 void RoiUiTest::viewerProvidesDedicatedRoiComparePage()

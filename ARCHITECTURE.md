@@ -39,7 +39,7 @@
   - `DashboardPanel`：连接、转镜、流统计、运行时间等摘要信息。
   - `LogPanel`：显示 TCP raw log。
 - `src/Ui/widgets/` 提供侧栏、顶部栏、图像视图、QCustomPlot 等复用部件。
-- 主图像区由 `ViewerAreaWidget` 承载，除常规图像页外还包含由三个 `ImageView` 组成的 Binning 对比页，以及全幅/ROI 双 `ImageView` 对比页。
+- 主图像区由 `ViewerAreaWidget` 承载，除常规图像页外还包含由三个 `ImageView` 组成的 Binning 对比页，以及全幅/ROI 双 `ImageView` 对比页；ROI 双图复用 `ImageView::cursorImagePosChanged` 显示各图左上角为原点的悬停像素坐标。
 
 ### 设备聚合层
 
@@ -130,7 +130,7 @@ Service 类继承或使用 `RpcServiceBase`，把业务 API 封装为命令名�
 2. `RoiTestController` 先确认 Binning 为透传/1x1，再读取相机分辨率并保存测试前 ROI 与采集门控配置；已有采集运行时拒绝开始测试。
 3. 控制器保留其他门控参数并设置 `static_collect_mode=true`，把 ROI 设置为 `[0,width) x [0,height)`，回读确认后调用 `collect.start`。
 4. 控制器忽略 HeaderFrame，收到尺寸匹配的 SliceStitch16 Mono16 DataFrame/TailFrame 后保存全幅快照，再设置用户 ROI；采集中的新 ROI 仍由服务端在下一采集段生效。
-5. 收到目标尺寸的后续 DataFrame/TailFrame 后保存 ROI 快照；`RoiCompareWidget` 使用共同 DN 范围并排显示全幅和 ROI 图，由操作者人工判断内容是否正确。
+5. 收到目标尺寸的后续 DataFrame/TailFrame 后保存 ROI 快照；`RoiCompareWidget` 使用共同 DN 范围并排显示全幅和 ROI 图，并分别显示鼠标悬停处的局部像素坐标，由操作者人工判断内容是否正确。
 6. 完成、取消或失败时依次停止静态采集、恢复原 ROI、恢复原采集门控；断线时保留恢复状态，重连后先查询/停止残留采集再继续恢复。
 
 ### Spectral 光谱显示

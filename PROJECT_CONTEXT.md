@@ -117,7 +117,7 @@ AtingSpectrographClient 是一个 Windows 桌面端光谱仪/成像设备控制�
 11. 远程 raw 按 `.json + .raw` 逐帧读取并渲染到 Playback 视图；远程 tif 使用 libtiff 读取 BigTIFF 并按面板内参数渲染为一张投影图。
 12. 光谱分析 Panel 激活时由 `MainWindowPanelRegistry` 自动切到 SliceStitch16 页；`SpectrumAnalysisCoordinator` 打开独立曲线窗口，并从最新 SliceStitch16 Mono16 原始帧中采样曲线。
 13. Binning 测试 Panel 激活时自动切到三图对比页；数据源默认 Raw16、可切换 SliceStitch16；`BinningTestController` 保存原配置，依次采集 1x1、2x2、4x4 快照并在结束、取消或失败后恢复原配置。
-14. ROI 测试 Panel 激活时自动切到双图对比页；`RoiTestController` 保存原 ROI 和采集门控配置，一键启动静态采集，忽略 Header 并依次抓取全幅与目标 ROI 的 SliceStitch16 后续数据图像，随后停止采集并恢复配置。
+14. ROI 测试 Panel 激活时自动切到双图对比页；`RoiTestController` 保存原 ROI 和采集门控配置，一键启动静态采集，忽略 Header 并依次抓取全幅与目标 ROI 的 SliceStitch16 后续数据图像；双图支持鼠标悬停显示各自的局部像素坐标，采集结束后停止采集并恢复配置。
 
 ## 光谱分析功能
 

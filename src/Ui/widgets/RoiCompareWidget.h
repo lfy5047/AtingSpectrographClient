@@ -31,8 +31,10 @@ private:
     QCheckBox* commonRangeCheck_ = nullptr;
     QLabel* fullFrameSizeLabel_ = nullptr;
     QLabel* fullFrameStatsLabel_ = nullptr;
+    QLabel* fullFrameCoordinateLabel_ = nullptr;
     QLabel* roiSizeLabel_ = nullptr;
     QLabel* roiStatsLabel_ = nullptr;
+    QLabel* roiCoordinateLabel_ = nullptr;
     ImageView* fullFrameView_ = nullptr;
     ImageView* roiView_ = nullptr;
 };
