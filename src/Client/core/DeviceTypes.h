@@ -43,6 +43,17 @@ struct BinningConfig {
 
 using BinningConfigCallback = std::function<void(bool ok, const BinningConfig& config, const QString& err)>;
 
+struct RoiConfig {
+    int sliceBegin = 0;
+    int sliceEnd = 0;
+    int sliceHBegin = 0;
+    int sliceHEnd = 0;
+    bool collecting = false;
+    bool pendingApply = false;
+};
+
+using RoiConfigCallback = std::function<void(bool ok, const RoiConfig& config, const QString& err)>;
+
 struct CameraDeviceOption {
     QString name;
     QString mac;

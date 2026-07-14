@@ -22,8 +22,9 @@ static const struct { const char* label; int iconType; int panelIndex; } kNavIte
     {"光谱分析", 10, 6},
     {"光谱段测试", 12, 8},
     {"Binning 测试", 13, 9},
+    {"ROI 测试", 14, 10},
     {"高级设置", 7, 7},
-    {"系统日志", 6, 10},
+    {"系统日志", 6, 11},
 };
 
 SidebarWidget::SidebarWidget(QWidget* parent)
@@ -238,6 +239,17 @@ static void drawIcon(QPainter& p, int type, const QColor& c, int sz)
         p.drawRect(14, 6, 4, 4);
         p.drawRect(6, 14, 4, 4);
         p.drawRect(14, 14, 4, 4);
+        break;
+    case 14:
+        p.drawRoundedRect(3, 3, 18, 18, 2, 2);
+        p.drawLine(7, 7, 11, 7);
+        p.drawLine(7, 7, 7, 11);
+        p.drawLine(17, 7, 13, 7);
+        p.drawLine(17, 7, 17, 11);
+        p.drawLine(7, 17, 11, 17);
+        p.drawLine(7, 17, 7, 13);
+        p.drawLine(17, 17, 13, 17);
+        p.drawLine(17, 17, 17, 13);
         break;
     }
 }

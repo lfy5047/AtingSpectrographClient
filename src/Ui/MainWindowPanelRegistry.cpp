@@ -11,6 +11,7 @@
 #include "panels/IrPanel.h"
 #include "panels/LogPanel.h"
 #include "panels/RecordPlaybackPanel.h"
+#include "panels/RoiTestPanel.h"
 #include "panels/SpectrumAnalysisPanel.h"
 #include "panels/SpectralSegmentTestPanel.h"
 #include "panels/TempControlPanel.h"
@@ -33,6 +34,7 @@ const char* kPanelNames[] = {
     "高级设置",
     "光谱段测试",
     "Binning 测试",
+    "ROI 测试",
     "系统日志",
 };
 
@@ -113,6 +115,7 @@ void MainWindowPanelRegistry::setupPanels()
     advancedSettingsPanel_ = new AdvancedSettingsPanel(device_, stack);
     spectralSegmentTestPanel_ = new SpectralSegmentTestPanel(stack);
     binningTestPanel_ = new BinningTestPanel(stack);
+    roiTestPanel_ = new RoiTestPanel(stack);
 
     stack->addWidget(wrapInScroll(dashPanel_));
     stack->addWidget(wrapInScroll(dataAcquisitionPanel_));
@@ -124,6 +127,7 @@ void MainWindowPanelRegistry::setupPanels()
     stack->addWidget(wrapInScroll(advancedSettingsPanel_));
     stack->addWidget(wrapInScroll(spectralSegmentTestPanel_));
     stack->addWidget(wrapInScroll(binningTestPanel_));
+    stack->addWidget(wrapInScroll(roiTestPanel_));
 
     connect(chrome_->viewerArea(), &ViewerAreaWidget::spectralSegmentPositionsChanged,
             spectralSegmentTestPanel_, &SpectralSegmentTestPanel::setLinePositions);
@@ -189,6 +193,9 @@ void MainWindowPanelRegistry::selectAssociatedViewerChannel(int panelIndex)
         break;
     case BinningTest:
         viewer->setCurrentChannel(ViewerAreaWidget::BinningCompareView);
+        break;
+    case RoiTest:
+        viewer->setCurrentChannel(ViewerAreaWidget::RoiCompareView);
         break;
     default:
         break;

@@ -9,6 +9,7 @@
 
 class ImageView;
 class BinningCompareWidget;
+class RoiCompareWidget;
 class QLabel;
 class QProgressBar;
 class QPushButton;
@@ -24,7 +25,8 @@ public:
         SpectralPreviewView = 3,
         PlaybackView = 4,
         BinningCompareView = 5,
-        ChannelCount = 6,
+        RoiCompareView = 6,
+        ChannelCount = 7,
     };
 
     explicit ViewerAreaWidget(QWidget* parent = nullptr);
@@ -34,6 +36,7 @@ public:
     bool hasChannelImage(int channel) const;
     ImageView* imageView(int channel) const;
     BinningCompareWidget* binningCompareWidget() const { return binningCompareWidget_; }
+    RoiCompareWidget* roiCompareWidget() const { return roiCompareWidget_; }
     void renderFrame(int channel, int width, int height, int pixfmt, const QByteArray& data);
     void setChannelImage(int channel, const QImage& image);
     void setImageStats(int channel, const ChannelImageStats& stats);
@@ -69,6 +72,7 @@ private:
     QPushButton* chTabSpectralPreview_ = nullptr;
     QPushButton* chTabPlayback_ = nullptr;
     QPushButton* chTabBinningCompare_ = nullptr;
+    QPushButton* chTabRoiCompare_ = nullptr;
     QStackedWidget* viewerStack_ = nullptr;
     ImageView* imageViewRaw_ = nullptr;
     ImageView* imageViewSlice_ = nullptr;
@@ -76,6 +80,7 @@ private:
     ImageView* imageViewSpectralPreview_ = nullptr;
     ImageView* imageViewPlayback_ = nullptr;
     BinningCompareWidget* binningCompareWidget_ = nullptr;
+    RoiCompareWidget* roiCompareWidget_ = nullptr;
 
     QWidget* zoomBar_ = nullptr;
     QWidget* imageStatsOverlay_ = nullptr;
@@ -86,6 +91,7 @@ private:
 
     int currentChannel_ = Raw16View;
     std::array<QPoint, ChannelCount> cursorImagePos_ = {
+        QPoint(-1, -1),
         QPoint(-1, -1),
         QPoint(-1, -1),
         QPoint(-1, -1),

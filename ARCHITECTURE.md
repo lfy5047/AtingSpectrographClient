@@ -4,7 +4,7 @@
 
 1. `src/main.cpp` 初始化 plog、Qt 应用、全局字体，并通过 `ThemeManager` 加载已保存的应用主题。
 2. 创建 `MainWindow` 并进入 `QApplication::exec()`。
-3. `MainWindow` 构造 `DeviceClient`、`MainWindowChrome`、`MainWindowPanelRegistry`、`SpectrumAnalysisCoordinator`、`BinningTestController` 和 `DeviceUiCoordinator`。
+3. `MainWindow` 构造 `DeviceClient`、`MainWindowChrome`、`MainWindowPanelRegistry`、`SpectrumAnalysisCoordinator`、`BinningTestController`、`RoiTestController` 和 `DeviceUiCoordinator`。
 4. `WindowSettingsStore` 恢复窗口 geometry、splitter、当前 Panel 和侧边栏折叠状态，`DeviceUiCoordinator` 启动 uptime、Spectral 渲染和进度刷新定时器。
 5. 用户在连接面板发起连接后，TCP 控制层和 UDP 流接收层开始与设备交互。
 
@@ -17,8 +17,9 @@
 - `MainWindowPanelRegistry` 创建并注册右侧业务 Panel，集中维护 Panel index、标题、系统日志 toggle 和光谱分析 Panel 激活。
 - `DeviceUiCoordinator` 连接设备层与 UI 层，负责连接状态、UDP bind、帧分发、录制回放、Spectral 刷新、stream stats、raw log 和 uptime。
 - `ThemeManager` 维护应用主题目录，集中加载深色/户外亮色 QSS，并保存 `ui/theme` 用户偏好。
-- `ViewerAreaWidget` 管理 Raw16、SliceStitch16、Spectral、SpectralPreview、Playback 和 Binning 对比页，以及图像统计 overlay 和 Spectral progress overlay。
+- `ViewerAreaWidget` 管理 Raw16、SliceStitch16、Spectral、SpectralPreview、Playback、Binning 对比和 ROI 对比页，以及图像统计 overlay 和 Spectral progress overlay。
 - `BinningTestController` 管理 Binning 测试会话、配置回读、稳帧采集、超时/取消和原配置恢复。
+- `RoiTestController` 管理 ROI 测试会话、静态采集启停、全幅/ROI 后续数据帧抓取、超时/取消，以及 ROI 与门控配置恢复。
 - `ImageFrameUtils` 提供 Mono8/Mono16 显示图转换与 Mono16 统计计算。
 - `SpectralScanController` 管理 Live/Playback 的 Raw16/SliceStitch16 光谱扫描缓存、进度状态和渲染入口。
 - `SpectrumAnalysisCoordinator` 管理 SliceStitch16 光谱分析的最新帧缓存、采样线 overlay、曲线窗口和曲线刷新。
@@ -32,18 +33,19 @@
   - `StreamPanel`：Raw16/SliceStitch16 通道订阅、取消订阅、状态轮询。
   - `SpectralPanel`：光谱显示来源、源通道、单波段/范围平均/RGB 合成参数与扫描状态。
   - `BinningTestPanel`：Raw16/SliceStitch16 数据源选择（默认 Raw16）、1x1/2x2/4x4 设置、自动三组采集、理论/实际尺寸和特征宽度结果。
+  - `RoiTestPanel`：四个 ROI 边界参数、配置读取/应用、一键静态采集测试、进度和全幅/ROI 尺寸结果。
 - `RecordPlaybackPanel`：远程录制数据查询、保留时间设置、`raw/tif` 下载缓存、Playback 播放控制和 tif 渲染参数。
   - `SpectrumAnalysisPanel`：SliceStitch16 光谱分析参数、水平采样线列表、曲线处理和曲线窗口入口。
   - `DashboardPanel`：连接、转镜、流统计、运行时间等摘要信息。
   - `LogPanel`：显示 TCP raw log。
 - `src/Ui/widgets/` 提供侧栏、顶部栏、图像视图、QCustomPlot 等复用部件。
-- 主图像区由 `ViewerAreaWidget` 承载，除常规图像页外还包含由三个 `ImageView` 组成的 Binning 对比页。
+- 主图像区由 `ViewerAreaWidget` 承载，除常规图像页外还包含由三个 `ImageView` 组成的 Binning 对比页，以及全幅/ROI 双 `ImageView` 对比页。
 
 ### 设备聚合层
 
 `DeviceClient` 是 UI 与设备通信之间的门面：
 - 持有 `ControlClient` 和 `StreamClient`。
-- 持有 `SystemService`、`MirrorService`、`CameraService`、`IrService`、`CollectService`、`BinningService`、`StreamControlService`。
+- 持有 `SystemService`、`MirrorService`、`CameraService`、`IrService`、`CollectService`、`BinningService`、`RoiService`、`StreamControlService`。
 - 转发 TCP 连接状态为 `connectionChanged`。
 - 把控制事件 `mirror.angle` 转发为 `mirrorAngleEvent`。
 - 把 UDP 完整帧以 `StreamFrame` 结构转发为 `frameReady`。
@@ -68,6 +70,7 @@ Service 类继承或使用 `RpcServiceBase`，把业务 API 封装为命令名�
 - `IrService`：版本/图像/参数/滤波/翻转/积分/模式/查询/维护/坏元管理
 - `CollectService`：采集开始/停止/状态
 - `BinningService`：`binning.get_config`、`binning.set_config`
+- `RoiService`：`roi.get_config`、`roi.set_config`
 
 `RpcServiceBase` 使用 `QPointer<QObject>` 保护 UI context；回调返回时如果面板对象已销毁，则丢弃回调。
 
@@ -120,6 +123,15 @@ Service 类继承或使用 `RpcServiceBase`，把业务 API 封装为命令名�
 4. 每档从所选数据源保存一帧 Mono16 原始数据，按 1x1 基准尺寸自动检查整数除法后的理论宽高；默认数据源为 Raw16，也可选择 SliceStitch16。
 5. `BinningCompareWidget` 使用三组数据的共同 DN 范围渲染快照；操作者可用水平或垂直双线测量靶标特征宽度。
 6. 测试完成、取消或失败后恢复原配置；连接中断时保留待恢复状态，并在重连后继续恢复。
+
+### ROI 功能测试
+
+1. 激活侧边栏“ROI 测试”时，`MainWindowPanelRegistry` 自动切换到 `ViewerAreaWidget::RoiCompareView`。
+2. `RoiTestController` 先确认 Binning 为透传/1x1，再读取相机分辨率并保存测试前 ROI 与采集门控配置；已有采集运行时拒绝开始测试。
+3. 控制器保留其他门控参数并设置 `static_collect_mode=true`，把 ROI 设置为 `[0,width) x [0,height)`，回读确认后调用 `collect.start`。
+4. 控制器忽略 HeaderFrame，收到尺寸匹配的 SliceStitch16 Mono16 DataFrame/TailFrame 后保存全幅快照，再设置用户 ROI；采集中的新 ROI 仍由服务端在下一采集段生效。
+5. 收到目标尺寸的后续 DataFrame/TailFrame 后保存 ROI 快照；`RoiCompareWidget` 使用共同 DN 范围并排显示全幅和 ROI 图，由操作者人工判断内容是否正确。
+6. 完成、取消或失败时依次停止静态采集、恢复原 ROI、恢复原采集门控；断线时保留恢复状态，重连后先查询/停止残留采集再继续恢复。
 
 ### Spectral 光谱显示
 
@@ -188,7 +200,7 @@ Service 类继承或使用 `RpcServiceBase`，把业务 API 封装为命令名�
 
 ## 当前状态观察
 
-- Panel 索引当前为：常规 panel `0-9`，光谱分析是 `9`，系统日志是特殊 index `10`；`window/panelVersion` 当前为 `3`。
+- Panel 索引当前为：常规 panel `0-10`，光谱分析是 `6`，Binning 测试是 `9`，ROI 测试是 `10`，系统日志是特殊 index `11`；`window/panelVersion` 当前为 `8`。
 - 顶层 CMake 使用 `file(GLOB_RECURSE)` 收集 `src/Client` 和 `src/Ui`，新源文件通常会被纳入构建。
 - `CMAKE_AUTOMOC` 已启用；带 `Q_OBJECT` 的类优先放在头文件中，让 CMake 自动生成 moc 文件。
 - QCustomPlot 已复制到 `src/Ui/widgets/qcustomplot.*`，主项目不链接 `LineProfileReusable`。

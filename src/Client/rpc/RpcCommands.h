@@ -186,6 +186,11 @@ static const char* const GetConfig = "binning.get_config";
 static const char* const SetConfig = "binning.set_config";
 }
 
+namespace Roi {
+static const char* const GetConfig = "roi.get_config";
+static const char* const SetConfig = "roi.set_config";
+}
+
 namespace TempControl {
 static const char* const Params = "tempctrl.params";
 static const char* const Status = "tempctrl.status";

@@ -2,6 +2,7 @@
 
 #include "ImageView.h"
 #include "BinningCompareWidget.h"
+#include "RoiCompareWidget.h"
 
 #include <QEvent>
 #include <QDateTime>
@@ -44,9 +45,10 @@ void ViewerAreaWidget::setupUi()
     chTabSpectralPreview_ = new QPushButton("SpectralPreview", channelTabBar_);
     chTabPlayback_ = new QPushButton("Playback", channelTabBar_);
     chTabBinningCompare_ = new QPushButton(QString::fromUtf8("Binning对比"), channelTabBar_);
+    chTabRoiCompare_ = new QPushButton(QString::fromUtf8("ROI对比"), channelTabBar_);
     const QList<QPushButton*> tabs = {
         chTabRaw16_, chTabSlice_, chTabSpectral_, chTabSpectralPreview_,
-        chTabPlayback_, chTabBinningCompare_,
+        chTabPlayback_, chTabBinningCompare_, chTabRoiCompare_,
     };
     for (auto* tab : tabs) {
         tab->setObjectName("channelTab");
@@ -66,12 +68,14 @@ void ViewerAreaWidget::setupUi()
     imageViewSpectralPreview_ = new ImageView(viewerStack_);
     imageViewPlayback_ = new ImageView(viewerStack_);
     binningCompareWidget_ = new BinningCompareWidget(viewerStack_);
+    roiCompareWidget_ = new RoiCompareWidget(viewerStack_);
     viewerStack_->addWidget(imageViewRaw_);
     viewerStack_->addWidget(imageViewSlice_);
     viewerStack_->addWidget(imageViewSpectral_);
     viewerStack_->addWidget(imageViewSpectralPreview_);
     viewerStack_->addWidget(imageViewPlayback_);
     viewerStack_->addWidget(binningCompareWidget_);
+    viewerStack_->addWidget(roiCompareWidget_);
     viewerLayout->addWidget(viewerStack_, 1);
 
     connect(chTabRaw16_, &QPushButton::clicked, this, [this]() { setCurrentChannel(Raw16View); });
@@ -80,6 +84,7 @@ void ViewerAreaWidget::setupUi()
     connect(chTabSpectralPreview_, &QPushButton::clicked, this, [this]() { setCurrentChannel(SpectralPreviewView); });
     connect(chTabPlayback_, &QPushButton::clicked, this, [this]() { setCurrentChannel(PlaybackView); });
     connect(chTabBinningCompare_, &QPushButton::clicked, this, [this]() { setCurrentChannel(BinningCompareView); });
+    connect(chTabRoiCompare_, &QPushButton::clicked, this, [this]() { setCurrentChannel(RoiCompareView); });
 
     zoomBar_ = new QWidget(this);
     zoomBar_->setObjectName("zoomBar");
@@ -170,7 +175,7 @@ void ViewerAreaWidget::setupUi()
 
 void ViewerAreaWidget::setCurrentChannel(int channel)
 {
-    if (channel < Raw16View || channel > BinningCompareView) return;
+    if (channel < Raw16View || channel > RoiCompareView) return;
     if (currentChannel_ == channel) {
         refreshImageStatsOverlay();
         return;
@@ -346,6 +351,8 @@ void ViewerAreaWidget::updateChannelTabStyle()
     chTabPlayback_->style()->polish(chTabPlayback_);
     chTabBinningCompare_->setProperty("active", currentChannel_ == BinningCompareView);
     chTabBinningCompare_->style()->polish(chTabBinningCompare_);
+    chTabRoiCompare_->setProperty("active", currentChannel_ == RoiCompareView);
+    chTabRoiCompare_->style()->polish(chTabRoiCompare_);
 }
 
 QString ViewerAreaWidget::formatImageStatsText(const QPoint& cursorPos, const ChannelImageStats* stats) const

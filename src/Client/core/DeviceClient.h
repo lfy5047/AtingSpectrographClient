@@ -11,6 +11,7 @@
 #include "IrService.h"
 #include "CollectService.h"
 #include "BinningService.h"
+#include "RoiService.h"
 #include "TempControlService.h"
 #include "StreamControlService.h"
 #include "RecordService.h"
@@ -29,6 +30,7 @@ public:
     IrService* ir() { return &ir_; }
     CollectService* collect() { return &collect_; }
     BinningService* binning() { return &binning_; }
+    RoiService* roi() { return &roi_; }
     TempControlService* tempControl() { return &tempControl_; }
     StreamControlService* streamControl() { return &streamControl_; }
     RecordService* record() { return &record_; }
@@ -51,6 +53,7 @@ private:
     IrService ir_;
     CollectService collect_;
     BinningService binning_;
+    RoiService roi_;
     TempControlService tempControl_;
     StreamControlService streamControl_;
     RecordService record_;

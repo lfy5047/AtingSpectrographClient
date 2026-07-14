@@ -109,6 +109,26 @@ target_link_libraries(BinningServiceTest PRIVATE
 )
 add_test(NAME BinningServiceTest COMMAND BinningServiceTest)
 
+add_executable(RoiServiceTest
+    RoiServiceTest.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/rpc/ControlClient.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/RoiService.cpp
+)
+target_include_directories(RoiServiceTest PRIVATE
+    ${PROJECT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/src/Client
+    ${PROJECT_SOURCE_DIR}/src/Client/core
+    ${PROJECT_SOURCE_DIR}/src/Client/rpc
+    ${PROJECT_SOURCE_DIR}/src/Client/services
+    ${PROJECT_SOURCE_DIR}/Common/include
+)
+target_link_libraries(RoiServiceTest PRIVATE
+    Qt5::Test
+    Qt5::Network
+)
+add_test(NAME RoiServiceTest COMMAND RoiServiceTest)
+
 add_executable(SystemServiceTest
     SystemServiceTest.cpp
     ${PROJECT_SOURCE_DIR}/src/Client/rpc/ControlClient.cpp
@@ -207,6 +227,7 @@ add_executable(ImageViewThemeTest
     ${PROJECT_SOURCE_DIR}/src/Ui/widgets/TopBarWidget.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/widgets/ViewerAreaWidget.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/widgets/BinningCompareWidget.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/widgets/RoiCompareWidget.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/widgets/ImageView.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/ThemeManager.cpp
     ${TEST_RESOURCES}
@@ -244,6 +265,7 @@ add_executable(SpectralSegmentTest
     ${PROJECT_SOURCE_DIR}/src/Ui/ThemeManager.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/panels/SpectralSegmentTestPanel.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/widgets/BinningCompareWidget.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/widgets/RoiCompareWidget.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/widgets/ImageView.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/widgets/ViewerAreaWidget.cpp
     ${TEST_RESOURCES}
@@ -267,6 +289,7 @@ add_executable(BinningUiTest
     ${PROJECT_SOURCE_DIR}/src/Ui/ThemeManager.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/panels/BinningTestPanel.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/widgets/BinningCompareWidget.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/widgets/RoiCompareWidget.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/widgets/ImageView.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/widgets/ViewerAreaWidget.cpp
     ${TEST_RESOURCES}
@@ -282,6 +305,72 @@ target_link_libraries(BinningUiTest PRIVATE
     Qt5::Widgets
 )
 add_test(NAME BinningUiTest COMMAND BinningUiTest)
+
+add_executable(RoiUiTest
+    RoiUiTest.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/ImageFrameUtils.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/ThemeManager.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/panels/RoiTestPanel.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/widgets/BinningCompareWidget.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/widgets/RoiCompareWidget.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/widgets/ImageView.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/widgets/ViewerAreaWidget.cpp
+    ${TEST_RESOURCES}
+)
+target_include_directories(RoiUiTest PRIVATE
+    ${PROJECT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/src/Client/core
+    ${PROJECT_SOURCE_DIR}/src/Client/rpc
+    ${PROJECT_SOURCE_DIR}/src/Ui
+)
+target_link_libraries(RoiUiTest PRIVATE
+    Qt5::Test
+    Qt5::Widgets
+)
+add_test(NAME RoiUiTest COMMAND RoiUiTest)
+
+add_executable(RoiTestControllerTest
+    RoiTestControllerTest.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/core/DeviceClient.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/rpc/ControlClient.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/stream/FrameAssembler.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/stream/StreamClient.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/BinningService.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/CameraService.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/CollectService.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/IrService.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/MirrorService.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/RecordService.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/RoiService.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/StreamControlService.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/SystemService.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/TempControlService.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/RoiTestController.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/ImageFrameUtils.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/ThemeManager.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/panels/RoiTestPanel.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/widgets/ImageView.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/widgets/RoiCompareWidget.cpp
+    ${TEST_RESOURCES}
+)
+target_include_directories(RoiTestControllerTest PRIVATE
+    ${PROJECT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/src/Client
+    ${PROJECT_SOURCE_DIR}/src/Client/core
+    ${PROJECT_SOURCE_DIR}/src/Client/rpc
+    ${PROJECT_SOURCE_DIR}/src/Client/services
+    ${PROJECT_SOURCE_DIR}/src/Client/stream
+    ${PROJECT_SOURCE_DIR}/src/Ui
+    ${PROJECT_SOURCE_DIR}/Common/include
+)
+target_link_libraries(RoiTestControllerTest PRIVATE
+    Qt5::Test
+    Qt5::Network
+    Qt5::Widgets
+)
+add_test(NAME RoiTestControllerTest COMMAND RoiTestControllerTest)
 
 add_executable(BinningTestControllerTest
     BinningTestControllerTest.cpp

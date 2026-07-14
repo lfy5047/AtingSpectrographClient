@@ -15,6 +15,7 @@ class IrPanel;
 class MainWindowChrome;
 class MirrorPanel;
 class RecordPlaybackPanel;
+class RoiTestPanel;
 class SpectralPanel;
 class SpectralSegmentTestPanel;
 class SpectrumAnalysisCoordinator;
@@ -36,9 +37,10 @@ public:
         AdvancedSettings = 7,
         SpectralSegmentTest = 8,
         BinningTest = 9,
-        Log = 10,
+        RoiTest = 10,
+        Log = 11,
     };
-    static const int PanelVersion = 7;
+    static const int PanelVersion = 8;
 
     MainWindowPanelRegistry(DeviceClient* device, MainWindowChrome* chrome, QObject* parent = nullptr);
 
@@ -56,6 +58,7 @@ public:
     AdvancedSettingsPanel* advancedSettings() const { return advancedSettingsPanel_; }
     SpectralSegmentTestPanel* spectralSegmentTest() const { return spectralSegmentTestPanel_; }
     BinningTestPanel* binningTest() const { return binningTestPanel_; }
+    RoiTestPanel* roiTest() const { return roiTestPanel_; }
 
     ConnectionPanel* connection() const;
     CameraPanel* camera() const;
@@ -87,4 +90,5 @@ private:
     AdvancedSettingsPanel* advancedSettingsPanel_ = nullptr;
     SpectralSegmentTestPanel* spectralSegmentTestPanel_ = nullptr;
     BinningTestPanel* binningTestPanel_ = nullptr;
+    RoiTestPanel* roiTestPanel_ = nullptr;
 };

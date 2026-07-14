@@ -4,6 +4,7 @@
 
 class DeviceClient;
 class BinningTestController;
+class RoiTestController;
 class DeviceUiCoordinator;
 class MainWindowChrome;
 class MainWindowPanelRegistry;
@@ -21,6 +22,7 @@ protected:
 private:
     DeviceClient* device_ = nullptr;
     BinningTestController* binningTestController_ = nullptr;
+    RoiTestController* roiTestController_ = nullptr;
     MainWindowChrome* chrome_ = nullptr;
     MainWindowPanelRegistry* panelRegistry_ = nullptr;
     SpectrumAnalysisCoordinator* spectrumAnalysisCoordinator_ = nullptr;

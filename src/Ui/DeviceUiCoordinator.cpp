@@ -104,6 +104,8 @@ void DeviceUiCoordinator::refreshStreamStats()
         fpsChannel = SpectralPreview;
     } else if (currentChannel == ViewerAreaWidget::BinningCompareView) {
         fpsChannel = registry_->binningTest()->sourceChannel();
+    } else if (currentChannel == ViewerAreaWidget::RoiCompareView) {
+        fpsChannel = SliceStitch16;
     }
 
     const double selectedFps = fpsChannel > 0 ? device_->stream()->fps(fpsChannel) : device_->stream()->fps();

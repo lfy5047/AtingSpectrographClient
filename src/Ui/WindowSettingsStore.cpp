@@ -68,6 +68,9 @@ int WindowSettingsStore::restore(QMainWindow* window, QSplitter* splitter, Sideb
     if (panelVersion < 7 && panel == 9) {
         panel = MainWindowPanelRegistry::Log;
     }
+    if (panelVersion < 8 && panel == 10) {
+        panel = MainWindowPanelRegistry::Log;
+    }
     if (panel < MainWindowPanelRegistry::Dashboard || panel > MainWindowPanelRegistry::Log) {
         panel = MainWindowPanelRegistry::Dashboard;
     }

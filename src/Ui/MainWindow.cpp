@@ -6,6 +6,7 @@
 #include "DeviceUiCoordinator.h"
 #include "MainWindowChrome.h"
 #include "MainWindowPanelRegistry.h"
+#include "RoiTestController.h"
 #include "SpectrumAnalysisCoordinator.h"
 #include "ThemeManager.h"
 #include "WindowSettingsStore.h"
@@ -33,6 +34,8 @@ MainWindow::MainWindow(QWidget* parent)
     panelRegistry_->setSpectrumAnalysisCoordinator(spectrumAnalysisCoordinator_);
     binningTestController_ = new BinningTestController(
         device_, panelRegistry_->binningTest(), chrome_->viewerArea()->binningCompareWidget(), this);
+    roiTestController_ = new RoiTestController(
+        device_, panelRegistry_->roiTest(), chrome_->viewerArea()->roiCompareWidget(), this);
     deviceUiCoordinator_ = new DeviceUiCoordinator(
         device_, chrome_, panelRegistry_, spectrumAnalysisCoordinator_, this);
 
@@ -58,7 +61,15 @@ MainWindow::~MainWindow() = default;
 
 void MainWindow::closeEvent(QCloseEvent* e)
 {
-    if (!binningTestController_->prepareForClose()) {
+    const bool roiReady = roiTestController_->prepareForClose();
+    const bool binningReady = binningTestController_->prepareForClose();
+    if (!roiReady) {
+        QMessageBox::information(this, QString::fromUtf8("ROI 测试"),
+                                 roiTestController_->closeBlockReason());
+        e->ignore();
+        return;
+    }
+    if (!binningReady) {
         QMessageBox::information(this, QString::fromUtf8("Binning 测试"),
                                  binningTestController_->closeBlockReason());
         e->ignore();
