@@ -89,6 +89,26 @@ target_link_libraries(CollectServiceTest PRIVATE
 )
 add_test(NAME CollectServiceTest COMMAND CollectServiceTest)
 
+add_executable(BinningServiceTest
+    BinningServiceTest.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/rpc/ControlClient.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/BinningService.cpp
+)
+target_include_directories(BinningServiceTest PRIVATE
+    ${PROJECT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/src/Client
+    ${PROJECT_SOURCE_DIR}/src/Client/core
+    ${PROJECT_SOURCE_DIR}/src/Client/rpc
+    ${PROJECT_SOURCE_DIR}/src/Client/services
+    ${PROJECT_SOURCE_DIR}/Common/include
+)
+target_link_libraries(BinningServiceTest PRIVATE
+    Qt5::Test
+    Qt5::Network
+)
+add_test(NAME BinningServiceTest COMMAND BinningServiceTest)
+
 add_executable(SystemServiceTest
     SystemServiceTest.cpp
     ${PROJECT_SOURCE_DIR}/src/Client/rpc/ControlClient.cpp
@@ -182,9 +202,11 @@ add_test(NAME ThemeManagerTest COMMAND ThemeManagerTest)
 
 add_executable(ImageViewThemeTest
     ImageViewThemeTest.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/BinningTestTypes.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/ImageFrameUtils.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/widgets/TopBarWidget.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/widgets/ViewerAreaWidget.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/widgets/BinningCompareWidget.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/widgets/ImageView.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/ThemeManager.cpp
     ${TEST_RESOURCES}
@@ -217,9 +239,11 @@ add_test(NAME SidebarWidgetTest COMMAND SidebarWidgetTest)
 
 add_executable(SpectralSegmentTest
     SpectralSegmentTest.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/BinningTestTypes.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/ImageFrameUtils.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/ThemeManager.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/panels/SpectralSegmentTestPanel.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/widgets/BinningCompareWidget.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/widgets/ImageView.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/widgets/ViewerAreaWidget.cpp
     ${TEST_RESOURCES}
@@ -235,6 +259,87 @@ target_link_libraries(SpectralSegmentTest PRIVATE
     Qt5::Widgets
 )
 add_test(NAME SpectralSegmentTest COMMAND SpectralSegmentTest)
+
+add_executable(BinningUiTest
+    BinningUiTest.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/BinningTestTypes.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/ImageFrameUtils.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/ThemeManager.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/panels/BinningTestPanel.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/widgets/BinningCompareWidget.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/widgets/ImageView.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/widgets/ViewerAreaWidget.cpp
+    ${TEST_RESOURCES}
+)
+target_include_directories(BinningUiTest PRIVATE
+    ${PROJECT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/src/Client/rpc
+    ${PROJECT_SOURCE_DIR}/src/Ui
+)
+target_link_libraries(BinningUiTest PRIVATE
+    Qt5::Test
+    Qt5::Widgets
+)
+add_test(NAME BinningUiTest COMMAND BinningUiTest)
+
+add_executable(BinningTestControllerTest
+    BinningTestControllerTest.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/core/DeviceClient.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/rpc/ControlClient.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/stream/FrameAssembler.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/stream/StreamClient.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/BinningService.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/CameraService.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/CollectService.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/IrService.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/MirrorService.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/RecordService.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/StreamControlService.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/SystemService.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/services/TempControlService.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/BinningTestController.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/BinningTestTypes.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/ImageFrameUtils.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/ThemeManager.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/panels/BinningTestPanel.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/widgets/BinningCompareWidget.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/widgets/ImageView.cpp
+    ${TEST_RESOURCES}
+)
+target_include_directories(BinningTestControllerTest PRIVATE
+    ${PROJECT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/src/Client
+    ${PROJECT_SOURCE_DIR}/src/Client/core
+    ${PROJECT_SOURCE_DIR}/src/Client/rpc
+    ${PROJECT_SOURCE_DIR}/src/Client/services
+    ${PROJECT_SOURCE_DIR}/src/Client/stream
+    ${PROJECT_SOURCE_DIR}/src/Ui
+    ${PROJECT_SOURCE_DIR}/Common/include
+)
+target_link_libraries(BinningTestControllerTest PRIVATE
+    Qt5::Test
+    Qt5::Widgets
+    Qt5::Network
+)
+add_test(NAME BinningTestControllerTest COMMAND BinningTestControllerTest)
+
+add_executable(WindowSettingsStoreTest
+    WindowSettingsStoreTest.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/WindowSettingsStore.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/widgets/SidebarWidget.cpp
+)
+target_include_directories(WindowSettingsStoreTest PRIVATE
+    ${PROJECT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/src/Ui
+)
+target_link_libraries(WindowSettingsStoreTest PRIVATE
+    Qt5::Test
+    Qt5::Widgets
+)
+add_test(NAME WindowSettingsStoreTest COMMAND WindowSettingsStoreTest)
 
 add_executable(PanelSettingsTest
     PanelSettingsTest.cpp

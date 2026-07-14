@@ -8,6 +8,7 @@
 #include "SpectrumAnalysisTypes.h"
 
 class ImageView;
+class BinningCompareWidget;
 class QLabel;
 class QProgressBar;
 class QPushButton;
@@ -22,7 +23,8 @@ public:
         SpectralView = 2,
         SpectralPreviewView = 3,
         PlaybackView = 4,
-        ChannelCount = 5,
+        BinningCompareView = 5,
+        ChannelCount = 6,
     };
 
     explicit ViewerAreaWidget(QWidget* parent = nullptr);
@@ -31,6 +33,7 @@ public:
     void setCurrentChannel(int channel);
     bool hasChannelImage(int channel) const;
     ImageView* imageView(int channel) const;
+    BinningCompareWidget* binningCompareWidget() const { return binningCompareWidget_; }
     void renderFrame(int channel, int width, int height, int pixfmt, const QByteArray& data);
     void setChannelImage(int channel, const QImage& image);
     void setImageStats(int channel, const ChannelImageStats& stats);
@@ -65,12 +68,14 @@ private:
     QPushButton* chTabSpectral_ = nullptr;
     QPushButton* chTabSpectralPreview_ = nullptr;
     QPushButton* chTabPlayback_ = nullptr;
+    QPushButton* chTabBinningCompare_ = nullptr;
     QStackedWidget* viewerStack_ = nullptr;
     ImageView* imageViewRaw_ = nullptr;
     ImageView* imageViewSlice_ = nullptr;
     ImageView* imageViewSpectral_ = nullptr;
     ImageView* imageViewSpectralPreview_ = nullptr;
     ImageView* imageViewPlayback_ = nullptr;
+    BinningCompareWidget* binningCompareWidget_ = nullptr;
 
     QWidget* zoomBar_ = nullptr;
     QWidget* imageStatsOverlay_ = nullptr;
@@ -81,6 +86,7 @@ private:
 
     int currentChannel_ = Raw16View;
     std::array<QPoint, ChannelCount> cursorImagePos_ = {
+        QPoint(-1, -1),
         QPoint(-1, -1),
         QPoint(-1, -1),
         QPoint(-1, -1),

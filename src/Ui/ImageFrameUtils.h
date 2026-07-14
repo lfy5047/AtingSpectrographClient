@@ -26,5 +26,7 @@ struct ComputeImageResult {
 
 bool computeMono16Stats(const QByteArray& data, int width, int height, Mono16Stats* out);
 QImage makeDisplayImage(int width, int height, int pixfmt, const QByteArray& data);
+QImage makeMono16DisplayImage(int width, int height, const QByteArray& data,
+                              quint16 displayMin, quint16 displayMax);
 ChannelImageStats makeChannelImageStats(int width, int height, int pixfmt, const QByteArray& data);
 ComputeImageResult computeImageResult(int width, int height, int pixfmt, const QByteArray& data);

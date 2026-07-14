@@ -1,6 +1,7 @@
 #include "MainWindow.h"
 
 #include "AppVersion.h"
+#include "BinningTestController.h"
 #include "DeviceClient.h"
 #include "DeviceUiCoordinator.h"
 #include "MainWindowChrome.h"
@@ -10,9 +11,11 @@
 #include "WindowSettingsStore.h"
 #include "widgets/SidebarWidget.h"
 #include "widgets/TopBarWidget.h"
+#include "widgets/ViewerAreaWidget.h"
 
 #include <QApplication>
 #include <QCloseEvent>
+#include <QMessageBox>
 #include <QStatusBar>
 
 MainWindow::MainWindow(QWidget* parent)
@@ -28,6 +31,8 @@ MainWindow::MainWindow(QWidget* parent)
     spectrumAnalysisCoordinator_ = new SpectrumAnalysisCoordinator(
         panelRegistry_->spectrumAnalysis(), chrome_->viewerArea(), this, this);
     panelRegistry_->setSpectrumAnalysisCoordinator(spectrumAnalysisCoordinator_);
+    binningTestController_ = new BinningTestController(
+        device_, panelRegistry_->binningTest(), chrome_->viewerArea()->binningCompareWidget(), this);
     deviceUiCoordinator_ = new DeviceUiCoordinator(
         device_, chrome_, panelRegistry_, spectrumAnalysisCoordinator_, this);
 
@@ -53,6 +58,12 @@ MainWindow::~MainWindow() = default;
 
 void MainWindow::closeEvent(QCloseEvent* e)
 {
+    if (!binningTestController_->prepareForClose()) {
+        QMessageBox::information(this, QString::fromUtf8("Binning 测试"),
+                                 binningTestController_->closeBlockReason());
+        e->ignore();
+        return;
+    }
     deviceUiCoordinator_->stopPlaybackForClose();
     WindowSettingsStore::save(this,
                               chrome_->mainSplitter(),

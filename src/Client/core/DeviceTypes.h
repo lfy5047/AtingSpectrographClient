@@ -35,6 +35,14 @@ struct CollectGateConfig {
 
 using CollectGateConfigCallback = std::function<void(bool ok, const CollectGateConfig& config, const QString& err)>;
 
+struct BinningConfig {
+    bool enabled = false;
+    int spectralFactor = 1;
+    int spatialFactor = 1;
+};
+
+using BinningConfigCallback = std::function<void(bool ok, const BinningConfig& config, const QString& err)>;
+
 struct CameraDeviceOption {
     QString name;
     QString mac;

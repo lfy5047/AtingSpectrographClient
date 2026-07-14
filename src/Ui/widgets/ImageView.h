@@ -21,11 +21,15 @@ public:
 
     void setImage(const QImage& img);
     void setNoSignal();
+    void resetView();
     QImage currentImage() const { return image_; }
     void setAnalysisOverlayEnabled(bool enabled);
     void setAnalysisLines(const QVector<SpectrumSampleLine>& lines);
     void setSpectralSegmentTestEnabled(bool enabled);
     void setSpectralSegmentLines(int firstX, int secondX);
+    void setPixelMeasureEnabled(bool enabled);
+    void setPixelMeasureOrientation(Qt::Orientation orientation);
+    void setPixelMeasureLines(int first, int second);
 
 signals:
     void cursorImagePosChanged(const QPoint& pos);
@@ -33,6 +37,7 @@ signals:
     void analysisLineMoveRequested(int index, int y);
     void analysisLineDeleteRequested(int index);
     void spectralSegmentLineMoveRequested(int index, int x);
+    void pixelMeasureLineMoveRequested(int index, int position);
 
 protected:
     void changeEvent(QEvent*) override;
@@ -80,6 +85,7 @@ private:
     QVector<SpectrumSampleLine> analysisLines_;
     bool    spectralSegmentTestEnabled_ = false;
     int     spectralSegmentLineXs_[2] = {-1, -1};
+    Qt::Orientation pixelMeasureOrientation_ = Qt::Horizontal;
     InteractionMode interactionMode_ = InteractionMode::Normal;
     int     activeLineIndex_ = -1;
 };

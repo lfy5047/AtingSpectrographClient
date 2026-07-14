@@ -839,3 +839,7 @@ QLabel#connDot {
     min-height: 10px;
     max-height: 10px;
 }
+
+QLabel#binningStatusLabel[error="true"] {
+    color: #F85149;
+}

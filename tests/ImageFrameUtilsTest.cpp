@@ -10,6 +10,7 @@ class ImageFrameUtilsTest : public QObject {
 
 private slots:
     void decodesJpegPayload();
+    void rendersMono16WithFixedDisplayRange();
 };
 
 void ImageFrameUtilsTest::decodesJpegPayload()
@@ -31,6 +32,19 @@ void ImageFrameUtilsTest::decodesJpegPayload()
     QVERIFY(pixel.red() > 180);
     QVERIFY(pixel.green() < 80);
     QVERIFY(pixel.blue() < 80);
+}
+
+void ImageFrameUtilsTest::rendersMono16WithFixedDisplayRange()
+{
+    const quint16 pixels[] = {100, 150, 200};
+    const QByteArray data(reinterpret_cast<const char*>(pixels), sizeof(pixels));
+
+    const QImage image = makeMono16DisplayImage(3, 1, data, 100, 200);
+
+    QVERIFY(!image.isNull());
+    QCOMPARE(image.pixelColor(0, 0).red(), 0);
+    QVERIFY(qAbs(image.pixelColor(1, 0).red() - 128) <= 1);
+    QCOMPARE(image.pixelColor(2, 0).red(), 255);
 }
 
 QTEST_MAIN(ImageFrameUtilsTest)

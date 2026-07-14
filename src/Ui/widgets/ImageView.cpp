@@ -34,6 +34,16 @@ void ImageView::setNoSignal()
     emit cursorImagePosChanged(QPoint(-1, -1));
 }
 
+void ImageView::resetView()
+{
+    scale_ = 1.0;
+    offset_ = QPointF(0, 0);
+    dragging_ = false;
+    interactionMode_ = InteractionMode::Normal;
+    activeLineIndex_ = -1;
+    update();
+}
+
 void ImageView::setAnalysisOverlayEnabled(bool enabled)
 {
     if (analysisOverlayEnabled_ == enabled) return;
@@ -52,6 +62,12 @@ void ImageView::setAnalysisLines(const QVector<SpectrumSampleLine>& lines)
 
 void ImageView::setSpectralSegmentTestEnabled(bool enabled)
 {
+    pixelMeasureOrientation_ = Qt::Horizontal;
+    setPixelMeasureEnabled(enabled);
+}
+
+void ImageView::setPixelMeasureEnabled(bool enabled)
+{
     if (spectralSegmentTestEnabled_ == enabled) return;
     spectralSegmentTestEnabled_ = enabled;
     interactionMode_ = InteractionMode::Normal;
@@ -65,8 +81,20 @@ void ImageView::setSpectralSegmentTestEnabled(bool enabled)
 
 void ImageView::setSpectralSegmentLines(int firstX, int secondX)
 {
-    spectralSegmentLineXs_[0] = firstX;
-    spectralSegmentLineXs_[1] = secondX;
+    setPixelMeasureLines(firstX, secondX);
+}
+
+void ImageView::setPixelMeasureOrientation(Qt::Orientation orientation)
+{
+    if (pixelMeasureOrientation_ == orientation) return;
+    pixelMeasureOrientation_ = orientation;
+    update();
+}
+
+void ImageView::setPixelMeasureLines(int first, int second)
+{
+    spectralSegmentLineXs_[0] = first;
+    spectralSegmentLineXs_[1] = second;
     update();
 }
 
@@ -161,10 +189,13 @@ int ImageView::hitSpectralSegmentLine(const QPoint& widgetPos) const
 
     int bestIndex = -1;
     double bestDistance = 7.0;
+    const int extent = pixelMeasureOrientation_ == Qt::Horizontal ? image_.width() : image_.height();
     for (int i = 0; i < 2; ++i) {
-        if (spectralSegmentLineXs_[i] < 0 || spectralSegmentLineXs_[i] >= image_.width()) continue;
-        const double lineX = widgetXForImageX(spectralSegmentLineXs_[i]);
-        const double distance = std::abs(lineX - p.x());
+        if (spectralSegmentLineXs_[i] < 0 || spectralSegmentLineXs_[i] >= extent) continue;
+        const double linePosition = pixelMeasureOrientation_ == Qt::Horizontal
+            ? widgetXForImageX(spectralSegmentLineXs_[i])
+            : widgetYForImageY(spectralSegmentLineXs_[i]);
+        const double distance = std::abs(linePosition - (pixelMeasureOrientation_ == Qt::Horizontal ? p.x() : p.y()));
         if (distance <= 6.0 && distance < bestDistance) {
             bestDistance = distance;
             bestIndex = i;
@@ -180,7 +211,7 @@ void ImageView::updateSpectralSegmentCursor(const QPoint& widgetPos)
             || (interactionMode_ == InteractionMode::Normal
                 && hitSpectralSegmentLine(widgetPos) >= 0));
     if (overMovableLine) {
-        setCursor(Qt::SizeHorCursor);
+        setCursor(pixelMeasureOrientation_ == Qt::Horizontal ? Qt::SizeHorCursor : Qt::SizeVerCursor);
     } else {
         unsetCursor();
     }
@@ -280,23 +311,38 @@ void ImageView::drawSpectralSegmentOverlay(QPainter& p, const QRectF& r)
     p.setClipRect(r);
 
     for (int i = 0; i < 2; ++i) {
-        const int x = spectralSegmentLineXs_[i];
-        if (x < 0 || x >= image_.width()) continue;
+        const int position = spectralSegmentLineXs_[i];
+        const int extent = pixelMeasureOrientation_ == Qt::Horizontal ? image_.width() : image_.height();
+        if (position < 0 || position >= extent) continue;
 
-        const double wx = widgetXForImageX(x);
         const QColor color = colors[i];
         p.setPen(QPen(color, i == activeLineIndex_ ? 3 : 2));
-        p.drawLine(QPointF(wx, r.top()), QPointF(wx, r.bottom()));
-
-        QRectF labelRect(wx + 6, r.top() + 8, 76, 22);
-        if (labelRect.right() > r.right() - 2) {
-            labelRect.moveRight(wx - 6);
+        QRectF labelRect;
+        if (pixelMeasureOrientation_ == Qt::Horizontal) {
+            const double wx = widgetXForImageX(position);
+            p.drawLine(QPointF(wx, r.top()), QPointF(wx, r.bottom()));
+            labelRect = QRectF(wx + 6, r.top() + 8, 76, 22);
+            if (labelRect.right() > r.right() - 2) {
+                labelRect.moveRight(wx - 6);
+            }
+        } else {
+            const double wy = widgetYForImageY(position);
+            p.drawLine(QPointF(r.left(), wy), QPointF(r.right(), wy));
+            labelRect = QRectF(r.left() + 8, wy + 6, 76, 22);
+            if (labelRect.bottom() > r.bottom() - 2) {
+                labelRect.moveBottom(wy - 6);
+            }
         }
         p.setPen(Qt::NoPen);
         p.setBrush(QColor(0x0A, 0x0E, 0x14, 210));
         p.drawRoundedRect(labelRect, 4, 4);
         p.setPen(color);
-        p.drawText(labelRect, Qt::AlignCenter, QStringLiteral("X%1: %2").arg(i + 1).arg(x));
+        p.drawText(labelRect, Qt::AlignCenter,
+                   QStringLiteral("%1%2: %3")
+                       .arg(pixelMeasureOrientation_ == Qt::Horizontal ? QStringLiteral("X")
+                                                                      : QStringLiteral("Y"))
+                       .arg(i + 1)
+                       .arg(position));
     }
 
     p.restore();
@@ -429,8 +475,10 @@ void ImageView::mouseMoveEvent(QMouseEvent* e)
 {
     if (interactionMode_ == InteractionMode::SegmentLineDragging && activeLineIndex_ >= 0) {
         const QPoint pos = imagePosFromWidgetPos(e->pos());
-        if (pos.x() >= 0) {
-            emit spectralSegmentLineMoveRequested(activeLineIndex_, pos.x());
+        const int position = pixelMeasureOrientation_ == Qt::Horizontal ? pos.x() : pos.y();
+        if (position >= 0) {
+            emit pixelMeasureLineMoveRequested(activeLineIndex_, position);
+            emit spectralSegmentLineMoveRequested(activeLineIndex_, position);
         }
     } else if (interactionMode_ == InteractionMode::LineDragging && activeLineIndex_ >= 0) {
         const QPoint pos = imagePosFromWidgetPos(e->pos());
@@ -471,9 +519,7 @@ void ImageView::mouseReleaseEvent(QMouseEvent* e)
 
 void ImageView::mouseDoubleClickEvent(QMouseEvent* e)
 {
-    scale_ = 1.0;
-    offset_ = QPointF(0, 0);
-    update();
+    resetView();
     syncCursorFromWidgetPos(e->pos());
 }
 

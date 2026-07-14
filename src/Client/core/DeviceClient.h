@@ -10,6 +10,7 @@
 #include "CameraService.h"
 #include "IrService.h"
 #include "CollectService.h"
+#include "BinningService.h"
 #include "TempControlService.h"
 #include "StreamControlService.h"
 #include "RecordService.h"
@@ -27,6 +28,7 @@ public:
     CameraService* camera() { return &camera_; }
     IrService* ir() { return &ir_; }
     CollectService* collect() { return &collect_; }
+    BinningService* binning() { return &binning_; }
     TempControlService* tempControl() { return &tempControl_; }
     StreamControlService* streamControl() { return &streamControl_; }
     RecordService* record() { return &record_; }
@@ -48,6 +50,7 @@ private:
     CameraService camera_;
     IrService ir_;
     CollectService collect_;
+    BinningService binning_;
     TempControlService tempControl_;
     StreamControlService streamControl_;
     RecordService record_;

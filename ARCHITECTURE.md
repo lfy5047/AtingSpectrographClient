@@ -4,7 +4,7 @@
 
 1. `src/main.cpp` 初始化 plog、Qt 应用、全局字体，并通过 `ThemeManager` 加载已保存的应用主题。
 2. 创建 `MainWindow` 并进入 `QApplication::exec()`。
-3. `MainWindow` 构造 `DeviceClient`、`MainWindowChrome`、`MainWindowPanelRegistry`、`SpectrumAnalysisCoordinator` 和 `DeviceUiCoordinator`。
+3. `MainWindow` 构造 `DeviceClient`、`MainWindowChrome`、`MainWindowPanelRegistry`、`SpectrumAnalysisCoordinator`、`BinningTestController` 和 `DeviceUiCoordinator`。
 4. `WindowSettingsStore` 恢复窗口 geometry、splitter、当前 Panel 和侧边栏折叠状态，`DeviceUiCoordinator` 启动 uptime、Spectral 渲染和进度刷新定时器。
 5. 用户在连接面板发起连接后，TCP 控制层和 UDP 流接收层开始与设备交互。
 
@@ -17,7 +17,8 @@
 - `MainWindowPanelRegistry` 创建并注册右侧业务 Panel，集中维护 Panel index、标题、系统日志 toggle 和光谱分析 Panel 激活。
 - `DeviceUiCoordinator` 连接设备层与 UI 层，负责连接状态、UDP bind、帧分发、录制回放、Spectral 刷新、stream stats、raw log 和 uptime。
 - `ThemeManager` 维护应用主题目录，集中加载深色/户外亮色 QSS，并保存 `ui/theme` 用户偏好。
-- `ViewerAreaWidget` 管理 Raw16、SliceStitch16、Spectral、Playback 四个图像页，以及图像统计 overlay 和 Spectral progress overlay。
+- `ViewerAreaWidget` 管理 Raw16、SliceStitch16、Spectral、SpectralPreview、Playback 和 Binning 对比页，以及图像统计 overlay 和 Spectral progress overlay。
+- `BinningTestController` 管理 Binning 测试会话、配置回读、稳帧采集、超时/取消和原配置恢复。
 - `ImageFrameUtils` 提供 Mono8/Mono16 显示图转换与 Mono16 统计计算。
 - `SpectralScanController` 管理 Live/Playback 的 Raw16/SliceStitch16 光谱扫描缓存、进度状态和渲染入口。
 - `SpectrumAnalysisCoordinator` 管理 SliceStitch16 光谱分析的最新帧缓存、采样线 overlay、曲线窗口和曲线刷新。
@@ -30,18 +31,19 @@
   - `CollectPanel`：采集流程开始/停止/状态查询。
   - `StreamPanel`：Raw16/SliceStitch16 通道订阅、取消订阅、状态轮询。
   - `SpectralPanel`：光谱显示来源、源通道、单波段/范围平均/RGB 合成参数与扫描状态。
+  - `BinningTestPanel`：Raw16/SliceStitch16 数据源选择（默认 Raw16）、1x1/2x2/4x4 设置、自动三组采集、理论/实际尺寸和特征宽度结果。
 - `RecordPlaybackPanel`：远程录制数据查询、保留时间设置、`raw/tif` 下载缓存、Playback 播放控制和 tif 渲染参数。
   - `SpectrumAnalysisPanel`：SliceStitch16 光谱分析参数、水平采样线列表、曲线处理和曲线窗口入口。
   - `DashboardPanel`：连接、转镜、流统计、运行时间等摘要信息。
   - `LogPanel`：显示 TCP raw log。
 - `src/Ui/widgets/` 提供侧栏、顶部栏、图像视图、QCustomPlot 等复用部件。
-- 主图像区由 `ViewerAreaWidget` 承载，包含 Raw16、SliceStitch16、Spectral、Playback 四个 `ImageView` 页面。
+- 主图像区由 `ViewerAreaWidget` 承载，除常规图像页外还包含由三个 `ImageView` 组成的 Binning 对比页。
 
 ### 设备聚合层
 
 `DeviceClient` 是 UI 与设备通信之间的门面：
 - 持有 `ControlClient` 和 `StreamClient`。
-- 持有 `SystemService`、`MirrorService`、`CameraService`、`IrService`、`CollectService`、`StreamControlService`。
+- 持有 `SystemService`、`MirrorService`、`CameraService`、`IrService`、`CollectService`、`BinningService`、`StreamControlService`。
 - 转发 TCP 连接状态为 `connectionChanged`。
 - 把控制事件 `mirror.angle` 转发为 `mirrorAngleEvent`。
 - 把 UDP 完整帧以 `StreamFrame` 结构转发为 `frameReady`。
@@ -65,6 +67,7 @@ Service 类继承或使用 `RpcServiceBase`，把业务 API 封装为命令名�
 - `CameraService`：start/stop stream、分辨率、设备选择、设备列表
 - `IrService`：版本/图像/参数/滤波/翻转/积分/模式/查询/维护/坏元管理
 - `CollectService`：采集开始/停止/状态
+- `BinningService`：`binning.get_config`、`binning.set_config`
 
 `RpcServiceBase` 使用 `QPointer<QObject>` 保护 UI context；回调返回时如果面板对象已销毁，则丢弃回调。
 
@@ -108,6 +111,15 @@ Service 类继承或使用 `RpcServiceBase`，把业务 API 封装为命令名�
 6. `DeviceUiCoordinator` 按通道选择 `ViewerAreaWidget` 中的 Raw/Slice 页面；Mono8 直接显示，Mono16 通过 `ImageFrameUtils` 做当前帧 min/max 拉伸到 8-bit 灰度。
 7. 对 `HeaderFrame/DataFrame/TailFrame`，`DeviceUiCoordinator` 同时将帧送入 `SpectralScanController` 的 Live 扫描缓存。
 8. 顶栏与仪表盘更新按通道 FPS、接收帧数、丢帧数。
+
+### Binning 功能测试
+
+1. 激活侧边栏“Binning 测试”时，`MainWindowPanelRegistry` 自动切换到 `ViewerAreaWidget::BinningCompareView`。
+2. `BinningTestController` 通过 `BinningService` 读取并保存当前服务端配置。
+3. 控制器依次设置并回读 1x1、2x2、4x4，对每档配置过滤旧尺寸帧并丢弃两帧稳定数据。
+4. 每档从所选数据源保存一帧 Mono16 原始数据，按 1x1 基准尺寸自动检查整数除法后的理论宽高；默认数据源为 Raw16，也可选择 SliceStitch16。
+5. `BinningCompareWidget` 使用三组数据的共同 DN 范围渲染快照；操作者可用水平或垂直双线测量靶标特征宽度。
+6. 测试完成、取消或失败后恢复原配置；连接中断时保留待恢复状态，并在重连后继续恢复。
 
 ### Spectral 光谱显示
 

@@ -181,6 +181,11 @@ static const char* const GetGateConfig = "collect.get_gate_config";
 static const char* const SetGateConfig = "collect.set_gate_config";
 }
 
+namespace Binning {
+static const char* const GetConfig = "binning.get_config";
+static const char* const SetConfig = "binning.set_config";
+}
+
 namespace TempControl {
 static const char* const Params = "tempctrl.params";
 static const char* const Status = "tempctrl.status";

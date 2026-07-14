@@ -8,7 +8,7 @@ AtingSpectrographClient 是一个 Windows 桌面端光谱仪/成像设备控制�
 - Windows 桌面应用：`AtingSpectrographClient.exe`
 - 控制连接：TCP，默认设备 `192.168.10.128:9000`
 - 图像流接收：本地 UDP，默认端口 `1400`
-- 主要图像页：Raw16、SliceStitch16、Spectral、Playback
+- 主要图像页：Raw16、SliceStitch16、Spectral、SpectralPreview、Playback、Binning 对比
 
 ## 技术栈
 
@@ -57,6 +57,7 @@ AtingSpectrographClient 是一个 Windows 桌面端光谱仪/成像设备控制�
 - `src/Ui/MainWindowChrome.*`：主窗口静态骨架，创建侧边栏、顶部栏、图像区、右侧 Panel 容器和底部日志。
 - `src/Ui/MainWindowPanelRegistry.*`：右侧业务 Panel 的创建、注册、切换、标题点击和 Panel index 管理。
 - `src/Ui/DeviceUiCoordinator.*`：设备信号与 UI 的绑定层，负责连接状态、帧分发、录制回放、Spectral 刷新、stream stats、raw log 和 uptime。
+- `src/Ui/BinningTestController.*`：Binning 测试状态机，负责保存/恢复配置、依次设置 1x1/2x2/4x4、回读确认，并从测试面板所选 Raw16/SliceStitch16 数据源采集稳定帧；默认数据源为 Raw16。
 - `src/Ui/ThemeManager.*`：应用级主题目录、QSS 加载和 `QSettings` 主题偏好保存。
 - `src/Ui/WindowSettingsStore.*`：窗口 geometry、splitter、当前 Panel、侧边栏折叠状态和 Panel index 迁移。
 - `src/Ui/ImageFrameUtils.*`：Mono8/Mono16 图像显示转换和 Mono16 图像统计。
@@ -103,7 +104,7 @@ AtingSpectrographClient 是一个 Windows 桌面端光谱仪/成像设备控制�
 ## 主运行流程
 
 1. `main()` 初始化日志、Qt 应用信息、全局字体，并通过 `ThemeManager` 恢复已保存的应用主题。
-2. `MainWindow` 创建 `DeviceClient`、`MainWindowChrome`、`MainWindowPanelRegistry`、`SpectrumAnalysisCoordinator` 和 `DeviceUiCoordinator`，再由 `WindowSettingsStore` 恢复窗口状态。
+2. `MainWindow` 创建 `DeviceClient`、`MainWindowChrome`、`MainWindowPanelRegistry`、`SpectrumAnalysisCoordinator`、`BinningTestController` 和 `DeviceUiCoordinator`，再由 `WindowSettingsStore` 恢复窗口状态。
 3. `ConnectionPanel` 调用 `DeviceClient::connectTo()`，由 `ControlClient` 建立 TCP 连接。
 4. TCP 连接成功后，`DeviceUiCoordinator` 使用连接面板中的 UDP 端口绑定 `StreamClient`，并查询系统版本。
 5. 各控制 Panel 通过 `DeviceClient` 下的 service 调用 RPC 命令。
@@ -114,11 +115,12 @@ AtingSpectrographClient 是一个 Windows 桌面端光谱仪/成像设备控制�
 10. `RecordPlaybackPanel` 通过 `record.list_recent` 查询服务端历史数据，通过 `record.fetch` 和独立文件 TCP 端口下载 raw/tif 到 `recordings/remote_cache/`。
 11. 远程 raw 按 `.json + .raw` 逐帧读取并渲染到 Playback 视图；远程 tif 使用 libtiff 读取 BigTIFF 并按面板内参数渲染为一张投影图。
 12. 光谱分析 Panel 激活时由 `MainWindowPanelRegistry` 自动切到 SliceStitch16 页；`SpectrumAnalysisCoordinator` 打开独立曲线窗口，并从最新 SliceStitch16 Mono16 原始帧中采样曲线。
+13. Binning 测试 Panel 激活时自动切到三图对比页；数据源默认 Raw16、可切换 SliceStitch16；`BinningTestController` 保存原配置，依次采集 1x1、2x2、4x4 快照并在结束、取消或失败后恢复原配置。
 
 ## 光谱分析功能
 
 当前光谱分析只针对 SliceStitch16：
-- 侧边栏 Panel index：光谱分析为 `9`，系统日志为特殊 index `10`；窗口状态版本为 `panelVersion = 3`。
+- 侧边栏 Panel index：光谱分析为 `6`、光谱段测试为 `8`、Binning 测试为 `9`，系统日志为特殊 index `10`；窗口状态版本为 `panelVersion = 7`。
 - `SpectrumAnalysisCoordinator` 缓存最新一帧 SliceStitch16 Mono16 原始数据、宽高和 `streamFrameId`。
 - `ViewerAreaWidget` 承载 SliceStitch16 图像页；底层 `ImageView` 支持亮色坐标刻度、水平采样线显示、点击添加线、拖动改 y、右键删除线。
 - `SpectrumAnalysisPanel` 管理波长映射、采样线列表、刷新率、滤波窗口、最大绘制点数、Y 轴倍率、Y 轴最小值位置和最小数据跨度。
@@ -148,6 +150,7 @@ RPC 命令名集中在 `src/Client/rpc/RpcCommands.h`，当前分组包括：
 - `camera.*`
 - `ir.*`
 - `collect.*`
+- `binning.*`
 - `record.*`
 
 ## 配置与持久化

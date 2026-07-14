@@ -30,6 +30,7 @@ private slots:
             QString::fromUtf8("录制回放"),
             QString::fromUtf8("光谱分析"),
             QString::fromUtf8("光谱段测试"),
+            QString::fromUtf8("Binning 测试"),
             QString::fromUtf8("高级设置"),
             QString::fromUtf8("系统日志"),
         };
@@ -39,7 +40,7 @@ private slots:
             QCOMPARE(buttons.at(i)->property("fullText").toString(), expected.at(i));
         }
 
-        const QList<int> expectedPanelIndices = {0, 1, 2, 3, 4, 5, 6, 8, 7, 9};
+        const QList<int> expectedPanelIndices = {0, 1, 2, 3, 4, 5, 6, 8, 9, 7, 10};
         QSignalSpy panelSpy(&sidebar, &SidebarWidget::panelSelected);
         for (int i = 0; i < buttons.size(); ++i) {
             buttons.at(i)->click();

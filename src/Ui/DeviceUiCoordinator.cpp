@@ -8,6 +8,7 @@
 #include "Client/stream/StreamFrame.h"
 #include "Protocol.h"
 #include "panels/ConnectionPanel.h"
+#include "panels/BinningTestPanel.h"
 #include "panels/DashboardPanel.h"
 #include "panels/LogPanel.h"
 #include "panels/RecordPlaybackPanel.h"
@@ -101,6 +102,8 @@ void DeviceUiCoordinator::refreshStreamStats()
         fpsChannel = registry_->spectral()->sourceChannel();
     } else if (currentChannel == ViewerAreaWidget::SpectralPreviewView) {
         fpsChannel = SpectralPreview;
+    } else if (currentChannel == ViewerAreaWidget::BinningCompareView) {
+        fpsChannel = registry_->binningTest()->sourceChannel();
     }
 
     const double selectedFps = fpsChannel > 0 ? device_->stream()->fps(fpsChannel) : device_->stream()->fps();
@@ -152,6 +155,9 @@ void DeviceUiCoordinator::setupConnections()
             refreshConnectionDashboard();
         }
     });
+
+    connect(registry_->binningTest(), &BinningTestPanel::sourceChannelChanged,
+            this, [this](int) { refreshStreamStats(); });
 
     auto toggleConnection = [this]() {
         if (device_->isConnected()) {

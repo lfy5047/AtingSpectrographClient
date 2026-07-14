@@ -25,6 +25,29 @@ bool computeMono16Stats(const QByteArray& data, int width, int height, Mono16Sta
     return true;
 }
 
+QImage makeMono16DisplayImage(int width, int height, const QByteArray& data,
+                              quint16 displayMin, quint16 displayMax)
+{
+    const int pixels = width * height;
+    if (width <= 0 || height <= 0 || data.size() < pixels * 2) return QImage();
+
+    const auto* src = reinterpret_cast<const quint16*>(data.constData());
+    QByteArray buf8(pixels, '\0');
+    if (displayMax > displayMin) {
+        const int range = static_cast<int>(displayMax) - static_cast<int>(displayMin);
+        for (int i = 0; i < pixels; ++i) {
+            const int bounded = qBound(static_cast<int>(displayMin),
+                                       static_cast<int>(src[i]),
+                                       static_cast<int>(displayMax));
+            const int mapped = (bounded - static_cast<int>(displayMin)) * 255 / range;
+            buf8[i] = static_cast<char>(static_cast<quint8>(mapped));
+        }
+    }
+
+    return QImage(reinterpret_cast<const uchar*>(buf8.constData()),
+                  width, height, width, QImage::Format_Grayscale8).copy();
+}
+
 QImage makeDisplayImage(int width, int height, int pixfmt, const QByteArray& data)
 {
     using namespace cli::proto;
@@ -55,16 +78,7 @@ QImage makeDisplayImage(int width, int height, int pixfmt, const QByteArray& dat
         if (src[i] > mx) mx = src[i];
     }
 
-    QByteArray buf8(pixels, '\0');
-    if (mx > mn) {
-        const double scale = 255.0 / (mx - mn);
-        for (int i = 0; i < pixels; ++i) {
-            buf8[i] = static_cast<char>(static_cast<quint8>((src[i] - mn) * scale));
-        }
-    }
-
-    return QImage(reinterpret_cast<const uchar*>(buf8.constData()),
-                  width, height, width, QImage::Format_Grayscale8).copy();
+    return makeMono16DisplayImage(width, height, data, mn, mx);
 }
 
 ChannelImageStats makeChannelImageStats(int width, int height, int pixfmt, const QByteArray& data)

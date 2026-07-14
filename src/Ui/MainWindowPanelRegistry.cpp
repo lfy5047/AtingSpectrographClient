@@ -4,6 +4,7 @@
 #include "MainWindowChrome.h"
 #include "SpectrumAnalysisCoordinator.h"
 #include "panels/AdvancedSettingsPanel.h"
+#include "panels/BinningTestPanel.h"
 #include "panels/CalibrationPanel.h"
 #include "panels/DashboardPanel.h"
 #include "panels/DataAcquisitionPanel.h"
@@ -31,6 +32,7 @@ const char* kPanelNames[] = {
     "光谱分析",
     "高级设置",
     "光谱段测试",
+    "Binning 测试",
     "系统日志",
 };
 
@@ -110,6 +112,7 @@ void MainWindowPanelRegistry::setupPanels()
     spectrumAnalysisPanel_ = new SpectrumAnalysisPanel(stack);
     advancedSettingsPanel_ = new AdvancedSettingsPanel(device_, stack);
     spectralSegmentTestPanel_ = new SpectralSegmentTestPanel(stack);
+    binningTestPanel_ = new BinningTestPanel(stack);
 
     stack->addWidget(wrapInScroll(dashPanel_));
     stack->addWidget(wrapInScroll(dataAcquisitionPanel_));
@@ -120,6 +123,7 @@ void MainWindowPanelRegistry::setupPanels()
     stack->addWidget(wrapInScroll(spectrumAnalysisPanel_));
     stack->addWidget(wrapInScroll(advancedSettingsPanel_));
     stack->addWidget(wrapInScroll(spectralSegmentTestPanel_));
+    stack->addWidget(wrapInScroll(binningTestPanel_));
 
     connect(chrome_->viewerArea(), &ViewerAreaWidget::spectralSegmentPositionsChanged,
             spectralSegmentTestPanel_, &SpectralSegmentTestPanel::setLinePositions);
@@ -182,6 +186,9 @@ void MainWindowPanelRegistry::selectAssociatedViewerChannel(int panelIndex)
         break;
     case SpectralSegmentTest:
         viewer->setCurrentChannel(ViewerAreaWidget::Raw16View);
+        break;
+    case BinningTest:
+        viewer->setCurrentChannel(ViewerAreaWidget::BinningCompareView);
         break;
     default:
         break;

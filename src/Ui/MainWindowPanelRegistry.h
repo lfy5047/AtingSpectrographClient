@@ -3,6 +3,7 @@
 #include <QObject>
 
 class AdvancedSettingsPanel;
+class BinningTestPanel;
 class CalibrationPanel;
 class CameraPanel;
 class CollectPanel;
@@ -34,9 +35,10 @@ public:
         SpectrumAnalysis = 6,
         AdvancedSettings = 7,
         SpectralSegmentTest = 8,
-        Log = 9,
+        BinningTest = 9,
+        Log = 10,
     };
-    static const int PanelVersion = 6;
+    static const int PanelVersion = 7;
 
     MainWindowPanelRegistry(DeviceClient* device, MainWindowChrome* chrome, QObject* parent = nullptr);
 
@@ -53,6 +55,7 @@ public:
     SpectrumAnalysisPanel* spectrumAnalysis() const { return spectrumAnalysisPanel_; }
     AdvancedSettingsPanel* advancedSettings() const { return advancedSettingsPanel_; }
     SpectralSegmentTestPanel* spectralSegmentTest() const { return spectralSegmentTestPanel_; }
+    BinningTestPanel* binningTest() const { return binningTestPanel_; }
 
     ConnectionPanel* connection() const;
     CameraPanel* camera() const;
@@ -83,4 +86,5 @@ private:
     SpectrumAnalysisPanel* spectrumAnalysisPanel_ = nullptr;
     AdvancedSettingsPanel* advancedSettingsPanel_ = nullptr;
     SpectralSegmentTestPanel* spectralSegmentTestPanel_ = nullptr;
+    BinningTestPanel* binningTestPanel_ = nullptr;
 };
