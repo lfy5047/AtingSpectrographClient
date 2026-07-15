@@ -34,7 +34,7 @@ const char* kPanelNames[] = {
     "高级设置",
     "光谱段测试",
     "Binning 测试",
-    "ROI 测试",
+    "开窗测试",
     "系统日志",
 };
 

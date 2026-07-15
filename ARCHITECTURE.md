@@ -19,7 +19,7 @@
 - `ThemeManager` 维护应用主题目录，集中加载深色/户外亮色 QSS，并保存 `ui/theme` 用户偏好。
 - `ViewerAreaWidget` 管理 Raw16、NucRaw16、SliceStitch16、Spectral、SpectralPreview、Playback、Binning 对比和 ROI 对比页，以及图像统计 overlay 和 Spectral progress overlay。
 - `BinningTestController` 管理 Binning 测试会话、配置回读、稳帧采集、超时/取消和原配置恢复。
-- `RoiTestController` 管理 ROI 测试会话、静态采集启停、全幅/ROI 后续数据帧抓取、超时/取消，以及 ROI 与门控配置恢复。
+- `RoiTestController` 管理开窗测试会话、静态采集启停、全幅/ROI 后续数据帧抓取、超时/取消，以及 ROI 与门控配置恢复。
 - `ImageFrameUtils` 提供 Mono8/Mono16 显示图转换与 Mono16 统计计算。
 - `SpectralScanController` 管理 Live/Playback 的 Raw16/SliceStitch16 光谱扫描缓存、进度状态和渲染入口。
 - `SpectrumAnalysisCoordinator` 管理 SliceStitch16 光谱分析的最新帧缓存、采样线 overlay、曲线窗口和曲线刷新。
@@ -34,7 +34,7 @@
   - `StreamPanel`：Raw16/NucRaw16/SliceStitch16/SpectralPreview 通道订阅、取消订阅、状态轮询。
   - `SpectralPanel`：光谱显示来源、源通道、单波段/范围平均/RGB 合成参数与扫描状态。
   - `BinningTestPanel`：Raw16/SliceStitch16 数据源选择（默认 Raw16）、1x1/2x2/4x4 设置、自动三组采集、理论/实际尺寸和特征宽度结果。
-  - `RoiTestPanel`：四个 ROI 边界参数、配置读取/应用、一键静态采集测试、进度和全幅/ROI 尺寸结果。
+  - `RoiTestPanel`：是否应用开窗功能的开关、一键静态采集测试、进度和全幅/开窗尺寸结果；界面不显示开窗边界参数。
 - `RecordPlaybackPanel`：远程录制数据查询、保留时间设置、`raw/tif` 下载缓存、Playback 播放控制和 tif 渲染参数。
   - `SpectrumAnalysisPanel`：SliceStitch16 光谱分析参数、水平采样线列表、曲线处理和曲线窗口入口。
   - `DashboardPanel`：连接、转镜、流统计、运行时间等摘要信息。
@@ -135,11 +135,11 @@ Service 类继承或使用 `RpcServiceBase`，把业务 API 封装为命令名�
 
 ### ROI 功能测试
 
-1. 激活侧边栏“ROI 测试”时，`MainWindowPanelRegistry` 自动切换到 `ViewerAreaWidget::RoiCompareView`。
+1. 激活侧边栏“开窗测试”时，`MainWindowPanelRegistry` 自动切换到 `ViewerAreaWidget::RoiCompareView`。
 2. `RoiTestController` 先确认 Binning 为透传/1x1，再读取相机分辨率并保存测试前 ROI 与采集门控配置；已有采集运行时拒绝开始测试。
 3. 控制器保留其他门控参数并设置 `static_collect_mode=true`，把 ROI 设置为 `[0,width) x [0,height)`，回读确认后调用 `collect.start`。
-4. 控制器忽略 HeaderFrame，收到尺寸匹配的 SliceStitch16 Mono16 DataFrame/TailFrame 后保存全幅快照，再设置用户 ROI；采集中的新 ROI 仍由服务端在下一采集段生效。
-5. 收到目标尺寸的后续 DataFrame/TailFrame 后保存 ROI 快照；`RoiCompareWidget` 使用共同 DN 范围并排显示全幅和 ROI 图，并分别显示鼠标悬停处的局部像素坐标，由操作者人工判断内容是否正确。
+4. 控制器忽略 HeaderFrame，收到尺寸匹配的 SliceStitch16 Mono16 DataFrame/TailFrame 后保存全幅快照；若启用“应用开窗功能”，再设置固定默认参数 `[240,435) x [0,512)`，否则直接结束采集。
+5. 启用开窗时，收到目标尺寸的后续 DataFrame/TailFrame 后保存开窗快照；`RoiCompareWidget` 使用共同 DN 范围并排显示全幅和开窗图，并分别显示鼠标悬停处的局部像素坐标，由操作者人工判断内容是否正确。
 6. 完成、取消或失败时依次停止静态采集、恢复原 ROI、恢复原采集门控；断线时保留恢复状态，重连后先查询/停止残留采集再继续恢复。
 
 ### Spectral 光谱显示
@@ -209,7 +209,7 @@ Service 类继承或使用 `RpcServiceBase`，把业务 API 封装为命令名�
 
 ## 当前状态观察
 
-- Panel 索引当前为：常规 panel `0-10`，光谱分析是 `6`，Binning 测试是 `9`，ROI 测试是 `10`，系统日志是特殊 index `11`；`window/panelVersion` 当前为 `8`。
+- Panel 索引当前为：常规 panel `0-10`，光谱分析是 `6`，Binning 测试是 `9`，开窗测试是 `10`，系统日志是特殊 index `11`；`window/panelVersion` 当前为 `8`。
 - 顶层 CMake 使用 `file(GLOB_RECURSE)` 收集 `src/Client` 和 `src/Ui`，新源文件通常会被纳入构建。
 - `CMAKE_AUTOMOC` 已启用；带 `Q_OBJECT` 的类优先放在头文件中，让 CMake 自动生成 moc 文件。
 - QCustomPlot 已复制到 `src/Ui/widgets/qcustomplot.*`，主项目不链接 `LineProfileReusable`。

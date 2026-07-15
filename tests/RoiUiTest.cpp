@@ -8,15 +8,18 @@
 #include "Ui/widgets/RoiCompareWidget.h"
 #include "Ui/widgets/ViewerAreaWidget.h"
 
+#include <QCheckBox>
 #include <QLabel>
+#include <QPushButton>
 #include <QSpinBox>
+#include <QTableWidget>
 #include <cstring>
 
 class RoiUiTest : public QObject {
     Q_OBJECT
 
 private slots:
-    void panelProvidesRequestedDefaults();
+    void panelOnlyExposesApplyWindowingToggle();
     void compareViewUsesCommonDisplayRange();
     void compareViewShowsHoverCoordinates();
     void viewerProvidesDedicatedRoiComparePage();
@@ -48,29 +51,35 @@ RoiSnapshot snapshot(int width, int height, std::initializer_list<quint16> value
 
 } // namespace
 
-void RoiUiTest::panelProvidesRequestedDefaults()
+void RoiUiTest::panelOnlyExposesApplyWindowingToggle()
 {
     RoiTestPanel panel;
 
-    auto* sliceBegin = panel.findChild<QSpinBox*>(QStringLiteral("roiSliceBeginSpin"));
-    auto* sliceEnd = panel.findChild<QSpinBox*>(QStringLiteral("roiSliceEndSpin"));
-    auto* sliceHBegin = panel.findChild<QSpinBox*>(QStringLiteral("roiSliceHBeginSpin"));
-    auto* sliceHEnd = panel.findChild<QSpinBox*>(QStringLiteral("roiSliceHEndSpin"));
-    QVERIFY(sliceBegin);
-    QVERIFY(sliceEnd);
-    QVERIFY(sliceHBegin);
-    QVERIFY(sliceHEnd);
+    auto* applyWindowing = panel.findChild<QCheckBox*>(
+        QStringLiteral("roiApplyWindowingCheck"));
+    QVERIFY(applyWindowing);
+    QVERIFY(applyWindowing->isChecked());
+    QVERIFY(panel.applyWindowing());
 
-    QCOMPARE(sliceBegin->value(), 240);
-    QCOMPARE(sliceEnd->value(), 435);
-    QCOMPARE(sliceHBegin->value(), 0);
-    QCOMPARE(sliceHEnd->value(), 512);
+    applyWindowing->setChecked(false);
+    QVERIFY(!panel.applyWindowing());
 
-    const RoiConfig config = panel.testConfig();
-    QCOMPARE(config.sliceBegin, 240);
-    QCOMPARE(config.sliceEnd, 435);
-    QCOMPARE(config.sliceHBegin, 0);
-    QCOMPARE(config.sliceHEnd, 512);
+    QVERIFY(!panel.findChild<QSpinBox*>(QStringLiteral("roiSliceBeginSpin")));
+    QVERIFY(!panel.findChild<QSpinBox*>(QStringLiteral("roiSliceEndSpin")));
+    QVERIFY(!panel.findChild<QSpinBox*>(QStringLiteral("roiSliceHBeginSpin")));
+    QVERIFY(!panel.findChild<QSpinBox*>(QStringLiteral("roiSliceHEndSpin")));
+    QVERIFY(!panel.findChild<QLabel*>(QStringLiteral("roiCurrentConfigLabel")));
+    QVERIFY(!panel.findChild<QLabel*>(QStringLiteral("roiResolutionLabel")));
+    QVERIFY(!panel.findChild<QPushButton*>(QStringLiteral("roiRefreshButton")));
+    QVERIFY(!panel.findChild<QPushButton*>(QStringLiteral("roiApplyButton")));
+
+    auto* resultTable = panel.findChild<QTableWidget*>(QStringLiteral("roiResultTable"));
+    QVERIFY(resultTable);
+    QCOMPARE(resultTable->columnCount(), 3);
+    for (int column = 0; column < resultTable->columnCount(); ++column) {
+        QVERIFY(resultTable->horizontalHeaderItem(column)->text()
+                    != QString::fromUtf8("配置"));
+    }
 }
 
 void RoiUiTest::compareViewUsesCommonDisplayRange()

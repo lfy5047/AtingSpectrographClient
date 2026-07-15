@@ -31,7 +31,7 @@ private slots:
             QString::fromUtf8("光谱分析"),
             QString::fromUtf8("光谱段测试"),
             QString::fromUtf8("Binning 测试"),
-            QString::fromUtf8("ROI 测试"),
+            QString::fromUtf8("开窗测试"),
             QString::fromUtf8("高级设置"),
             QString::fromUtf8("系统日志"),
         };

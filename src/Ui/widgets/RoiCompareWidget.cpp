@@ -52,7 +52,7 @@ RoiCompareWidget::RoiCompareWidget(QWidget* parent)
     commonRangeCheck_->setChecked(true);
     toolbar->addWidget(commonRangeCheck_);
     auto* hint = new QLabel(
-        QString::fromUtf8("对照全幅图与 ROI 图的尺寸和内容；移动鼠标可查看以各图左上角为原点的像素坐标。"),
+        QString::fromUtf8("对照全幅图与开窗图的尺寸和内容；移动鼠标可查看以各图左上角为原点的像素坐标。"),
         this);
     hint->setWordWrap(true);
     toolbar->addWidget(hint, 1);
@@ -97,7 +97,7 @@ RoiCompareWidget::RoiCompareWidget(QWidget* parent)
     createCard(QString::fromUtf8("全幅基准"), QStringLiteral("roiFullFrame"),
                &fullFrameSizeLabel_, &fullFrameStatsLabel_, &fullFrameCoordinateLabel_,
                &fullFrameView_);
-    createCard(QString::fromUtf8("ROI 区域"), QStringLiteral("roiTarget"),
+    createCard(QString::fromUtf8("开窗区域"), QStringLiteral("roiTarget"),
                &roiSizeLabel_, &roiStatsLabel_, &roiCoordinateLabel_, &roiView_);
     root->addLayout(cards, 1);
 

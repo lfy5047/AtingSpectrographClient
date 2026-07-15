@@ -18,7 +18,6 @@ public:
                       RoiCompareWidget* compare,
                       QObject* parent = nullptr);
 
-    void refreshConfig();
     bool prepareForClose();
     QString closeBlockReason() const;
 
@@ -37,7 +36,6 @@ private:
     bool validateRoi(const RoiConfig& config, const QSize& resolution, QString* error) const;
     void startTest();
     void cancelTest();
-    void applyManualConfig(const RoiConfig& config);
     void readOriginalRoi(quint64 operation);
     void readOriginalGate(quint64 operation);
     void enableStaticMode(quint64 operation);
@@ -75,6 +73,7 @@ private:
     bool testRunning_ = false;
     bool restoring_ = false;
     bool restorePending_ = false;
+    bool applyWindowing_ = true;
     bool awaitingFrame_ = false;
     SnapshotStage snapshotStage_ = NoSnapshot;
     RoiConfig awaitedConfig_;

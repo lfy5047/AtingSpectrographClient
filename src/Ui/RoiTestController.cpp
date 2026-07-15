@@ -9,6 +9,20 @@
 
 #include <QTimer>
 
+namespace {
+
+RoiConfig defaultWindowConfig()
+{
+    RoiConfig config;
+    config.sliceBegin = 240;
+    config.sliceEnd = 435;
+    config.sliceHBegin = 0;
+    config.sliceHEnd = 512;
+    return config;
+}
+
+} // namespace
+
 RoiTestController::RoiTestController(DeviceClient* device,
                                      RoiTestPanel* panel,
                                      RoiCompareWidget* compare,
@@ -25,13 +39,9 @@ RoiTestController::RoiTestController(DeviceClient* device,
         if (testRunning_ && awaitingFrame_) {
             failTest(QString::fromUtf8("等待 %1 SliceStitch16 数据帧超时")
                 .arg(snapshotStage_ == FullFrameSnapshot
-                         ? QString::fromUtf8("全幅") : QStringLiteral("ROI")));
+                         ? QString::fromUtf8("全幅") : QString::fromUtf8("开窗")));
         }
     });
-    connect(panel_, &RoiTestPanel::refreshRequested,
-            this, &RoiTestController::refreshConfig);
-    connect(panel_, &RoiTestPanel::applyRequested,
-            this, &RoiTestController::applyManualConfig);
     connect(panel_, &RoiTestPanel::startRequested,
             this, &RoiTestController::startTest);
     connect(panel_, &RoiTestPanel::cancelRequested,
@@ -45,7 +55,6 @@ RoiTestController::RoiTestController(DeviceClient* device,
             return;
         }
         if (restorePending_) retryPendingRestore();
-        else if (!testRunning_ && !restoring_) refreshConfig();
     });
 }
 
@@ -106,45 +115,6 @@ bool RoiTestController::validateRoi(const RoiConfig& config,
     return true;
 }
 
-void RoiTestController::refreshConfig()
-{
-    if (!device_->isConnected()) {
-        panel_->setStatusText(QString::fromUtf8("设备未连接"), true);
-        return;
-    }
-    if (testRunning_ || restoring_) return;
-    if (restorePending_) {
-        retryPendingRestore();
-        return;
-    }
-
-    const quint64 operation = ++operation_;
-    panel_->setBusy(true, false);
-    panel_->setStatusText(QString::fromUtf8("正在读取相机分辨率和 ROI 配置..."));
-    device_->camera()->getResolution(this,
-        [this, operation](bool ok, int width, int height, const QString& err) {
-        if (operation != operation_ || testRunning_ || restoring_) return;
-        if (!ok || width <= 0 || height <= 0) {
-            panel_->setBusy(false);
-            panel_->setStatusText(errorText(QString::fromUtf8("读取相机分辨率失败"), err), true);
-            return;
-        }
-        resolution_ = QSize(width, height);
-        panel_->setResolution(resolution_);
-        device_->roi()->getConfig(this,
-            [this, operation](bool roiOk, const RoiConfig& config, const QString& roiErr) {
-            if (operation != operation_ || testRunning_ || restoring_) return;
-            panel_->setBusy(false);
-            if (!roiOk) {
-                panel_->setStatusText(errorText(QString::fromUtf8("读取 ROI 配置失败"), roiErr), true);
-                return;
-            }
-            panel_->setCurrentConfig(config);
-            panel_->setStatusText(QString::fromUtf8("ROI 配置已读取"));
-        });
-    });
-}
-
 bool RoiTestController::prepareForClose()
 {
     if (testRunning_) cancelTest();
@@ -154,9 +124,9 @@ bool RoiTestController::prepareForClose()
 QString RoiTestController::closeBlockReason() const
 {
     if (restorePending_) {
-        return QString::fromUtf8("ROI 测试前配置尚未恢复。请保持或重新连接设备，等待恢复完成后再关闭。");
+        return QString::fromUtf8("开窗测试前配置尚未恢复。请保持或重新连接设备，等待恢复完成后再关闭。");
     }
-    return QString::fromUtf8("正在停止静态采集并恢复 ROI 测试前配置，请稍后再关闭。");
+    return QString::fromUtf8("正在停止静态采集并恢复开窗测试前配置，请稍后再关闭。");
 }
 
 void RoiTestController::startTest()
@@ -171,7 +141,8 @@ void RoiTestController::startTest()
         return;
     }
 
-    targetConfig_ = panel_->testConfig();
+    applyWindowing_ = panel_->applyWindowing();
+    targetConfig_ = defaultWindowConfig();
     testRunning_ = true;
     originalRoiValid_ = false;
     originalGateValid_ = false;
@@ -195,7 +166,7 @@ void RoiTestController::startTest()
             return;
         }
         if (config.spectralFactor != 1 || config.spatialFactor != 1) {
-            failTest(QString::fromUtf8("ROI 测试要求 Binning 为透传/1x1，请先调整 Binning 配置"));
+            failTest(QString::fromUtf8("开窗测试要求 Binning 为透传/1x1，请先调整 Binning 配置"));
             return;
         }
 
@@ -208,10 +179,10 @@ void RoiTestController::startTest()
                 return;
             }
             resolution_ = QSize(width, height);
-            panel_->setResolution(resolution_);
             QString validationError;
-            if (!validateRoi(targetConfig_, resolution_, &validationError)) {
-                failTest(validationError);
+            if (applyWindowing_
+                && !validateRoi(targetConfig_, resolution_, &validationError)) {
+                failTest(QString::fromUtf8("默认开窗参数无效：%1").arg(validationError));
                 return;
             }
             fullFrameConfig_ = RoiConfig();
@@ -231,61 +202,18 @@ void RoiTestController::cancelTest()
     beginRestore(QString::fromUtf8("测试已取消，已恢复测试前配置"));
 }
 
-void RoiTestController::applyManualConfig(const RoiConfig& config)
-{
-    if (testRunning_ || restoring_ || restorePending_) return;
-    if (!device_->isConnected()) {
-        panel_->setStatusText(QString::fromUtf8("设备未连接，无法应用 ROI"), true);
-        return;
-    }
-
-    const quint64 operation = ++operation_;
-    panel_->setBusy(true, false);
-    panel_->setStatusText(QString::fromUtf8("正在校验并应用 ROI..."));
-    device_->camera()->getResolution(this,
-        [this, operation, config](bool ok, int width, int height, const QString& err) {
-        if (operation != operation_ || testRunning_ || restoring_) return;
-        if (!ok || width <= 0 || height <= 0) {
-            panel_->setBusy(false);
-            panel_->setStatusText(errorText(QString::fromUtf8("读取相机分辨率失败"), err), true);
-            return;
-        }
-        resolution_ = QSize(width, height);
-        panel_->setResolution(resolution_);
-        QString validationError;
-        if (!validateRoi(config, resolution_, &validationError)) {
-            panel_->setBusy(false);
-            panel_->setStatusText(validationError, true);
-            return;
-        }
-        device_->roi()->setConfig(this, config,
-            [this, operation, config](bool setOk, const RoiConfig& updated, const QString& setErr) {
-            if (operation != operation_ || testRunning_ || restoring_) return;
-            panel_->setBusy(false);
-            if (!setOk || !roiMatches(updated, config)) {
-                panel_->setStatusText(errorText(QString::fromUtf8("应用 ROI 配置失败"), setErr), true);
-                return;
-            }
-            panel_->setCurrentConfig(updated);
-            panel_->setStatusText(updated.pendingApply
-                ? QString::fromUtf8("ROI 已保存，将在下一采集段生效")
-                : QString::fromUtf8("ROI 已应用"));
-        });
-    });
-}
-
 void RoiTestController::readOriginalRoi(quint64 operation)
 {
-    panel_->setStatusText(QString::fromUtf8("正在保存测试前 ROI 配置..."));
+    panel_->setStatusText(QString::fromUtf8("正在保存测试前开窗配置..."));
     device_->roi()->getConfig(this,
         [this, operation](bool ok, const RoiConfig& config, const QString& err) {
         if (operation != operation_ || !testRunning_) return;
         if (!ok) {
-            failTest(errorText(QString::fromUtf8("读取测试前 ROI 配置失败"), err));
+            failTest(errorText(QString::fromUtf8("读取测试前开窗配置失败"), err));
             return;
         }
         if (config.collecting) {
-            failTest(QString::fromUtf8("设备正在采集，请先停止当前采集后再运行 ROI 测试"));
+            failTest(QString::fromUtf8("设备正在采集，请先停止当前采集后再运行开窗测试"));
             return;
         }
         originalRoi_ = config;
@@ -305,7 +233,7 @@ void RoiTestController::readOriginalGate(quint64 operation)
             return;
         }
         if (config.collecting) {
-            failTest(QString::fromUtf8("设备正在采集，请先停止当前采集后再运行 ROI 测试"));
+            failTest(QString::fromUtf8("设备正在采集，请先停止当前采集后再运行开窗测试"));
             return;
         }
         originalGate_ = config;
@@ -334,22 +262,21 @@ void RoiTestController::enableStaticMode(quint64 operation)
 void RoiTestController::configureFullFrame(quint64 operation)
 {
     roiChanged_ = originalRoiValid_;
-    panel_->setStatusText(QString::fromUtf8("正在设置并回读全幅 ROI..."));
+    panel_->setStatusText(QString::fromUtf8("正在设置并回读全幅配置..."));
     device_->roi()->setConfig(this, fullFrameConfig_,
         [this, operation](bool ok, const RoiConfig& updated, const QString& err) {
         if (operation != operation_ || !testRunning_) return;
         if (!ok || !roiMatches(updated, fullFrameConfig_) || updated.pendingApply) {
-            failTest(errorText(QString::fromUtf8("设置全幅 ROI 失败"), err));
+            failTest(errorText(QString::fromUtf8("设置全幅配置失败"), err));
             return;
         }
         device_->roi()->getConfig(this,
             [this, operation](bool readOk, const RoiConfig& readback, const QString& readErr) {
             if (operation != operation_ || !testRunning_) return;
             if (!readOk || !roiMatches(readback, fullFrameConfig_) || readback.pendingApply) {
-                failTest(errorText(QString::fromUtf8("全幅 ROI 配置回读不一致"), readErr));
+                failTest(errorText(QString::fromUtf8("全幅配置回读不一致"), readErr));
                 return;
             }
-            panel_->setCurrentConfig(readback);
             startStaticCollection(operation);
         });
     });
@@ -374,23 +301,22 @@ void RoiTestController::configureTargetRoi(quint64 operation)
 {
     if (operation != operation_ || !testRunning_) return;
     roiChanged_ = originalRoiValid_;
-    panel_->setProgress(1, QString::fromUtf8("应用目标 ROI"));
-    panel_->setStatusText(QString::fromUtf8("正在设置并回读目标 ROI..."));
+    panel_->setProgress(1, QString::fromUtf8("应用默认开窗"));
+    panel_->setStatusText(QString::fromUtf8("正在设置并回读默认开窗..."));
     device_->roi()->setConfig(this, targetConfig_,
         [this, operation](bool ok, const RoiConfig& updated, const QString& err) {
         if (operation != operation_ || !testRunning_) return;
         if (!ok || !roiMatches(updated, targetConfig_)) {
-            failTest(errorText(QString::fromUtf8("设置目标 ROI 失败"), err));
+            failTest(errorText(QString::fromUtf8("设置默认开窗失败"), err));
             return;
         }
         device_->roi()->getConfig(this,
             [this, operation](bool readOk, const RoiConfig& readback, const QString& readErr) {
             if (operation != operation_ || !testRunning_) return;
             if (!readOk || !roiMatches(readback, targetConfig_)) {
-                failTest(errorText(QString::fromUtf8("目标 ROI 配置回读不一致"), readErr));
+                failTest(errorText(QString::fromUtf8("默认开窗配置回读不一致"), readErr));
                 return;
             }
-            panel_->setCurrentConfig(readback);
             waitForSnapshot(TargetRoiSnapshot, targetConfig_);
         });
     });
@@ -405,7 +331,7 @@ void RoiTestController::waitForSnapshot(SnapshotStage stage, const RoiConfig& co
     frameTimeout_.start();
     const QSize expected = roiSize(config);
     panel_->setStatusText(QString::fromUtf8("等待 %1 %2x%3 后续数据图像...")
-        .arg(stage == FullFrameSnapshot ? QString::fromUtf8("全幅") : QStringLiteral("ROI"))
+        .arg(stage == FullFrameSnapshot ? QString::fromUtf8("全幅") : QString::fromUtf8("开窗"))
         .arg(expected.width()).arg(expected.height()));
 }
 
@@ -437,7 +363,7 @@ void RoiTestController::captureFrame(const StreamFrame& frame)
     snapshot.data = frame.data;
     snapshot.stats = makeChannelImageStats(frame.width, frame.height, frame.pixfmt, frame.data);
     if (!snapshot.stats.valid) {
-        failTest(QString::fromUtf8("收到的 ROI 测试图像数据长度或格式无效"));
+        failTest(QString::fromUtf8("收到的开窗测试图像数据长度或格式无效"));
         return;
     }
 
@@ -445,18 +371,24 @@ void RoiTestController::captureFrame(const StreamFrame& frame)
     const QSize expected = roiSize(awaitedConfig_);
     if (snapshotStage_ == FullFrameSnapshot) {
         compare_->setFullFrameSnapshot(snapshot);
-        panel_->setCaptureResult(true, awaitedConfig_, expected, actual);
+        panel_->setCaptureResult(true, expected, actual);
         panel_->setProgress(1, QString::fromUtf8("全幅图采集完成"));
+        if (!applyWindowing_) {
+            panel_->setProgress(2, QString::fromUtf8("全幅图采集完成（未应用开窗）"));
+            testRunning_ = false;
+            beginRestore(QString::fromUtf8("全幅图像采集完成，未应用开窗，已恢复测试前配置"));
+            return;
+        }
         const quint64 operation = operation_;
         QTimer::singleShot(0, this, [this, operation]() { configureTargetRoi(operation); });
         return;
     }
 
     compare_->setRoiSnapshot(snapshot);
-    panel_->setCaptureResult(false, awaitedConfig_, expected, actual);
-    panel_->setProgress(2, QString::fromUtf8("两组图像采集完成"));
+    panel_->setCaptureResult(false, expected, actual);
+    panel_->setProgress(2, QString::fromUtf8("全幅与开窗图采集完成"));
     testRunning_ = false;
-    beginRestore(QString::fromUtf8("全幅与 ROI 图像采集完成，已恢复测试前配置"));
+    beginRestore(QString::fromUtf8("全幅与开窗图像采集完成，已恢复测试前配置"));
 }
 
 void RoiTestController::failTest(const QString& message)
@@ -548,11 +480,10 @@ void RoiTestController::restoreOriginalRoi(quint64 operation)
         [this, operation](bool ok, const RoiConfig& updated, const QString& err) {
         if (operation != operation_ || !restoring_) return;
         if (!ok || !roiMatches(updated, originalRoi_) || updated.pendingApply) {
-            markRestorePending(errorText(QString::fromUtf8("恢复测试前 ROI 配置失败"), err));
+            markRestorePending(errorText(QString::fromUtf8("恢复测试前开窗配置失败"), err));
             return;
         }
         roiChanged_ = false;
-        panel_->setCurrentConfig(updated);
         restoreOriginalGate(operation);
     });
 }

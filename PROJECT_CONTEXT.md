@@ -58,7 +58,7 @@ AtingSpectrographClient 是一个 Windows 桌面端光谱仪/成像设备控制�
 - `src/Ui/MainWindowPanelRegistry.*`：右侧业务 Panel 的创建、注册、切换、标题点击和 Panel index 管理。
 - `src/Ui/DeviceUiCoordinator.*`：设备信号与 UI 的绑定层，负责连接状态、帧分发、录制回放、Spectral 刷新、stream stats、raw log 和 uptime。
 - `src/Ui/BinningTestController.*`：Binning 测试状态机，负责保存/恢复配置、依次设置 1x1/2x2/4x4、回读确认，并从测试面板所选 Raw16/SliceStitch16 数据源采集稳定帧；默认数据源为 Raw16。
-- `src/Ui/RoiTestController.*`：ROI 测试状态机，负责校验 Binning 1x1、启用静态采集、忽略 Header 并采集全幅/ROI 后续数据图像，在完成、取消、失败或重连后恢复 ROI 和采集门控配置。
+- `src/Ui/RoiTestController.*`：开窗测试状态机，负责校验 Binning 1x1、启用静态采集、忽略 Header 并采集全幅/ROI 后续数据图像，在完成、取消、失败或重连后恢复 ROI 和采集门控配置。
 - `src/Ui/panels/ColumnNucPanel.*`：嵌入“校正”页的列向 NUC 工作流，负责配置回读、Low/High 黑体采集与轮询、历史选择、矩阵生成/应用和结果复核。
 - `src/Ui/ThemeManager.*`：应用级主题目录、QSS 加载和 `QSettings` 主题偏好保存。
 - `src/Ui/WindowSettingsStore.*`：窗口 geometry、splitter、当前 Panel、侧边栏折叠状态和 Panel index 迁移。
@@ -118,13 +118,13 @@ AtingSpectrographClient 是一个 Windows 桌面端光谱仪/成像设备控制�
 11. 远程 raw 按 `.json + .raw` 逐帧读取并渲染到 Playback 视图；远程 tif 使用 libtiff 读取 BigTIFF 并按面板内参数渲染为一张投影图。
 12. 光谱分析 Panel 激活时由 `MainWindowPanelRegistry` 自动切到 SliceStitch16 页；`SpectrumAnalysisCoordinator` 打开独立曲线窗口，并从最新 SliceStitch16 Mono16 原始帧中采样曲线。
 13. Binning 测试 Panel 激活时自动切到三图对比页；数据源默认 Raw16、可切换 SliceStitch16；`BinningTestController` 保存原配置，依次采集 1x1、2x2、4x4 快照并在结束、取消或失败后恢复原配置。
-14. ROI 测试 Panel 激活时自动切到双图对比页；`RoiTestController` 保存原 ROI 和采集门控配置，一键启动静态采集，忽略 Header 并依次抓取全幅与目标 ROI 的 SliceStitch16 后续数据图像；双图支持鼠标悬停显示各自的局部像素坐标，采集结束后停止采集并恢复配置。
+14. 开窗测试 Panel 激活时自动切到双图对比页；面板只提供“应用开窗功能”开关，不显示边界参数。`RoiTestController` 保存原 ROI 和采集门控配置，一键启动静态采集并忽略 Header；先抓取全幅 SliceStitch16 后续数据图像，启用开窗时再使用固定默认参数 `[240,435) x [0,512)` 抓取开窗图，否则只保留全幅图。图像支持鼠标悬停显示局部像素坐标，结束后停止采集并恢复配置。
 15. 校正 Panel 激活时自动切到 NucRaw16 页；`ColumnNucPanel` 确认后发起 Low/High 黑体异步采集，轮询任务阶段，从服务端完成列表选择一对 Raw，并调用 `calibrate(apply=true)` 后回读配置确认矩阵已加载。
 
 ## 光谱分析功能
 
 当前光谱分析只针对 SliceStitch16：
-- 侧边栏 Panel index：光谱分析为 `6`、光谱段测试为 `8`、Binning 测试为 `9`、ROI 测试为 `10`，系统日志为特殊 index `11`；窗口状态版本为 `panelVersion = 8`。
+- 侧边栏 Panel index：光谱分析为 `6`、光谱段测试为 `8`、Binning 测试为 `9`、开窗测试为 `10`，系统日志为特殊 index `11`；窗口状态版本为 `panelVersion = 8`。
 - `SpectrumAnalysisCoordinator` 缓存最新一帧 SliceStitch16 Mono16 原始数据、宽高和 `streamFrameId`。
 - `ViewerAreaWidget` 承载 SliceStitch16 图像页；底层 `ImageView` 支持亮色坐标刻度、水平采样线显示、点击添加线、拖动改 y、右键删除线。
 - `SpectrumAnalysisPanel` 管理波长映射、采样线列表、刷新率、滤波窗口、最大绘制点数、Y 轴倍率、Y 轴最小值位置和最小数据跨度。

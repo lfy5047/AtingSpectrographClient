@@ -7,6 +7,7 @@
 #include "Ui/widgets/ImageView.h"
 #include "Ui/widgets/RoiCompareWidget.h"
 
+#include <QCheckBox>
 #include <QCoreApplication>
 #include <QElapsedTimer>
 #include <QLabel>
@@ -20,7 +21,8 @@ class RoiTestControllerTest : public QObject {
     Q_OBJECT
 
 private slots:
-    void capturesFullAndRoiFramesAndRestoresConfigs();
+    void capturesFullAndWindowedFramesAndRestoresConfigs();
+    void capturesOnlyFullFrameWhenWindowingDisabled();
     void rejectsNonUnitBinning();
 };
 
@@ -160,17 +162,9 @@ void sendFrame(DeviceClient& device, int width, int height,
     QCoreApplication::processEvents(QEventLoop::AllEvents, 50);
 }
 
-bool answerInitialRefresh(QTcpSocket* socket)
-{
-    return answerRequest(socket, QStringLiteral("camera.get_resolution"),
-                         {{"width", 640}, {"height", 512}})
-        && answerRequest(socket, QStringLiteral("roi.get_config"),
-                         roiData(10, 600, 5, 500));
-}
-
 } // namespace
 
-void RoiTestControllerTest::capturesFullAndRoiFramesAndRestoresConfigs()
+void RoiTestControllerTest::capturesFullAndWindowedFramesAndRestoresConfigs()
 {
     QTcpServer server;
     QVERIFY(server.listen(QHostAddress::LocalHost, 0));
@@ -185,7 +179,6 @@ void RoiTestControllerTest::capturesFullAndRoiFramesAndRestoresConfigs()
     QTcpSocket* socket = server.nextPendingConnection();
     QVERIFY(socket);
     QTRY_VERIFY(device.isConnected());
-    QVERIFY2(answerInitialRefresh(socket), "initial ROI refresh did not complete");
 
     auto* start = panel.findChild<QPushButton*>(QStringLiteral("roiStartTestButton"));
     QVERIFY(start);
@@ -239,6 +232,62 @@ void RoiTestControllerTest::capturesFullAndRoiFramesAndRestoresConfigs()
     QCOMPARE(compare.roiView()->currentImage().size(), QSize(195, 512));
 }
 
+void RoiTestControllerTest::capturesOnlyFullFrameWhenWindowingDisabled()
+{
+    QTcpServer server;
+    QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+
+    DeviceClient device;
+    RoiTestPanel panel;
+    RoiCompareWidget compare;
+    RoiTestController controller(&device, &panel, &compare);
+
+    device.connectTo(QStringLiteral("127.0.0.1"), server.serverPort());
+    QVERIFY(server.waitForNewConnection(1000));
+    QTcpSocket* socket = server.nextPendingConnection();
+    QVERIFY(socket);
+    QTRY_VERIFY(device.isConnected());
+
+    auto* applyWindowing = panel.findChild<QCheckBox*>(
+        QStringLiteral("roiApplyWindowingCheck"));
+    auto* start = panel.findChild<QPushButton*>(QStringLiteral("roiStartTestButton"));
+    QVERIFY(applyWindowing);
+    QVERIFY(start);
+    applyWindowing->setChecked(false);
+    start->click();
+
+    QVERIFY(answerRequest(socket, QStringLiteral("binning.get_config"),
+                          {{"enabled", false}, {"spectral_factor", 1}, {"spatial_factor", 1}}));
+    QVERIFY(answerRequest(socket, QStringLiteral("camera.get_resolution"),
+                          {{"width", 640}, {"height", 512}}));
+    QVERIFY(answerRequest(socket, QStringLiteral("roi.get_config"),
+                          roiData(10, 600, 5, 500)));
+    QVERIFY(answerRequest(socket, QStringLiteral("collect.get_gate_config"), gateData(false)));
+    QVERIFY(answerRequest(socket, QStringLiteral("collect.set_gate_config"), gateData(true),
+                          [](const nlohmann::json& params) { return matchesGate(params, true); }));
+    QVERIFY(answerRequest(socket, QStringLiteral("roi.set_config"), roiData(0, 640, 0, 512),
+                          [](const nlohmann::json& params) {
+                              return matchesRoi(params, 0, 640, 0, 512);
+                          }));
+    QVERIFY(answerRequest(socket, QStringLiteral("roi.get_config"), roiData(0, 640, 0, 512)));
+    QVERIFY(answerRequest(socket, QStringLiteral("collect.start"), nlohmann::json::object()));
+
+    sendFrame(device, 640, 512, cli::proto::DataFrame, 101);
+
+    QVERIFY(answerRequest(socket, QStringLiteral("collect.stop"), nlohmann::json::object()));
+    QVERIFY(answerRequest(socket, QStringLiteral("roi.set_config"), roiData(10, 600, 5, 500),
+                          [](const nlohmann::json& params) {
+                              return matchesRoi(params, 10, 600, 5, 500);
+                          }));
+    QVERIFY(answerRequest(socket, QStringLiteral("collect.set_gate_config"), gateData(false),
+                          [](const nlohmann::json& params) { return matchesGate(params, false); }));
+
+    QTRY_VERIFY(controller.prepareForClose());
+    QTRY_VERIFY(start->isEnabled());
+    QCOMPARE(compare.fullFrameView()->currentImage().size(), QSize(640, 512));
+    QVERIFY(compare.roiView()->currentImage().isNull());
+}
+
 void RoiTestControllerTest::rejectsNonUnitBinning()
 {
     QTcpServer server;
@@ -254,7 +303,6 @@ void RoiTestControllerTest::rejectsNonUnitBinning()
     QTcpSocket* socket = server.nextPendingConnection();
     QVERIFY(socket);
     QTRY_VERIFY(device.isConnected());
-    QVERIFY(answerInitialRefresh(socket));
 
     auto* start = panel.findChild<QPushButton*>(QStringLiteral("roiStartTestButton"));
     auto* status = panel.findChild<QLabel*>(QStringLiteral("roiStatusLabel"));

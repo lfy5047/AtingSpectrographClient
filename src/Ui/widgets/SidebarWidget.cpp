@@ -22,7 +22,7 @@ static const struct { const char* label; int iconType; int panelIndex; } kNavIte
     {"光谱分析", 10, 6},
     {"光谱段测试", 12, 8},
     {"Binning 测试", 13, 9},
-    {"ROI 测试", 14, 10},
+    {"开窗测试", 14, 10},
     {"高级设置", 7, 7},
     {"系统日志", 6, 11},
 };

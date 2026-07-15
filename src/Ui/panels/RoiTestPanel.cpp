@@ -1,13 +1,12 @@
 #include "RoiTestPanel.h"
 
-#include <QFormLayout>
+#include <QCheckBox>
 #include <QGroupBox>
 #include <QHeaderView>
 #include <QHBoxLayout>
 #include <QLabel>
 #include <QProgressBar>
 #include <QPushButton>
-#include <QSpinBox>
 #include <QTableWidget>
 #include <QTableWidgetItem>
 #include <QVBoxLayout>
@@ -20,13 +19,6 @@ QTableWidgetItem* readOnlyItem(const QString& text)
     item->setFlags(item->flags() & ~Qt::ItemIsEditable);
     item->setTextAlignment(Qt::AlignCenter);
     return item;
-}
-
-QString configText(const RoiConfig& config)
-{
-    return QStringLiteral("[%1, %2) x [%3, %4)")
-        .arg(config.sliceBegin).arg(config.sliceEnd)
-        .arg(config.sliceHBegin).arg(config.sliceHEnd);
 }
 
 QString sizeText(const QSize& size)
@@ -47,48 +39,18 @@ RoiTestPanel::RoiTestPanel(QWidget* parent)
     root->setSpacing(10);
 
     auto* instruction = new QLabel(
-        QString::fromUtf8("一键测试会临时启用静态采集，先采集全幅基准，再应用 ROI 并采集对比图，完成后恢复测试前配置。"),
+        QString::fromUtf8("一键测试会临时启用静态采集，先采集全幅基准，然后采集窗口图；"),
         this);
     instruction->setWordWrap(true);
     root->addWidget(instruction);
 
-    auto* configGroup = new QGroupBox(QString::fromUtf8("ROI 配置"), this);
-    auto* configForm = new QFormLayout(configGroup);
-    currentConfigLabel_ = new QLabel(QStringLiteral("--"), configGroup);
-    currentConfigLabel_->setObjectName(QStringLiteral("roiCurrentConfigLabel"));
-    currentConfigLabel_->setWordWrap(true);
-    currentConfigLabel_->setProperty("readout", true);
-    resolutionLabel_ = new QLabel(QStringLiteral("--"), configGroup);
-    resolutionLabel_->setObjectName(QStringLiteral("roiResolutionLabel"));
-    resolutionLabel_->setProperty("readout", true);
-    configForm->addRow(QString::fromUtf8("当前配置"), currentConfigLabel_);
-    configForm->addRow(QString::fromUtf8("全幅尺寸"), resolutionLabel_);
-
-    auto createSpin = [configGroup](const QString& name, int value) {
-        auto* spin = new QSpinBox(configGroup);
-        spin->setObjectName(name);
-        spin->setRange(0, 65535);
-        spin->setValue(value);
-        return spin;
-    };
-    sliceBeginSpin_ = createSpin(QStringLiteral("roiSliceBeginSpin"), 240);
-    sliceEndSpin_ = createSpin(QStringLiteral("roiSliceEndSpin"), 435);
-    sliceHBeginSpin_ = createSpin(QStringLiteral("roiSliceHBeginSpin"), 0);
-    sliceHEndSpin_ = createSpin(QStringLiteral("roiSliceHEndSpin"), 512);
-    configForm->addRow(QString::fromUtf8("光谱列起点"), sliceBeginSpin_);
-    configForm->addRow(QString::fromUtf8("光谱列终点（不含）"), sliceEndSpin_);
-    configForm->addRow(QString::fromUtf8("空间行起点"), sliceHBeginSpin_);
-    configForm->addRow(QString::fromUtf8("空间行终点（不含）"), sliceHEndSpin_);
-
-    refreshBtn_ = new QPushButton(QString::fromUtf8("读取"), configGroup);
-    refreshBtn_->setObjectName(QStringLiteral("roiRefreshButton"));
-    applyBtn_ = new QPushButton(QString::fromUtf8("应用"), configGroup);
-    applyBtn_->setObjectName(QStringLiteral("roiApplyButton"));
-    auto* configActions = new QHBoxLayout();
-    configActions->addWidget(refreshBtn_);
-    configActions->addWidget(applyBtn_);
-    configForm->addRow(QString(), configActions);
-    root->addWidget(configGroup);
+    auto* optionGroup = new QGroupBox(QString::fromUtf8("测试选项"), this);
+    auto* optionLayout = new QVBoxLayout(optionGroup);
+    applyWindowingCheck_ = new QCheckBox(QString::fromUtf8("应用开窗功能"), optionGroup);
+    applyWindowingCheck_->setObjectName(QStringLiteral("roiApplyWindowingCheck"));
+    applyWindowingCheck_->setChecked(true);
+    optionLayout->addWidget(applyWindowingCheck_);
+    root->addWidget(optionGroup);
 
     auto* actionGroup = new QGroupBox(QString::fromUtf8("自动测试"), this);
     auto* actionLayout = new QVBoxLayout(actionGroup);
@@ -117,11 +79,11 @@ RoiTestPanel::RoiTestPanel(QWidget* parent)
 
     auto* resultGroup = new QGroupBox(QString::fromUtf8("采集结果"), this);
     auto* resultLayout = new QVBoxLayout(resultGroup);
-    resultTable_ = new QTableWidget(2, 4, resultGroup);
+    resultTable_ = new QTableWidget(2, 3, resultGroup);
     resultTable_->setObjectName(QStringLiteral("roiResultTable"));
     resultTable_->setHorizontalHeaderLabels({
-        QString::fromUtf8("阶段"), QString::fromUtf8("配置"),
-        QString::fromUtf8("理论尺寸"), QString::fromUtf8("实际尺寸"),
+        QString::fromUtf8("阶段"), QString::fromUtf8("理论尺寸"),
+        QString::fromUtf8("实际尺寸"),
     });
     resultTable_->verticalHeader()->hide();
     resultTable_->horizontalHeader()->setSectionResizeMode(QHeaderView::ResizeToContents);
@@ -133,49 +95,18 @@ RoiTestPanel::RoiTestPanel(QWidget* parent)
     root->addStretch();
 
     resetResults();
-    connect(refreshBtn_, &QPushButton::clicked, this, &RoiTestPanel::refreshRequested);
-    connect(applyBtn_, &QPushButton::clicked, this, [this]() {
-        emit applyRequested(testConfig());
-    });
     connect(startBtn_, &QPushButton::clicked, this, &RoiTestPanel::startRequested);
     connect(cancelBtn_, &QPushButton::clicked, this, &RoiTestPanel::cancelRequested);
 }
 
-RoiConfig RoiTestPanel::testConfig() const
+bool RoiTestPanel::applyWindowing() const
 {
-    RoiConfig config;
-    config.sliceBegin = sliceBeginSpin_->value();
-    config.sliceEnd = sliceEndSpin_->value();
-    config.sliceHBegin = sliceHBeginSpin_->value();
-    config.sliceHEnd = sliceHEndSpin_->value();
-    return config;
-}
-
-void RoiTestPanel::setCurrentConfig(const RoiConfig& config)
-{
-    QString suffix;
-    if (config.pendingApply) suffix = QString::fromUtf8("（待下一采集段生效）");
-    currentConfigLabel_->setText(configText(config) + suffix);
-}
-
-void RoiTestPanel::setResolution(const QSize& resolution)
-{
-    resolutionLabel_->setText(sizeText(resolution));
-    if (!resolution.isValid()) return;
-    sliceBeginSpin_->setMaximum(qMax(0, resolution.width() - 1));
-    sliceEndSpin_->setMaximum(resolution.width());
-    sliceHBeginSpin_->setMaximum(qMax(0, resolution.height() - 1));
-    sliceHEndSpin_->setMaximum(resolution.height());
+    return applyWindowingCheck_->isChecked();
 }
 
 void RoiTestPanel::setBusy(bool busy, bool cancellable)
 {
-    sliceBeginSpin_->setEnabled(!busy);
-    sliceEndSpin_->setEnabled(!busy);
-    sliceHBeginSpin_->setEnabled(!busy);
-    sliceHEndSpin_->setEnabled(!busy);
-    refreshBtn_->setEnabled(!busy);
-    applyBtn_->setEnabled(!busy);
+    applyWindowingCheck_->setEnabled(!busy);
     startBtn_->setEnabled(!busy);
     cancelBtn_->setEnabled(busy && cancellable);
 }
@@ -197,19 +128,17 @@ void RoiTestPanel::setProgress(int completedSteps, const QString& text)
 void RoiTestPanel::resetResults()
 {
     resultTable_->setItem(0, 0, readOnlyItem(QString::fromUtf8("全幅基准")));
-    resultTable_->setItem(1, 0, readOnlyItem(QStringLiteral("ROI")));
+    resultTable_->setItem(1, 0, readOnlyItem(QString::fromUtf8("开窗图")));
     for (int row = 0; row < 2; ++row) {
-        for (int column = 1; column < 4; ++column) {
+        for (int column = 1; column < 3; ++column) {
             resultTable_->setItem(row, column, readOnlyItem(QStringLiteral("--")));
         }
     }
 }
 
-void RoiTestPanel::setCaptureResult(bool fullFrame, const RoiConfig& config,
-                                    const QSize& expected, const QSize& actual)
+void RoiTestPanel::setCaptureResult(bool fullFrame, const QSize& expected, const QSize& actual)
 {
     const int row = fullFrame ? 0 : 1;
-    resultTable_->item(row, 1)->setText(configText(config));
-    resultTable_->item(row, 2)->setText(sizeText(expected));
-    resultTable_->item(row, 3)->setText(sizeText(actual));
+    resultTable_->item(row, 1)->setText(sizeText(expected));
+    resultTable_->item(row, 2)->setText(sizeText(actual));
 }

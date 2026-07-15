@@ -64,7 +64,7 @@ void MainWindow::closeEvent(QCloseEvent* e)
     const bool roiReady = roiTestController_->prepareForClose();
     const bool binningReady = binningTestController_->prepareForClose();
     if (!roiReady) {
-        QMessageBox::information(this, QString::fromUtf8("ROI 测试"),
+        QMessageBox::information(this, QString::fromUtf8("开窗测试"),
                                  roiTestController_->closeBlockReason());
         e->ignore();
         return;
