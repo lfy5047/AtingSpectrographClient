@@ -8,7 +8,7 @@
 namespace {
 bool hasScanDirection(const cli::proto::StreamHeader& hdr)
 {
-    return hdr.version >= cli::proto::kStreamProtoVersion &&
+    return hdr.version >= cli::proto::kStreamMetadataProtoVersion &&
            (hdr.meta_flags & cli::proto::HasScanDirection) != 0;
 }
 

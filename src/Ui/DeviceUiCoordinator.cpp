@@ -27,6 +27,7 @@ int viewerChannelForStreamChannel(int channel)
     using namespace cli::proto;
 
     if (channel == Raw16) return ViewerAreaWidget::Raw16View;
+    if (channel == NucRaw16) return ViewerAreaWidget::NucRaw16View;
     if (channel == SliceStitch16) return ViewerAreaWidget::SliceStitch16View;
     if (channel == SpectralPreview) return ViewerAreaWidget::SpectralPreviewView;
     return -1;
@@ -96,6 +97,8 @@ void DeviceUiCoordinator::refreshStreamStats()
     const int currentChannel = chrome_->viewerArea()->currentChannel();
     if (currentChannel == ViewerAreaWidget::Raw16View) {
         fpsChannel = Raw16;
+    } else if (currentChannel == ViewerAreaWidget::NucRaw16View) {
+        fpsChannel = NucRaw16;
     } else if (currentChannel == ViewerAreaWidget::SliceStitch16View) {
         fpsChannel = SliceStitch16;
     } else if (currentChannel == ViewerAreaWidget::SpectralView) {

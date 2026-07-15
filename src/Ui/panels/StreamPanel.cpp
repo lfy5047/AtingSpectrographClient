@@ -24,6 +24,8 @@ StreamPanel::StreamPanel(DeviceClient* dev, QWidget* parent)
     chkSliceStitch16_->setObjectName(QStringLiteral("streamSliceStitch16Check"));
     chkRegionStitch16_ = new QCheckBox("RegionStitch16", this);
     chkRegionStitch16_->setObjectName(QStringLiteral("streamRegionStitch16Check"));
+    chkNucRaw16_       = new QCheckBox("NucRaw16", this);
+    chkNucRaw16_->setObjectName(QStringLiteral("streamNucRaw16Check"));
     chkSpectralPreview_ = new QCheckBox("SpectralPreview", this);
     chkSpectralPreview_->setObjectName(QStringLiteral("streamSpectralPreviewCheck"));
     chkPreview8_->setVisible(false);
@@ -33,6 +35,7 @@ StreamPanel::StreamPanel(DeviceClient* dev, QWidget* parent)
     vb->addWidget(chkPreview8_);
     vb->addWidget(chkSliceStitch16_);
     vb->addWidget(chkRegionStitch16_);
+    vb->addWidget(chkNucRaw16_);
     vb->addWidget(chkSpectralPreview_);
 
     auto* btnRow = new QHBoxLayout();
@@ -61,6 +64,7 @@ StreamPanel::StreamPanel(DeviceClient* dev, QWidget* parent)
     connect(chkPreview8_, &QCheckBox::toggled, this, [this](bool) { saveSettings(); });
     connect(chkSliceStitch16_, &QCheckBox::toggled, this, [this](bool) { saveSettings(); });
     connect(chkRegionStitch16_, &QCheckBox::toggled, this, [this](bool) { saveSettings(); });
+    connect(chkNucRaw16_, &QCheckBox::toggled, this, [this](bool) { saveSettings(); });
     connect(chkSpectralPreview_, &QCheckBox::toggled, this, [this](bool) { saveSettings(); });
 
     pollTimer_ = new QTimer(this);
@@ -77,6 +81,7 @@ void StreamPanel::loadSettings()
     chkPreview8_->setChecked(s.value(p + QStringLiteral("preview8"), chkPreview8_->isChecked()).toBool());
     chkSliceStitch16_->setChecked(s.value(p + QStringLiteral("sliceStitch16"), chkSliceStitch16_->isChecked()).toBool());
     chkRegionStitch16_->setChecked(s.value(p + QStringLiteral("regionStitch16"), chkRegionStitch16_->isChecked()).toBool());
+    chkNucRaw16_->setChecked(s.value(p + QStringLiteral("nucRaw16"), chkNucRaw16_->isChecked()).toBool());
     chkSpectralPreview_->setChecked(s.value(p + QStringLiteral("spectralPreview"), chkSpectralPreview_->isChecked()).toBool());
 }
 
@@ -88,6 +93,7 @@ void StreamPanel::saveSettings() const
     s.setValue(p + QStringLiteral("preview8"), chkPreview8_->isChecked());
     s.setValue(p + QStringLiteral("sliceStitch16"), chkSliceStitch16_->isChecked());
     s.setValue(p + QStringLiteral("regionStitch16"), chkRegionStitch16_->isChecked());
+    s.setValue(p + QStringLiteral("nucRaw16"), chkNucRaw16_->isChecked());
     s.setValue(p + QStringLiteral("spectralPreview"), chkSpectralPreview_->isChecked());
 }
 
@@ -98,6 +104,7 @@ QStringList StreamPanel::selectedChannels() const
     if (chkPreview8_->isChecked())       chs << "preview8";
     if (chkSliceStitch16_->isChecked())  chs << "slice_stitch16";
     if (chkRegionStitch16_->isChecked()) chs << "region_stitch16";
+    if (chkNucRaw16_->isChecked())       chs << "nuc_raw16";
     if (chkSpectralPreview_->isChecked()) chs << "spectral_preview";
     return chs;
 }

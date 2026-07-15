@@ -101,7 +101,7 @@ void DashboardPanel::setupUi()
 
     // initial values
     dashVerSys_->setText("Spectra Pro v2.0");
-    dashChannels_->setText("Raw16, SliceStitch16, SpectralPreview");
+    dashChannels_->setText("Raw16, NucRaw16, SliceStitch16, SpectralPreview");
     dashMoving_->setText(QString::fromUtf8("已停止"));
     dashMoving_->setProperty("moving", false);
     dashMoving_->setStyleSheet("color: #26A641; font-weight: bold; font-size: 11pt;");

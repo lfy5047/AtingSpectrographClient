@@ -19,6 +19,23 @@ target_link_libraries(ImageFrameUtilsTest PRIVATE
 )
 add_test(NAME ImageFrameUtilsTest COMMAND ImageFrameUtilsTest)
 
+add_executable(FrameAssemblerTest
+    FrameAssemblerTest.cpp
+    ${PROJECT_SOURCE_DIR}/src/Client/stream/FrameAssembler.cpp
+)
+target_include_directories(FrameAssemblerTest PRIVATE
+    ${PROJECT_SOURCE_DIR}
+    ${PROJECT_SOURCE_DIR}/src
+    ${PROJECT_SOURCE_DIR}/src/Client/rpc
+    ${PROJECT_SOURCE_DIR}/src/Client/stream
+    ${PROJECT_SOURCE_DIR}/Common/include
+)
+target_link_libraries(FrameAssemblerTest PRIVATE
+    Qt5::Test
+    Qt5::Core
+)
+add_test(NAME FrameAssemblerTest COMMAND FrameAssemblerTest)
+
 add_executable(AppVersionTest
     AppVersionTest.cpp
 )
@@ -447,6 +464,7 @@ add_executable(PanelSettingsTest
     ${PROJECT_SOURCE_DIR}/src/Ui/panels/CameraPanel.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/panels/AdvancedSettingsPanel.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/panels/CalibrationPanel.cpp
+    ${PROJECT_SOURCE_DIR}/src/Ui/panels/ColumnNucPanel.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/panels/CollectPanel.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/panels/ConnectionPanel.cpp
     ${PROJECT_SOURCE_DIR}/src/Ui/panels/DataAcquisitionPanel.cpp

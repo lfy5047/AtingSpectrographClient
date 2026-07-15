@@ -26,7 +26,8 @@ public:
         PlaybackView = 4,
         BinningCompareView = 5,
         RoiCompareView = 6,
-        ChannelCount = 7,
+        NucRaw16View = 7,
+        ChannelCount = 8,
     };
 
     explicit ViewerAreaWidget(QWidget* parent = nullptr);
@@ -67,6 +68,7 @@ private:
 
     QWidget* channelTabBar_ = nullptr;
     QPushButton* chTabRaw16_ = nullptr;
+    QPushButton* chTabNucRaw16_ = nullptr;
     QPushButton* chTabSlice_ = nullptr;
     QPushButton* chTabSpectral_ = nullptr;
     QPushButton* chTabSpectralPreview_ = nullptr;
@@ -75,6 +77,7 @@ private:
     QPushButton* chTabRoiCompare_ = nullptr;
     QStackedWidget* viewerStack_ = nullptr;
     ImageView* imageViewRaw_ = nullptr;
+    ImageView* imageViewNucRaw_ = nullptr;
     ImageView* imageViewSlice_ = nullptr;
     ImageView* imageViewSpectral_ = nullptr;
     ImageView* imageViewSpectralPreview_ = nullptr;
@@ -98,8 +101,10 @@ private:
         QPoint(-1, -1),
         QPoint(-1, -1),
         QPoint(-1, -1),
+        QPoint(-1, -1),
     };
     ChannelImageStats rawImageStats_;
+    ChannelImageStats nucRawImageStats_;
     ChannelImageStats sliceImageStats_;
     ChannelImageStats playbackImageStats_;
     bool spectralSegmentTestEnabled_ = false;

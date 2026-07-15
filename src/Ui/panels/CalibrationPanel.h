@@ -6,6 +6,7 @@
 #include <QPushButton>
 
 class DeviceClient;
+class ColumnNucPanel;
 class QTimer;
 struct BackgroundCalibrationStatus;
 
@@ -13,6 +14,8 @@ class CalibrationPanel : public QWidget {
     Q_OBJECT
 public:
     explicit CalibrationPanel(DeviceClient* dev, QWidget* parent = nullptr);
+
+    void refreshColumnNuc();
 
 private slots:
     void startBackgroundCalibration();
@@ -25,4 +28,5 @@ private:
     QLabel* backgroundCalibrationStatusLabel_ = nullptr;
     QPushButton* backgroundCalibrationBtn_ = nullptr;
     QTimer* backgroundCalibrationTimer_ = nullptr;
+    ColumnNucPanel* columnNucPanel_ = nullptr;
 };

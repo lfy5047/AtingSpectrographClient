@@ -6,8 +6,11 @@
 #include <QString>
 #include "json.hpp"
 
+struct RpcResult;
+
 using Callback = std::function<void(bool ok, const QString& err)>;
 using JsonCallback = std::function<void(bool ok, const nlohmann::json& data, const QString& err)>;
+using RpcResultCallback = std::function<void(const RpcResult& result)>;
 using PingCallback = std::function<void(bool ok, qint64 ts, const QString& err)>;
 using VersionCallback = std::function<void(bool ok, int ver, const QString& name, const QString& err)>;
 using MirrorAngleCallback = std::function<void(bool ok, double angle, bool moving, const QString& err)>;

@@ -40,6 +40,7 @@ void ViewerAreaWidget::setupUi()
     chTabLayout->addStretch();
 
     chTabRaw16_ = new QPushButton("Raw16", channelTabBar_);
+    chTabNucRaw16_ = new QPushButton("NucRaw16", channelTabBar_);
     chTabSlice_ = new QPushButton("SliceStitch16", channelTabBar_);
     chTabSpectral_ = new QPushButton("Spectral", channelTabBar_);
     chTabSpectralPreview_ = new QPushButton("SpectralPreview", channelTabBar_);
@@ -47,7 +48,7 @@ void ViewerAreaWidget::setupUi()
     chTabBinningCompare_ = new QPushButton(QString::fromUtf8("Binning对比"), channelTabBar_);
     chTabRoiCompare_ = new QPushButton(QString::fromUtf8("ROI对比"), channelTabBar_);
     const QList<QPushButton*> tabs = {
-        chTabRaw16_, chTabSlice_, chTabSpectral_, chTabSpectralPreview_,
+        chTabRaw16_, chTabNucRaw16_, chTabSlice_, chTabSpectral_, chTabSpectralPreview_,
         chTabPlayback_, chTabBinningCompare_, chTabRoiCompare_,
     };
     for (auto* tab : tabs) {
@@ -63,6 +64,7 @@ void ViewerAreaWidget::setupUi()
     viewerStack_ = new QStackedWidget(this);
     viewerStack_->setObjectName("viewerStack");
     imageViewRaw_ = new ImageView(viewerStack_);
+    imageViewNucRaw_ = new ImageView(viewerStack_);
     imageViewSlice_ = new ImageView(viewerStack_);
     imageViewSpectral_ = new ImageView(viewerStack_);
     imageViewSpectralPreview_ = new ImageView(viewerStack_);
@@ -76,9 +78,11 @@ void ViewerAreaWidget::setupUi()
     viewerStack_->addWidget(imageViewPlayback_);
     viewerStack_->addWidget(binningCompareWidget_);
     viewerStack_->addWidget(roiCompareWidget_);
+    viewerStack_->addWidget(imageViewNucRaw_);
     viewerLayout->addWidget(viewerStack_, 1);
 
     connect(chTabRaw16_, &QPushButton::clicked, this, [this]() { setCurrentChannel(Raw16View); });
+    connect(chTabNucRaw16_, &QPushButton::clicked, this, [this]() { setCurrentChannel(NucRaw16View); });
     connect(chTabSlice_, &QPushButton::clicked, this, [this]() { setCurrentChannel(SliceStitch16View); });
     connect(chTabSpectral_, &QPushButton::clicked, this, [this]() { setCurrentChannel(SpectralView); });
     connect(chTabSpectralPreview_, &QPushButton::clicked, this, [this]() { setCurrentChannel(SpectralPreviewView); });
@@ -137,6 +141,10 @@ void ViewerAreaWidget::setupUi()
         cursorImagePos_[Raw16View] = pos;
         refreshImageStatsOverlay();
     });
+    connect(imageViewNucRaw_, &ImageView::cursorImagePosChanged, this, [this](const QPoint& pos) {
+        cursorImagePos_[NucRaw16View] = pos;
+        refreshImageStatsOverlay();
+    });
     connect(imageViewSlice_, &ImageView::cursorImagePosChanged, this, [this](const QPoint& pos) {
         cursorImagePos_[SliceStitch16View] = pos;
         refreshImageStatsOverlay();
@@ -175,7 +183,7 @@ void ViewerAreaWidget::setupUi()
 
 void ViewerAreaWidget::setCurrentChannel(int channel)
 {
-    if (channel < Raw16View || channel > RoiCompareView) return;
+    if (channel < Raw16View || channel >= ChannelCount) return;
     if (currentChannel_ == channel) {
         refreshImageStatsOverlay();
         return;
@@ -198,6 +206,7 @@ ImageView* ViewerAreaWidget::imageView(int channel) const
 {
     switch (channel) {
     case Raw16View: return imageViewRaw_;
+    case NucRaw16View: return imageViewNucRaw_;
     case SliceStitch16View: return imageViewSlice_;
     case SpectralView: return imageViewSpectral_;
     case SpectralPreviewView: return imageViewSpectralPreview_;
@@ -246,6 +255,8 @@ void ViewerAreaWidget::setImageStats(int channel, const ChannelImageStats& stats
 {
     if (channel == Raw16View) {
         rawImageStats_ = stats;
+    } else if (channel == NucRaw16View) {
+        nucRawImageStats_ = stats;
     } else if (channel == SliceStitch16View) {
         sliceImageStats_ = stats;
     } else if (channel == PlaybackView) {
@@ -341,6 +352,8 @@ void ViewerAreaWidget::updateChannelTabStyle()
 {
     chTabRaw16_->setProperty("active", currentChannel_ == Raw16View);
     chTabRaw16_->style()->polish(chTabRaw16_);
+    chTabNucRaw16_->setProperty("active", currentChannel_ == NucRaw16View);
+    chTabNucRaw16_->style()->polish(chTabNucRaw16_);
     chTabSlice_->setProperty("active", currentChannel_ == SliceStitch16View);
     chTabSlice_->style()->polish(chTabSlice_);
     chTabSpectral_->setProperty("active", currentChannel_ == SpectralView);
@@ -389,6 +402,7 @@ void ViewerAreaWidget::refreshImageStatsOverlay()
     if (!imageStatsOverlay_ || !imageStatsLabel_) return;
 
     const bool showOverlay = currentChannel_ == Raw16View
+        || currentChannel_ == NucRaw16View
         || currentChannel_ == SliceStitch16View
         || currentChannel_ == PlaybackView;
     if (!showOverlay) {
@@ -398,7 +412,8 @@ void ViewerAreaWidget::refreshImageStatsOverlay()
 
     const QPoint cursorPos = cursorImagePos_[static_cast<std::size_t>(currentChannel_)];
     const ChannelImageStats* stats = &rawImageStats_;
-    if (currentChannel_ == SliceStitch16View) stats = &sliceImageStats_;
+    if (currentChannel_ == NucRaw16View) stats = &nucRawImageStats_;
+    else if (currentChannel_ == SliceStitch16View) stats = &sliceImageStats_;
     else if (currentChannel_ == PlaybackView) stats = &playbackImageStats_;
     imageStatsLabel_->setText(formatImageStatsText(cursorPos, stats));
     imageStatsOverlay_->adjustSize();

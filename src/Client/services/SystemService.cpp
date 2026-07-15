@@ -58,3 +58,119 @@ void SystemService::backgroundCalibrationStatus(QObject* context, BackgroundCali
         if (cb) cb(r.ok, status, r.msg);
     });
 }
+
+void SystemService::columnNucGetConfig(QObject* context, RpcResultCallback cb) const
+{
+    request(RpcCommand::System::ColumnNucGetConfig, {}, context, [cb](const RpcResult& r) {
+        if (cb) cb(r);
+    });
+}
+
+void SystemService::columnNucSetConfig(QObject* context,
+                                       bool enabled,
+                                       const QString& gainFile,
+                                       const QString& offsetFile,
+                                       int width,
+                                       int height,
+                                       double eps,
+                                       RpcResultCallback cb) const
+{
+    const nlohmann::json params = {
+        {"enabled", enabled},
+        {"gain_file", gainFile.toStdString()},
+        {"offset_file", offsetFile.toStdString()},
+        {"width", width},
+        {"height", height},
+        {"eps", eps},
+    };
+    request(RpcCommand::System::ColumnNucSetConfig, params, context, [cb](const RpcResult& r) {
+        if (cb) cb(r);
+    });
+}
+
+void SystemService::columnNucReload(QObject* context, RpcResultCallback cb) const
+{
+    request(RpcCommand::System::ColumnNucReload, {}, context, [cb](const RpcResult& r) {
+        if (cb) cb(r);
+    });
+}
+
+void SystemService::columnNucCapture(QObject* context,
+                                     const QString& level,
+                                     double temperature,
+                                     int frameCount,
+                                     int timeoutMs,
+                                     RpcResultCallback cb) const
+{
+    const nlohmann::json params = {
+        {"level", level.toStdString()},
+        {"temperature", temperature},
+        {"frame_count", frameCount},
+        {"timeout_ms", timeoutMs},
+    };
+    request(RpcCommand::System::ColumnNucCapture, params, context, [cb](const RpcResult& r) {
+        if (cb) cb(r);
+    });
+}
+
+void SystemService::columnNucCaptureStatus(QObject* context,
+                                           const QString& taskId,
+                                           RpcResultCallback cb) const
+{
+    request(RpcCommand::System::ColumnNucCaptureStatus,
+            {{"task_id", taskId.toStdString()}},
+            context,
+            [cb](const RpcResult& r) {
+                if (cb) cb(r);
+            });
+}
+
+void SystemService::columnNucCaptureCancel(QObject* context,
+                                           const QString& taskId,
+                                           RpcResultCallback cb) const
+{
+    request(RpcCommand::System::ColumnNucCaptureCancel,
+            {{"task_id", taskId.toStdString()}},
+            context,
+            [cb](const RpcResult& r) {
+                if (cb) cb(r);
+            });
+}
+
+void SystemService::columnNucListCaptures(QObject* context, int count, RpcResultCallback cb) const
+{
+    request(RpcCommand::System::ColumnNucListCaptures,
+            {{"count", count}},
+            context,
+            [cb](const RpcResult& r) {
+                if (cb) cb(r);
+            });
+}
+
+void SystemService::columnNucCalibrate(QObject* context,
+                                       const QString& lowFile,
+                                       const QString& highFile,
+                                       const QString& outDir,
+                                       int width,
+                                       int height,
+                                       double eps,
+                                       bool apply,
+                                       RpcResultCallback cb) const
+{
+    const nlohmann::json params = {
+        {"low_file", lowFile.toStdString()},
+        {"high_file", highFile.toStdString()},
+        {"out_dir", outDir.toStdString()},
+        {"width", width},
+        {"height", height},
+        {"eps", eps},
+        {"apply", apply},
+    };
+    request(RpcCommand::System::ColumnNucCalibrate,
+            params,
+            context,
+            [cb](const RpcResult& r) {
+                if (cb) cb(r);
+            },
+            RpcTimeout::ColumnNucCalibration);
+}

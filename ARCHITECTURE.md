@@ -17,7 +17,7 @@
 - `MainWindowPanelRegistry` 创建并注册右侧业务 Panel，集中维护 Panel index、标题、系统日志 toggle 和光谱分析 Panel 激活。
 - `DeviceUiCoordinator` 连接设备层与 UI 层，负责连接状态、UDP bind、帧分发、录制回放、Spectral 刷新、stream stats、raw log 和 uptime。
 - `ThemeManager` 维护应用主题目录，集中加载深色/户外亮色 QSS，并保存 `ui/theme` 用户偏好。
-- `ViewerAreaWidget` 管理 Raw16、SliceStitch16、Spectral、SpectralPreview、Playback、Binning 对比和 ROI 对比页，以及图像统计 overlay 和 Spectral progress overlay。
+- `ViewerAreaWidget` 管理 Raw16、NucRaw16、SliceStitch16、Spectral、SpectralPreview、Playback、Binning 对比和 ROI 对比页，以及图像统计 overlay 和 Spectral progress overlay。
 - `BinningTestController` 管理 Binning 测试会话、配置回读、稳帧采集、超时/取消和原配置恢复。
 - `RoiTestController` 管理 ROI 测试会话、静态采集启停、全幅/ROI 后续数据帧抓取、超时/取消，以及 ROI 与门控配置恢复。
 - `ImageFrameUtils` 提供 Mono8/Mono16 显示图转换与 Mono16 统计计算。
@@ -29,8 +29,9 @@
   - `CameraPanel`：相机采集设备选择、分辨率、采集启动/停止。
   - `MirrorPanel`：转镜角度、速度、归零、预设位等控制。
   - `IrPanel`：红外参数、校准、状态/温度/模块查询。
+  - `CalibrationPanel`：背景校正，以及嵌入式 `ColumnNucPanel` 提供的 Low/High 黑体采集、历史选择、矩阵生成/应用和运行态启停。
   - `CollectPanel`：采集流程开始/停止/状态查询。
-  - `StreamPanel`：Raw16/SliceStitch16 通道订阅、取消订阅、状态轮询。
+  - `StreamPanel`：Raw16/NucRaw16/SliceStitch16/SpectralPreview 通道订阅、取消订阅、状态轮询。
   - `SpectralPanel`：光谱显示来源、源通道、单波段/范围平均/RGB 合成参数与扫描状态。
   - `BinningTestPanel`：Raw16/SliceStitch16 数据源选择（默认 Raw16）、1x1/2x2/4x4 设置、自动三组采集、理论/实际尺寸和特征宽度结果。
   - `RoiTestPanel`：四个 ROI 边界参数、配置读取/应用、一键静态采集测试、进度和全幅/ROI 尺寸结果。
@@ -63,7 +64,7 @@
 ### Service 层
 
 Service 类继承或使用 `RpcServiceBase`，把业务 API 封装为命令名和参数：
-- `SystemService`：`system.ping`、`system.version`、`system.status`
+- `SystemService`：`system.ping`、`system.version`、`system.status`、背景校正，以及 `system.column_nuc.*` 配置/采集/标定命令
 - `StreamControlService`：`stream.subscribe`、`stream.unsubscribe`、`stream.status`
 - `MirrorService`：角度查询、速度、相对/绝对目标、启动/停止、home、set home、preset
 - `CameraService`：start/stop stream、分辨率、设备选择、设备列表
@@ -79,9 +80,9 @@ Service 类继承或使用 `RpcServiceBase`，把业务 API 封装为命令名�
 `StreamClient` 负责绑定本地 UDP 端口并读取 datagram：
 - 默认端口来自连接面板，当前默认 `1400`。
 - 成功绑定后尝试把接收缓冲区设置为 64 MiB。
-- 每秒根据 `FrameAssembler::framesReceived()` 增量计算总体 FPS，并维护 Raw16/SliceStitch16 的按通道 FPS。
+- 每秒根据 `FrameAssembler::framesReceived()` 增量计算总体 FPS，并维护各图像通道的按通道 FPS。
 - 每个 UDP 包先检查 `StreamHeader` 的 magic 和版本，再交给 `FrameAssembler`。
-- `StreamHeader` 当前是 UDP v2 64 字节头，携带通道、帧号、宽高、像素格式、`meta_flags`、时间戳、转镜元数据和 `frame_type`。
+- `StreamHeader` 当前是 UDP v4 64 字节头，携带通道、帧号、宽高、像素格式、`meta_flags`、时间戳、转镜元数据和 `frame_type`；元数据字段从 v3 起有效，客户端仍兼容接收 v2/v3。
 
 `FrameAssembler` 负责分片重组：
 - 以 `(channel, frame_id)` 作为帧 key。
@@ -111,9 +112,17 @@ Service 类继承或使用 `RpcServiceBase`，把业务 API 封装为命令名�
 3. `DeviceUiCoordinator` 确保 `StreamClient` 已绑定该端口。
 4. `StreamClient` 持续读取 UDP 包并交给 `FrameAssembler`。
 5. 完整帧产生后发出 `StreamFrame`。
-6. `DeviceUiCoordinator` 按通道选择 `ViewerAreaWidget` 中的 Raw/Slice 页面；Mono8 直接显示，Mono16 通过 `ImageFrameUtils` 做当前帧 min/max 拉伸到 8-bit 灰度。
+6. `DeviceUiCoordinator` 按通道选择 `ViewerAreaWidget` 中的 Raw/NucRaw/Slice/SpectralPreview 页面；Mono8 直接显示，Mono16 通过 `ImageFrameUtils` 做当前帧 min/max 拉伸到 8-bit 灰度，JPEG 由 Qt 解码。
 7. 对 `HeaderFrame/DataFrame/TailFrame`，`DeviceUiCoordinator` 同时将帧送入 `SpectralScanController` 的 Live 扫描缓存。
 8. 顶栏与仪表盘更新按通道 FPS、接收帧数、丢帧数。
+
+### Column NUC 校正
+
+1. 用户进入“校正”面板时切换到 NucRaw16 图像页，并刷新 `system.column_nuc.get_config` 与 `list_captures`。
+2. Low/High 采集在确认后调用 `capture`；客户端以单次 500 ms 定时器轮询 `capture_status`，展示转镜、温控和 Raw 采集阶段，并支持 `capture_cancel`。
+3. 完成采集后刷新服务端 Low/High 文件列表；客户端只保存当前选择，不把任务状态或结果写入本地配置。
+4. 用户选择尺寸一致的 Low/High 后确认标定，客户端调用长超时 `calibrate(apply=true)`，再用 `get_config` 确认矩阵已加载。
+5. `nuc_raw16` 由 StreamPanel 订阅，经 `DeviceUiCoordinator` 路由到独立 NucRaw16 viewer；启用状态和流订阅选择是用户可编辑设置，服务端运行时结果不做客户端持久化。
 
 ### Binning 功能测试
 

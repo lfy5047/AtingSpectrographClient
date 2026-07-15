@@ -86,6 +86,9 @@ void MainWindowPanelRegistry::selectPanel(int index)
 
     selectAssociatedViewerChannel(index);
 
+    if (index == Calibration && calibrationPanel_) {
+        calibrationPanel_->refreshColumnNuc();
+    }
     if (index == SpectrumAnalysis && spectrumAnalysisCoordinator_) {
         spectrumAnalysisCoordinator_->openDialog();
     }
@@ -181,6 +184,9 @@ void MainWindowPanelRegistry::selectAssociatedViewerChannel(int panelIndex)
     switch (panelIndex) {
     case DataAcquisition:
         viewer->setCurrentChannel(preferredStreamViewerChannel());
+        break;
+    case Calibration:
+        viewer->setCurrentChannel(ViewerAreaWidget::NucRaw16View);
         break;
     case RecordPlayback:
         viewer->setCurrentChannel(ViewerAreaWidget::PlaybackView);

@@ -14,7 +14,7 @@ using namespace cli::proto;
 namespace {
 const qint64 kDropLogIntervalMs = 1000;
 const uint8_t kMinStreamChannel = 1;
-const uint8_t kMaxStreamChannel = 5;
+const uint8_t kMaxStreamChannel = 6;
 const uint8_t kMinSupportedStreamVersion = 2;
 }
 
@@ -110,7 +110,7 @@ void StreamClient::onReadyRead()
         }
 
         const bool hasMeta = (hdr.meta_flags & HasRawFrameMeta) != 0;
-        const bool hasDirection = hdr.version >= kStreamProtoVersion &&
+        const bool hasDirection = hdr.version >= kStreamMetadataProtoVersion &&
                                   (hdr.meta_flags & HasScanDirection) != 0;
         if (hasMeta) {
             if (hdr.is_latest_mirror_frame > 1) {

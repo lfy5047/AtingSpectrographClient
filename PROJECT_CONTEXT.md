@@ -2,13 +2,13 @@
 
 ## 项目概览
 
-AtingSpectrographClient 是一个 Windows 桌面端光谱仪/成像设备控制客户端。主界面使用 Qt Widgets 构建，通过 TCP JSON-RPC 控制设备，通过 UDP 接收 Raw16、SliceStitch16 和 Spectral 图像流，并通过服务端 `record.*` 接口查询、下载和回放历史 raw/tif 录制数据。
+AtingSpectrographClient 是一个 Windows 桌面端光谱仪/成像设备控制客户端。主界面使用 Qt Widgets 构建，通过 TCP JSON-RPC 控制设备，通过 UDP 接收 Raw16、NucRaw16、SliceStitch16 和 Spectral 图像流，并通过服务端 `record.*` 接口查询、下载和回放历史 raw/tif 录制数据。
 
 主要运行目标：
 - Windows 桌面应用：`AtingSpectrographClient.exe`
 - 控制连接：TCP，默认设备 `192.168.10.128:9000`
 - 图像流接收：本地 UDP，默认端口 `1400`
-- 主要图像页：Raw16、SliceStitch16、Spectral、SpectralPreview、Playback、Binning 对比、ROI 对比
+- 主要图像页：Raw16、NucRaw16、SliceStitch16、Spectral、SpectralPreview、Playback、Binning 对比、ROI 对比
 
 ## 技术栈
 
@@ -59,6 +59,7 @@ AtingSpectrographClient 是一个 Windows 桌面端光谱仪/成像设备控制�
 - `src/Ui/DeviceUiCoordinator.*`：设备信号与 UI 的绑定层，负责连接状态、帧分发、录制回放、Spectral 刷新、stream stats、raw log 和 uptime。
 - `src/Ui/BinningTestController.*`：Binning 测试状态机，负责保存/恢复配置、依次设置 1x1/2x2/4x4、回读确认，并从测试面板所选 Raw16/SliceStitch16 数据源采集稳定帧；默认数据源为 Raw16。
 - `src/Ui/RoiTestController.*`：ROI 测试状态机，负责校验 Binning 1x1、启用静态采集、忽略 Header 并采集全幅/ROI 后续数据图像，在完成、取消、失败或重连后恢复 ROI 和采集门控配置。
+- `src/Ui/panels/ColumnNucPanel.*`：嵌入“校正”页的列向 NUC 工作流，负责配置回读、Low/High 黑体采集与轮询、历史选择、矩阵生成/应用和结果复核。
 - `src/Ui/ThemeManager.*`：应用级主题目录、QSS 加载和 `QSettings` 主题偏好保存。
 - `src/Ui/WindowSettingsStore.*`：窗口 geometry、splitter、当前 Panel、侧边栏折叠状态和 Panel index 迁移。
 - `src/Ui/ImageFrameUtils.*`：Mono8/Mono16 图像显示转换和 Mono16 图像统计。
@@ -118,6 +119,7 @@ AtingSpectrographClient 是一个 Windows 桌面端光谱仪/成像设备控制�
 12. 光谱分析 Panel 激活时由 `MainWindowPanelRegistry` 自动切到 SliceStitch16 页；`SpectrumAnalysisCoordinator` 打开独立曲线窗口，并从最新 SliceStitch16 Mono16 原始帧中采样曲线。
 13. Binning 测试 Panel 激活时自动切到三图对比页；数据源默认 Raw16、可切换 SliceStitch16；`BinningTestController` 保存原配置，依次采集 1x1、2x2、4x4 快照并在结束、取消或失败后恢复原配置。
 14. ROI 测试 Panel 激活时自动切到双图对比页；`RoiTestController` 保存原 ROI 和采集门控配置，一键启动静态采集，忽略 Header 并依次抓取全幅与目标 ROI 的 SliceStitch16 后续数据图像；双图支持鼠标悬停显示各自的局部像素坐标，采集结束后停止采集并恢复配置。
+15. 校正 Panel 激活时自动切到 NucRaw16 页；`ColumnNucPanel` 确认后发起 Low/High 黑体异步采集，轮询任务阶段，从服务端完成列表选择一对 Raw，并调用 `calibrate(apply=true)` 后回读配置确认矩阵已加载。
 
 ## 光谱分析功能
 
@@ -136,13 +138,13 @@ AtingSpectrographClient 是一个 Windows 桌面端光谱仪/成像设备控制�
 控制和流协议位于 `src/Client/rpc/Protocol.h`：
 - 控制 magic：`0x4E495441`，注释为 `'ATIN' LE`
 - 流 magic：`0x4D545341`，注释为 `'ASTM' LE`
-- 控制协议版本：`1`
-- UDP 流协议版本：`2`
+- 控制协议版本：`2`
+- UDP 流协议版本：`4`，元数据字段从 v3 起有效
 - 控制头：`CtrlHeader`，16 字节
 - 流头：`StreamHeader`，64 字节
 - 控制消息类型：`Request`、`Response`、`Event`、`Error`
-- 图像通道：`Raw16 = 1`，`SliceStitch16 = 3`
-- 像素格式：`Mono8 = 1`，`Mono16 = 2`
+- 图像通道：`Raw16 = 1`、`Preview8 = 2`、`SliceStitch16 = 3`、`RegionStitch16 = 4`、`NucRaw16 = 5`、`SpectralPreview = 6`
+- 像素格式：`Mono8 = 1`、`Mono16 = 2`、`Jpeg = 3`
 - 光谱帧类型：`UnknownFrame = 0`、`HeaderFrame = 1`、`DataFrame = 2`、`TailFrame = 3`
 
 RPC 命令名集中在 `src/Client/rpc/RpcCommands.h`，当前分组包括：

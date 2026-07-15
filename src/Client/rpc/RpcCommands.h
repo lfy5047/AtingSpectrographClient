@@ -3,6 +3,7 @@
 namespace RpcTimeout {
 static const int Normal = 3000;
 static const int Slow = 5000;
+static const int ColumnNucCalibration = 600000;
 }
 
 namespace RpcCommand {
@@ -12,6 +13,14 @@ static const char* const Version = "system.version";
 static const char* const Status = "system.status";
 static const char* const BackgroundCalibrationStart = "system.background_calibration.start";
 static const char* const BackgroundCalibrationStatus = "system.background_calibration.status";
+static const char* const ColumnNucGetConfig = "system.column_nuc.get_config";
+static const char* const ColumnNucSetConfig = "system.column_nuc.set_config";
+static const char* const ColumnNucReload = "system.column_nuc.reload";
+static const char* const ColumnNucCapture = "system.column_nuc.capture";
+static const char* const ColumnNucCaptureStatus = "system.column_nuc.capture_status";
+static const char* const ColumnNucCaptureCancel = "system.column_nuc.capture_cancel";
+static const char* const ColumnNucListCaptures = "system.column_nuc.list_captures";
+static const char* const ColumnNucCalibrate = "system.column_nuc.calibrate";
 }
 
 namespace StreamControl {

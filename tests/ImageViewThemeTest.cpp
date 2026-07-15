@@ -19,6 +19,7 @@ private slots:
     void outdoorThemeUsesLightNoSignalBackground();
     void outdoorThemePaintsTopBarBackground();
     void outdoorThemePaintsViewerSpacingBackground();
+    void viewerExposesNucRaw16Channel();
     void topBarExposesConnectionToggleButton();
     void topBarCombinesFpsAndDropped();
 };
@@ -88,6 +89,18 @@ void ImageViewThemeTest::outdoorThemePaintsViewerSpacingBackground()
                  .arg(pixel.blue(), 2, 16, QLatin1Char('0'))));
 
     ThemeManager::setCurrentThemeForTesting(ThemeManager::Theme::IndustrialDark);
+}
+
+void ImageViewThemeTest::viewerExposesNucRaw16Channel()
+{
+    ViewerAreaWidget viewer;
+    QVERIFY(viewer.imageView(ViewerAreaWidget::NucRaw16View));
+
+    QSignalSpy spy(&viewer, &ViewerAreaWidget::channelChanged);
+    viewer.setCurrentChannel(ViewerAreaWidget::NucRaw16View);
+
+    QCOMPARE(viewer.currentChannel(), static_cast<int>(ViewerAreaWidget::NucRaw16View));
+    QCOMPARE(spy.count(), 1);
 }
 
 void ImageViewThemeTest::topBarExposesConnectionToggleButton()

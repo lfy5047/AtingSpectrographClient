@@ -8,7 +8,8 @@ namespace cli { namespace proto {
 static const uint32_t kCtrlMagic   = 0x4E495441u;  // 'ATIN' LE
 static const uint32_t kStreamMagic = 0x4D545341u;  // 'ASTM' LE
 static const uint16_t kCtrlProtoVersion = 2;
-static const uint8_t kStreamProtoVersion = 3;
+static const uint8_t kStreamProtoVersion = 4;
+static const uint8_t kStreamMetadataProtoVersion = 3;
 static const uint32_t kMaxCtrlPayload = 1u << 20;  // 1 MiB
 
 enum MsgType : uint16_t {
@@ -23,7 +24,8 @@ enum StreamChannel : uint8_t {
     Preview8       = 2,
     SliceStitch16  = 3,
     RegionStitch16 = 4,
-    SpectralPreview = 5,
+    NucRaw16       = 5,
+    SpectralPreview = 6,
 };
 
 enum PixelFormat : uint16_t {

@@ -1,5 +1,6 @@
 #include "CalibrationPanel.h"
 
+#include "ColumnNucPanel.h"
 #include "DeviceClient.h"
 
 #include <QFormLayout>
@@ -26,6 +27,13 @@ CalibrationPanel::CalibrationPanel(DeviceClient* dev, QWidget* parent)
     backgroundCalibrationForm->addRow(QString::fromUtf8("状态"), backgroundCalibrationStatusLabel_);
     backgroundCalibrationForm->addRow(backgroundCalibrationBtn_);
     root->addWidget(backgroundCalibrationGroup);
+
+    auto* columnNucGroup = new QGroupBox(QString::fromUtf8("列向 NUC 校正"), this);
+    columnNucGroup->setObjectName(QStringLiteral("calibrationColumnNucGroup"));
+    auto* columnNucLayout = new QVBoxLayout(columnNucGroup);
+    columnNucPanel_ = new ColumnNucPanel(dev_, columnNucGroup);
+    columnNucLayout->addWidget(columnNucPanel_);
+    root->addWidget(columnNucGroup);
     root->addStretch();
 
     connect(backgroundCalibrationBtn_, &QPushButton::clicked,
@@ -35,6 +43,11 @@ CalibrationPanel::CalibrationPanel(DeviceClient* dev, QWidget* parent)
     backgroundCalibrationTimer_->setSingleShot(true);
     connect(backgroundCalibrationTimer_, &QTimer::timeout,
             this, &CalibrationPanel::pollBackgroundCalibrationStatus);
+}
+
+void CalibrationPanel::refreshColumnNuc()
+{
+    if (columnNucPanel_) columnNucPanel_->refreshRemote();
 }
 
 void CalibrationPanel::startBackgroundCalibration()

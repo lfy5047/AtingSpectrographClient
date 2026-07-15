@@ -52,6 +52,7 @@ private slots:
     void dataAcquisitionPanelOrdersSubPanels();
     void dataAcquisitionPanelKeepsOnlyOperationalCollectionControls();
     void calibrationPanelProvidesBackgroundCalibrationControls();
+    void calibrationPanelProvidesColumnNucWorkflow();
     void advancedSettingsPanelProvidesConnectionAndCameraSettings();
     void advancedSettingsPanelProvidesCollectionSettings();
     void tempControlPanelRestoresSavedUserInputs();
@@ -360,6 +361,42 @@ void PanelSettingsTest::calibrationPanelProvidesBackgroundCalibrationControls()
     QCOMPARE(status->text(), QStringLiteral("\u672a\u542f\u52a8"));
 }
 
+void PanelSettingsTest::calibrationPanelProvidesColumnNucWorkflow()
+{
+    DeviceClient device;
+    CalibrationPanel panel(&device);
+
+    auto* group = panel.findChild<QGroupBox*>(QStringLiteral("calibrationColumnNucGroup"));
+    auto* enabled = panel.findChild<QCheckBox*>(QStringLiteral("columnNucEnabledCheck"));
+    auto* frameCount = panel.findChild<QSpinBox*>(QStringLiteral("columnNucFrameCountSpin"));
+    auto* timeout = panel.findChild<QSpinBox*>(QStringLiteral("columnNucTimeoutSpin"));
+    auto* lowTemperature = panel.findChild<QDoubleSpinBox*>(QStringLiteral("columnNucLowTemperatureSpin"));
+    auto* highTemperature = panel.findChild<QDoubleSpinBox*>(QStringLiteral("columnNucHighTemperatureSpin"));
+    auto* captureLow = panel.findChild<QPushButton*>(QStringLiteral("columnNucCaptureLowButton"));
+    auto* captureHigh = panel.findChild<QPushButton*>(QStringLiteral("columnNucCaptureHighButton"));
+    auto* cancelCapture = panel.findChild<QPushButton*>(QStringLiteral("columnNucCancelCaptureButton"));
+    auto* calibrate = panel.findChild<QPushButton*>(QStringLiteral("columnNucCalibrateButton"));
+
+    QVERIFY(group);
+    QVERIFY(enabled);
+    QVERIFY(frameCount);
+    QVERIFY(timeout);
+    QVERIFY(lowTemperature);
+    QVERIFY(highTemperature);
+    QVERIFY(captureLow);
+    QVERIFY(captureHigh);
+    QVERIFY(cancelCapture);
+    QVERIFY(calibrate);
+    QCOMPARE(frameCount->minimum(), 1);
+    QCOMPARE(frameCount->maximum(), 10000);
+    QCOMPARE(timeout->maximum(), 600000);
+    QCOMPARE(lowTemperature->value(), 30.0);
+    QCOMPARE(highTemperature->value(), 45.0);
+    QVERIFY(!captureLow->isEnabled());
+    QVERIFY(!captureHigh->isEnabled());
+    QVERIFY(!calibrate->isEnabled());
+}
+
 void PanelSettingsTest::advancedSettingsPanelProvidesConnectionAndCameraSettings()
 {
     QSettings settings;
@@ -546,6 +583,7 @@ void PanelSettingsTest::streamPanelRestoresSavedChannels()
     QSettings settings;
     settings.setValue(QStringLiteral("panels/stream/raw16"), true);
     settings.setValue(QStringLiteral("panels/stream/sliceStitch16"), true);
+    settings.setValue(QStringLiteral("panels/stream/nucRaw16"), true);
     settings.setValue(QStringLiteral("panels/stream/spectralPreview"), true);
 
     DeviceClient device;
@@ -553,17 +591,21 @@ void PanelSettingsTest::streamPanelRestoresSavedChannels()
 
     auto* raw = panel.findChild<QCheckBox*>(QStringLiteral("streamRaw16Check"));
     auto* slice = panel.findChild<QCheckBox*>(QStringLiteral("streamSliceStitch16Check"));
+    auto* nucRaw = panel.findChild<QCheckBox*>(QStringLiteral("streamNucRaw16Check"));
     auto* spectralPreview = panel.findChild<QCheckBox*>(QStringLiteral("streamSpectralPreviewCheck"));
 
     QVERIFY(raw);
     QVERIFY(slice);
+    QVERIFY(nucRaw);
     QVERIFY(spectralPreview);
     QVERIFY(raw->isChecked());
     QVERIFY(slice->isChecked());
+    QVERIFY(nucRaw->isChecked());
     QVERIFY(spectralPreview->isChecked());
     QCOMPARE(panel.selectedChannels(),
              QStringList({QStringLiteral("raw16"),
                           QStringLiteral("slice_stitch16"),
+                          QStringLiteral("nuc_raw16"),
                           QStringLiteral("spectral_preview")}));
 }
 
