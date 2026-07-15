@@ -33,6 +33,7 @@ private:
     std::array<bool, 3> snapshotValid_ = {{false, false, false}};
     std::array<ImageView*, 3> imageViews_ = {{nullptr, nullptr, nullptr}};
     std::array<QLabel*, 3> sizeLabels_ = {{nullptr, nullptr, nullptr}};
+    std::array<QLabel*, 3> coordinateLabels_ = {{nullptr, nullptr, nullptr}};
     std::array<QLabel*, 3> pixelRatioLabels_ = {{nullptr, nullptr, nullptr}};
     std::array<QLabel*, 3> dnStatsLabels_ = {{nullptr, nullptr, nullptr}};
     std::array<std::array<int, 2>, 3> measurementLines_ = {{{{-1, -1}}, {{-1, -1}}, {{-1, -1}}}};

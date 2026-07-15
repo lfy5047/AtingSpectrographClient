@@ -25,7 +25,9 @@ private slots:
     void expectedSizeUsesFloorDivision();
     void featureWidthUsesOnePixelTolerance();
     void compareViewUsesCommonDisplayRange();
+    void compareViewShowsHoverCoordinatesAndDn();
     void compareInfoLabelsAllowFullDisplay();
+    void mainViewerShowsHoverDn();
     void viewerProvidesDedicatedBinningComparePage();
 };
 
@@ -146,6 +148,28 @@ void BinningUiTest::compareViewUsesCommonDisplayRange()
     QCOMPARE(factor4->currentImage().pixelColor(0, 0).red(), 255);
 }
 
+void BinningUiTest::compareViewShowsHoverCoordinatesAndDn()
+{
+    BinningCompareWidget compare;
+    compare.setSnapshot(snapshot(1, 2, 2, {10, 20, 30, 40}));
+
+    ImageView* factor1 = compare.imageViewForFactor(1);
+    auto* coordinate = compare.findChild<QLabel*>(QStringLiteral("binningCoordinateLabel1"));
+    QVERIFY(factor1);
+    QVERIFY(coordinate);
+    QCOMPARE(coordinate->text(), QString::fromUtf8("坐标: --  DN: --"));
+
+    QVERIFY(QMetaObject::invokeMethod(factor1, "cursorImagePosChanged",
+                                      Qt::DirectConnection,
+                                      Q_ARG(QPoint, QPoint(1, 1))));
+    QCOMPARE(coordinate->text(), QStringLiteral("X: 1  Y: 1  DN: 40"));
+
+    QVERIFY(QMetaObject::invokeMethod(factor1, "cursorImagePosChanged",
+                                      Qt::DirectConnection,
+                                      Q_ARG(QPoint, QPoint(-1, -1))));
+    QCOMPARE(coordinate->text(), QString::fromUtf8("坐标: --  DN: --"));
+}
+
 void BinningUiTest::compareInfoLabelsAllowFullDisplay()
 {
     BinningCompareWidget compare;
@@ -164,6 +188,38 @@ void BinningUiTest::compareInfoLabelsAllowFullDisplay()
     QVERIFY(stats->text().contains(QStringLiteral("Min")));
     QVERIFY(stats->text().contains(QStringLiteral("Avg")));
     QVERIFY(stats->text().contains(QStringLiteral("Max")));
+}
+
+void BinningUiTest::mainViewerShowsHoverDn()
+{
+    ViewerAreaWidget viewer;
+    const QByteArray data = mono16Data({12, 345});
+    viewer.setImageStats(ViewerAreaWidget::Raw16View,
+                         makeChannelImageStats(2, 1, cli::proto::Mono16, data));
+    viewer.renderFrame(ViewerAreaWidget::Raw16View, 2, 1, cli::proto::Mono16, data);
+
+    ImageView* raw = viewer.imageView(ViewerAreaWidget::Raw16View);
+    auto* info = viewer.findChild<QLabel*>(QStringLiteral("imgInfoLabel"));
+    QVERIFY(raw);
+    QVERIFY(info);
+
+    QVERIFY(QMetaObject::invokeMethod(raw, "cursorImagePosChanged",
+                                      Qt::DirectConnection,
+                                      Q_ARG(QPoint, QPoint(1, 0))));
+    QCOMPARE(info->text(), QStringLiteral(
+        "x: 1  y: 0  dn: 345\nmin: 12  max: 345  avg: 178.5"));
+
+    QImage playback(1, 1, QImage::Format_Grayscale8);
+    playback.fill(77);
+    viewer.setChannelImage(ViewerAreaWidget::PlaybackView, playback);
+    viewer.setCurrentChannel(ViewerAreaWidget::PlaybackView);
+    ImageView* playbackView = viewer.imageView(ViewerAreaWidget::PlaybackView);
+    QVERIFY(playbackView);
+    QVERIFY(QMetaObject::invokeMethod(playbackView, "cursorImagePosChanged",
+                                      Qt::DirectConnection,
+                                      Q_ARG(QPoint, QPoint(0, 0))));
+    QCOMPARE(info->text().section(QLatin1Char('\n'), 0, 0),
+             QStringLiteral("x: 0  y: 0  dn: 77"));
 }
 
 void BinningUiTest::viewerProvidesDedicatedBinningComparePage()

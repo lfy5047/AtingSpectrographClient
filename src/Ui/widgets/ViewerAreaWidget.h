@@ -64,7 +64,8 @@ private:
     void positionImageStatsOverlay();
     void positionSpectralProgressOverlay();
     void syncSpectralSegmentLinesWithRawImage();
-    QString formatImageStatsText(const QPoint& cursorPos, const ChannelImageStats* stats) const;
+    QString formatImageStatsText(const QPoint& cursorPos, const ChannelImageStats* stats,
+                                 const ImageView* imageView) const;
 
     QWidget* channelTabBar_ = nullptr;
     QPushButton* chTabRaw16_ = nullptr;

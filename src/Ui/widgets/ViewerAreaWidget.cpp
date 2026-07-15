@@ -109,7 +109,7 @@ void ViewerAreaWidget::setupUi()
     imageStatsLabel_ = new QLabel(imageStatsOverlay_);
     imageStatsLabel_->setObjectName("imgInfoLabel");
     imageStatsLabel_->setAlignment(Qt::AlignRight | Qt::AlignVCenter);
-    imageStatsLabel_->setText(QString::fromUtf8("x: --  y: --\nmin: --  max: --  avg: --"));
+    imageStatsLabel_->setText(QString::fromUtf8("x: --  y: --  dn: --\nmin: --  max: --  avg: --"));
     statsLayout->addWidget(imageStatsLabel_);
     imageStatsOverlay_->adjustSize();
     imageStatsOverlay_->raise();
@@ -222,7 +222,11 @@ void ViewerAreaWidget::renderFrame(int channel, int width, int height, int pixfm
 
     const QImage img = makeDisplayImage(width, height, pixfmt, data);
     if (!img.isNull()) {
-        target->setImage(img);
+        const bool needsPixelDn = channel == Raw16View
+            || channel == NucRaw16View
+            || channel == SliceStitch16View;
+        if (needsPixelDn) target->setImage(img, pixfmt, data);
+        else target->setImage(img);
         if (channel == Raw16View) {
             syncSpectralSegmentLinesWithRawImage();
         }
@@ -368,10 +372,17 @@ void ViewerAreaWidget::updateChannelTabStyle()
     chTabRoiCompare_->style()->polish(chTabRoiCompare_);
 }
 
-QString ViewerAreaWidget::formatImageStatsText(const QPoint& cursorPos, const ChannelImageStats* stats) const
+QString ViewerAreaWidget::formatImageStatsText(const QPoint& cursorPos,
+                                               const ChannelImageStats* stats,
+                                               const ImageView* imageView) const
 {
     const QString xText = cursorPos.x() >= 0 ? QString::number(cursorPos.x()) : QString::fromUtf8("--");
     const QString yText = cursorPos.y() >= 0 ? QString::number(cursorPos.y()) : QString::fromUtf8("--");
+    QString dnText = QString::fromUtf8("--");
+    quint16 dn = 0;
+    if (imageView && imageView->pixelDnAt(cursorPos, &dn)) {
+        dnText = QString::number(dn);
+    }
 
     QString minText = QString::fromUtf8("--");
     QString maxText = QString::fromUtf8("--");
@@ -382,8 +393,8 @@ QString ViewerAreaWidget::formatImageStatsText(const QPoint& cursorPos, const Ch
         avgText = QString::number(stats->avg, 'f', 1);
     }
 
-    return QString::fromUtf8("x: %1  y: %2\nmin: %3  max: %4  avg: %5")
-        .arg(xText, yText, minText, maxText, avgText);
+    return QString::fromUtf8("x: %1  y: %2  dn: %3\nmin: %4  max: %5  avg: %6")
+        .arg(xText, yText, dnText, minText, maxText, avgText);
 }
 
 void ViewerAreaWidget::positionImageStatsOverlay()
@@ -415,7 +426,7 @@ void ViewerAreaWidget::refreshImageStatsOverlay()
     if (currentChannel_ == NucRaw16View) stats = &nucRawImageStats_;
     else if (currentChannel_ == SliceStitch16View) stats = &sliceImageStats_;
     else if (currentChannel_ == PlaybackView) stats = &playbackImageStats_;
-    imageStatsLabel_->setText(formatImageStatsText(cursorPos, stats));
+    imageStatsLabel_->setText(formatImageStatsText(cursorPos, stats, imageView(currentChannel_)));
     imageStatsOverlay_->adjustSize();
     positionImageStatsOverlay();
     imageStatsOverlay_->show();

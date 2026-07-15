@@ -1,5 +1,6 @@
 #include "ImageView.h"
 
+#include "Protocol.h"
 #include "ThemeManager.h"
 
 #include <QCursor>
@@ -10,6 +11,7 @@
 #include <QWheelEvent>
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 ImageView::ImageView(QWidget* parent) : QWidget(parent)
 {
@@ -21,14 +23,52 @@ ImageView::ImageView(QWidget* parent) : QWidget(parent)
 void ImageView::setImage(const QImage& img)
 {
     image_ = img;
+    pixelData_.clear();
+    pixelFormat_ = 0;
     noSignal_ = false;
     update();
     syncCursorFromGlobalPos();
 }
 
+void ImageView::setImage(const QImage& img, int pixelFormat, const QByteArray& pixelData)
+{
+    image_ = img;
+    pixelData_ = pixelData;
+    pixelFormat_ = pixelFormat;
+    noSignal_ = false;
+    update();
+    syncCursorFromGlobalPos();
+}
+
+bool ImageView::pixelDnAt(const QPoint& pos, quint16* value) const
+{
+    if (!value || noSignal_ || image_.isNull()
+        || pos.x() < 0 || pos.y() < 0
+        || pos.x() >= image_.width() || pos.y() >= image_.height()) {
+        return false;
+    }
+
+    const int index = pos.y() * image_.width() + pos.x();
+    if (pixelFormat_ == cli::proto::Mono16
+        && pixelData_.size() >= (index + 1) * static_cast<int>(sizeof(quint16))) {
+        std::memcpy(value, pixelData_.constData() + index * static_cast<int>(sizeof(quint16)),
+                    sizeof(quint16));
+        return true;
+    }
+    if (pixelFormat_ == cli::proto::Mono8 && pixelData_.size() > index) {
+        *value = static_cast<quint8>(pixelData_.at(index));
+        return true;
+    }
+
+    *value = static_cast<quint16>(qGray(image_.pixel(pos)));
+    return true;
+}
+
 void ImageView::setNoSignal()
 {
     image_ = QImage();
+    pixelData_.clear();
+    pixelFormat_ = 0;
     noSignal_ = true;
     update();
     emit cursorImagePosChanged(QPoint(-1, -1));

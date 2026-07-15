@@ -20,6 +20,15 @@ QString modeText(int factor)
     return QStringLiteral("%1x%1").arg(factor);
 }
 
+QString coordinateText(const QPoint& pos, const ImageView* view)
+{
+    quint16 dn = 0;
+    if (pos.x() < 0 || pos.y() < 0 || !view || !view->pixelDnAt(pos, &dn)) {
+        return QString::fromUtf8("坐标: --  DN: --");
+    }
+    return QStringLiteral("X: %1  Y: %2  DN: %3").arg(pos.x()).arg(pos.y()).arg(dn);
+}
+
 } // namespace
 
 BinningCompareWidget::BinningCompareWidget(QWidget* parent)
@@ -59,6 +68,12 @@ BinningCompareWidget::BinningCompareWidget(QWidget* parent)
         sizeLabels_[static_cast<std::size_t>(index)]->setObjectName(
             QStringLiteral("binningSizeLabel%1").arg(kFactors[index]));
         sizeLabels_[static_cast<std::size_t>(index)]->setAlignment(Qt::AlignCenter);
+        coordinateLabels_[static_cast<std::size_t>(index)] = new QLabel(
+            QString::fromUtf8("坐标: --  DN: --"), group);
+        coordinateLabels_[static_cast<std::size_t>(index)]->setObjectName(
+            QStringLiteral("binningCoordinateLabel%1").arg(kFactors[index]));
+        coordinateLabels_[static_cast<std::size_t>(index)]->setAlignment(Qt::AlignCenter);
+        coordinateLabels_[static_cast<std::size_t>(index)]->setProperty("readoutSm", true);
         pixelRatioLabels_[static_cast<std::size_t>(index)] = new QLabel(
             QString::fromUtf8("总像素比: --"), group);
         pixelRatioLabels_[static_cast<std::size_t>(index)]->setObjectName(
@@ -81,6 +96,7 @@ BinningCompareWidget::BinningCompareWidget(QWidget* parent)
         imageViews_[static_cast<std::size_t>(index)] = view;
 
         layout->addWidget(sizeLabels_[static_cast<std::size_t>(index)]);
+        layout->addWidget(coordinateLabels_[static_cast<std::size_t>(index)]);
         layout->addWidget(pixelRatioLabels_[static_cast<std::size_t>(index)]);
         layout->addWidget(dnStatsLabels_[static_cast<std::size_t>(index)]);
         layout->addWidget(view, 1);
@@ -94,6 +110,11 @@ BinningCompareWidget::BinningCompareWidget(QWidget* parent)
                 measurementLines_[static_cast<std::size_t>(index)][0],
                 measurementLines_[static_cast<std::size_t>(index)][1]);
             emit measurementChanged(kFactors[index], measurementWidth(kFactors[index]));
+        });
+        connect(view, &ImageView::cursorImagePosChanged,
+                this, [this, index, view](const QPoint& pos) {
+            coordinateLabels_[static_cast<std::size_t>(index)]->setText(
+                coordinateText(pos, view));
         });
     }
     root->addLayout(cards, 1);
@@ -196,7 +217,10 @@ void BinningCompareWidget::renderSnapshots()
         const quint16 displayMax = commonRangeCheck_->isChecked() ? commonMax : snapshot.stats.max;
         const QImage image = makeMono16DisplayImage(snapshot.width, snapshot.height,
                                                     snapshot.data, displayMin, displayMax);
-        if (!image.isNull()) imageViews_[static_cast<std::size_t>(index)]->setImage(image);
+        if (!image.isNull()) {
+            imageViews_[static_cast<std::size_t>(index)]->setImage(
+                image, cli::proto::Mono16, snapshot.data);
+        }
     }
 }
 
@@ -205,6 +229,8 @@ void BinningCompareWidget::updateCardLabels(int index)
     if (index < 0 || index >= 3) return;
     if (!snapshotValid_[static_cast<std::size_t>(index)]) {
         sizeLabels_[static_cast<std::size_t>(index)]->setText(QString::fromUtf8("尺寸: --"));
+        coordinateLabels_[static_cast<std::size_t>(index)]->setText(
+            QString::fromUtf8("坐标: --  DN: --"));
         pixelRatioLabels_[static_cast<std::size_t>(index)]->setText(
             QString::fromUtf8("总像素比: --"));
         dnStatsLabels_[static_cast<std::size_t>(index)]->setText(

@@ -1,6 +1,7 @@
 #include "RoiCompareWidget.h"
 
 #include "ImageView.h"
+#include "Protocol.h"
 
 #include <QCheckBox>
 #include <QGroupBox>
@@ -25,10 +26,13 @@ QString statsText(const RoiSnapshot& snapshot, bool valid)
         .arg(snapshot.stats.max);
 }
 
-QString coordinateText(const QPoint& pos)
+QString coordinateText(const QPoint& pos, const ImageView* view)
 {
-    if (pos.x() < 0 || pos.y() < 0) return QString::fromUtf8("坐标: --");
-    return QStringLiteral("X: %1  Y: %2").arg(pos.x()).arg(pos.y());
+    quint16 dn = 0;
+    if (pos.x() < 0 || pos.y() < 0 || !view || !view->pixelDnAt(pos, &dn)) {
+        return QString::fromUtf8("坐标: --  DN: --");
+    }
+    return QStringLiteral("X: %1  Y: %2  DN: %3").arg(pos.x()).arg(pos.y()).arg(dn);
 }
 
 } // namespace
@@ -75,7 +79,7 @@ RoiCompareWidget::RoiCompareWidget(QWidget* parent)
         (*statsLabel)->setAlignment(Qt::AlignCenter);
         (*statsLabel)->setWordWrap(true);
         (*statsLabel)->setProperty("readoutSm", true);
-        *coordinateLabel = new QLabel(QString::fromUtf8("坐标: --"), group);
+        *coordinateLabel = new QLabel(QString::fromUtf8("坐标: --  DN: --"), group);
         (*coordinateLabel)->setObjectName(prefix + QStringLiteral("CoordinateLabel"));
         (*coordinateLabel)->setAlignment(Qt::AlignCenter);
         (*coordinateLabel)->setProperty("readoutSm", true);
@@ -101,11 +105,11 @@ RoiCompareWidget::RoiCompareWidget(QWidget* parent)
             this, [this](bool) { renderSnapshots(); });
     connect(fullFrameView_, &ImageView::cursorImagePosChanged,
             this, [this](const QPoint& pos) {
-                fullFrameCoordinateLabel_->setText(coordinateText(pos));
+                fullFrameCoordinateLabel_->setText(coordinateText(pos, fullFrameView_));
             });
     connect(roiView_, &ImageView::cursorImagePosChanged,
             this, [this](const QPoint& pos) {
-                roiCoordinateLabel_->setText(coordinateText(pos));
+                roiCoordinateLabel_->setText(coordinateText(pos, roiView_));
             });
     clearSnapshots();
 }
@@ -171,7 +175,7 @@ void RoiCompareWidget::renderSnapshots()
             ? commonMax : snapshot.stats.max;
         const QImage image = makeMono16DisplayImage(snapshot.width, snapshot.height,
                                                     snapshot.data, displayMin, displayMax);
-        if (!image.isNull()) view->setImage(image);
+        if (!image.isNull()) view->setImage(image, cli::proto::Mono16, snapshot.data);
     };
     render(fullFrameSnapshot_, fullFrameValid_, fullFrameView_);
     render(roiSnapshot_, roiValid_, roiView_);

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <QByteArray>
 #include <QImage>
 #include <QEvent>
 #include <QMouseEvent>
@@ -20,9 +21,11 @@ public:
     explicit ImageView(QWidget* parent = nullptr);
 
     void setImage(const QImage& img);
+    void setImage(const QImage& img, int pixelFormat, const QByteArray& pixelData);
     void setNoSignal();
     void resetView();
     QImage currentImage() const { return image_; }
+    bool pixelDnAt(const QPoint& pos, quint16* value) const;
     void setAnalysisOverlayEnabled(bool enabled);
     void setAnalysisLines(const QVector<SpectrumSampleLine>& lines);
     void setSpectralSegmentTestEnabled(bool enabled);
@@ -75,6 +78,8 @@ private:
     };
 
     QImage  image_;
+    QByteArray pixelData_;
+    int     pixelFormat_ = 0;
     double  scale_   = 1.0;
     QPointF offset_;
     QPoint  dragStart_;
