@@ -20,6 +20,7 @@ class BinningUiTest : public QObject {
 
 private slots:
     void panelExposesOnlyRequiredFactors();
+    void measurementSelectorUsesSpectralAndSpatialLabels();
     void sourceSelectorDefaultsToRawAndOffersSlice();
     void resultTableOmitsVerdictColumn();
     void expectedSizeUsesFloorDivision();
@@ -69,6 +70,20 @@ void BinningUiTest::panelExposesOnlyRequiredFactors()
     QCOMPARE(combo->itemData(0).toInt(), 1);
     QCOMPARE(combo->itemData(1).toInt(), 2);
     QCOMPARE(combo->itemData(2).toInt(), 4);
+}
+
+void BinningUiTest::measurementSelectorUsesSpectralAndSpatialLabels()
+{
+    BinningTestPanel panel;
+    auto* combo = panel.findChild<QComboBox*>(
+        QStringLiteral("binningMeasurementOrientationCombo"));
+
+    QVERIFY(combo);
+    QCOMPARE(combo->count(), 2);
+    QCOMPARE(combo->itemText(0), QString::fromUtf8("光谱纬度（竖线）"));
+    QCOMPARE(combo->itemData(0).toInt(), static_cast<int>(Qt::Horizontal));
+    QCOMPARE(combo->itemText(1), QString::fromUtf8("空间纬度（横线）"));
+    QCOMPARE(combo->itemData(1).toInt(), static_cast<int>(Qt::Vertical));
 }
 
 void BinningUiTest::sourceSelectorDefaultsToRawAndOffersSlice()

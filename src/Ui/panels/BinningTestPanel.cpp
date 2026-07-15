@@ -79,8 +79,8 @@ BinningTestPanel::BinningTestPanel(QWidget* parent)
 
     orientationCombo_ = new QComboBox(configGroup);
     orientationCombo_->setObjectName(QStringLiteral("binningMeasurementOrientationCombo"));
-    orientationCombo_->addItem(QString::fromUtf8("水平宽度（竖线）"), static_cast<int>(Qt::Horizontal));
-    orientationCombo_->addItem(QString::fromUtf8("垂直宽度（横线）"), static_cast<int>(Qt::Vertical));
+    orientationCombo_->addItem(QString::fromUtf8("光谱纬度（竖线）"), static_cast<int>(Qt::Horizontal));
+    orientationCombo_->addItem(QString::fromUtf8("空间纬度（横线）"), static_cast<int>(Qt::Vertical));
     configForm->addRow(QString::fromUtf8("特征测量"), orientationCombo_);
     root->addWidget(configGroup);
 
