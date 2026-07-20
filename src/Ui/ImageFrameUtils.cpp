@@ -2,6 +2,8 @@
 
 #include "Protocol.h"
 
+#include <QVector>
+
 bool computeMono16Stats(const QByteArray& data, int width, int height, Mono16Stats* out)
 {
     if (!out) return false;
@@ -23,6 +25,46 @@ bool computeMono16Stats(const QByteArray& data, int width, int height, Mono16Sta
     out->max = mx;
     out->sum = sum;
     return true;
+}
+
+QByteArray stretchCropMono16Horizontal(const QByteArray& data, int width, int height,
+                                       int stretchWidth, int cropLeftColumns)
+{
+    const int pixelCount = width * height;
+    const int requiredBytes = pixelCount * static_cast<int>(sizeof(quint16));
+    if (width <= 0 || height <= 0 || data.size() < requiredBytes) return QByteArray();
+    if (stretchWidth <= width) return data;
+
+    const int extraColumns = stretchWidth - width;
+    const int cropLeft = qBound(0, cropLeftColumns, extraColumns);
+    const qint64 denominator = stretchWidth - 1;
+    const auto* src = reinterpret_cast<const quint16*>(data.constData());
+    QByteArray result(requiredBytes, '\0');
+    auto* dst = reinterpret_cast<quint16*>(result.data());
+
+    QVector<int> leftXs(width);
+    QVector<qint64> remainders(width);
+    for (int outputX = 0; outputX < width; ++outputX) {
+        const int stretchedX = cropLeft + outputX;
+        const qint64 numerator = static_cast<qint64>(stretchedX) * (width - 1);
+        leftXs[outputX] = static_cast<int>(numerator / denominator);
+        remainders[outputX] = numerator % denominator;
+    }
+
+    for (int y = 0; y < height; ++y) {
+        const int rowOffset = y * width;
+        for (int outputX = 0; outputX < width; ++outputX) {
+            const int leftX = leftXs[outputX];
+            const int rightX = qMin(width - 1, leftX + 1);
+            const qint64 remainder = remainders[outputX];
+            const qint64 leftWeight = denominator - remainder;
+            const qint64 value = static_cast<qint64>(src[rowOffset + leftX]) * leftWeight
+                + static_cast<qint64>(src[rowOffset + rightX]) * remainder;
+            dst[rowOffset + outputX] = static_cast<quint16>((value + denominator / 2) / denominator);
+        }
+    }
+
+    return result;
 }
 
 QImage makeMono16DisplayImage(int width, int height, const QByteArray& data,

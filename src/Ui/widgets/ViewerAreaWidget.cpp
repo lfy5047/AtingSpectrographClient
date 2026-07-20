@@ -1,5 +1,7 @@
 #include "ViewerAreaWidget.h"
 
+#include "Protocol.h"
+
 #include "ImageView.h"
 #include "BinningCompareWidget.h"
 #include "RoiCompareWidget.h"
@@ -220,13 +222,27 @@ void ViewerAreaWidget::renderFrame(int channel, int width, int height, int pixfm
     ImageView* target = imageView(channel);
     if (!target) return;
 
-    const QImage img = makeDisplayImage(width, height, pixfmt, data);
+    QByteArray renderData = data;
+    ChannelImageStats transformedStats;
+    bool rawTransformed = false;
+    if (channel == Raw16View && pixfmt == cli::proto::Mono16 && rawStretchWidth_ > width) {
+        const QByteArray transformed = stretchCropMono16Horizontal(
+            data, width, height, rawStretchWidth_, rawCropLeftColumns_);
+        if (!transformed.isEmpty()) {
+            renderData = transformed;
+            transformedStats = makeChannelImageStats(width, height, pixfmt, renderData);
+            rawTransformed = true;
+        }
+    }
+
+    const QImage img = makeDisplayImage(width, height, pixfmt, renderData);
     if (!img.isNull()) {
         const bool needsPixelDn = channel == Raw16View
             || channel == NucRaw16View
             || channel == SliceStitch16View;
-        if (needsPixelDn) target->setImage(img, pixfmt, data);
+        if (needsPixelDn) target->setImage(img, pixfmt, renderData);
         else target->setImage(img);
+        if (rawTransformed) setImageStats(channel, transformedStats);
         if (channel == Raw16View) {
             syncSpectralSegmentLinesWithRawImage();
         }
@@ -243,6 +259,12 @@ void ViewerAreaWidget::renderFrame(int channel, int width, int height, int pixfm
             lastWarnMs = nowMs;
         }
     }
+}
+
+void ViewerAreaWidget::setRawStretchCrop(int stretchWidth, int cropLeftColumns)
+{
+    rawStretchWidth_ = qMax(0, stretchWidth);
+    rawCropLeftColumns_ = qMax(0, cropLeftColumns);
 }
 
 void ViewerAreaWidget::setChannelImage(int channel, const QImage& image)

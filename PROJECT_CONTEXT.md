@@ -112,7 +112,7 @@ AtingSpectrographClient 是一个 Windows 桌面端光谱仪/成像设备控制�
 5. 各控制 Panel 通过 `DeviceClient` 下的 service 调用 RPC 命令。
 6. `ControlClient` 发送 `CtrlHeader + JSON`，按 seq 管理 pending 回调、超时和断线清理。
 7. UDP 包进入 `StreamClient`，`FrameAssembler` 按通道和 frame id 重组完整帧并发出 `StreamFrame`。
-8. Raw16/SliceStitch16 的 Mono8/Mono16 数据经 `ImageFrameUtils` 转换为 8-bit `QImage`，由 `ViewerAreaWidget` 显示并更新图像统计 overlay。
+8. Raw16/SliceStitch16 的 Mono8/Mono16 数据经 `ImageFrameUtils` 转换为 8-bit `QImage`，由 `ViewerAreaWidget` 显示并更新图像统计 overlay；高级设置可对 Raw16 Mono16 数据先做水平线性拉伸，再按左裁偏移保留原宽度窗口，显示、悬停 DN 和统计共用变换后的数据。
 9. `HeaderFrame/DataFrame/TailFrame` 同时进入 `SpectralScanController` 管理的 `SpectralScanBuilder`，Spectral 页按单波段、范围平均或 RGB 合成渲染。
 10. `RecordPlaybackPanel` 通过 `record.list_recent` 查询服务端历史数据，通过 `record.fetch` 和独立文件 TCP 端口下载 raw/tif 到 `recordings/remote_cache/`。
 11. 远程 raw 按 `.json + .raw` 逐帧读取并渲染到 Playback 视图；远程 tif 使用 libtiff 读取 BigTIFF 并按面板内参数渲染为一张投影图。

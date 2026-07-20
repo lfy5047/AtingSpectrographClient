@@ -29,6 +29,7 @@ private slots:
     void compareViewShowsHoverCoordinatesAndDn();
     void compareInfoLabelsAllowFullDisplay();
     void mainViewerShowsHoverDn();
+    void mainViewerAppliesRawStretchCropToImageAndDn();
     void viewerProvidesDedicatedBinningComparePage();
 };
 
@@ -235,6 +236,31 @@ void BinningUiTest::mainViewerShowsHoverDn()
                                       Q_ARG(QPoint, QPoint(0, 0))));
     QCOMPARE(info->text().section(QLatin1Char('\n'), 0, 0),
              QStringLiteral("x: 0  y: 0  dn: 77"));
+}
+
+void BinningUiTest::mainViewerAppliesRawStretchCropToImageAndDn()
+{
+    ViewerAreaWidget viewer;
+    const QByteArray data = mono16Data({0, 100, 200, 300});
+    viewer.setRawStretchCrop(6, 1);
+    viewer.renderFrame(ViewerAreaWidget::Raw16View, 4, 1, cli::proto::Mono16, data);
+
+    ImageView* raw = viewer.imageView(ViewerAreaWidget::Raw16View);
+    auto* info = viewer.findChild<QLabel*>(QStringLiteral("imgInfoLabel"));
+    QVERIFY(raw);
+    QVERIFY(info);
+    QCOMPARE(raw->currentImage().size(), QSize(4, 1));
+
+    QVERIFY(QMetaObject::invokeMethod(raw, "cursorImagePosChanged",
+                                      Qt::DirectConnection,
+                                      Q_ARG(QPoint, QPoint(0, 0))));
+    QCOMPARE(info->text(), QStringLiteral(
+        "x: 0  y: 0  dn: 60\nmin: 60  max: 240  avg: 150.0"));
+
+    QVERIFY(QMetaObject::invokeMethod(raw, "cursorImagePosChanged",
+                                      Qt::DirectConnection,
+                                      Q_ARG(QPoint, QPoint(3, 0))));
+    QVERIFY(info->text().startsWith(QStringLiteral("x: 3  y: 0  dn: 240")));
 }
 
 void BinningUiTest::viewerProvidesDedicatedBinningComparePage()

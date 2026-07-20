@@ -134,6 +134,10 @@ void MainWindowPanelRegistry::setupPanels()
 
     connect(chrome_->viewerArea(), &ViewerAreaWidget::spectralSegmentPositionsChanged,
             spectralSegmentTestPanel_, &SpectralSegmentTestPanel::setLinePositions);
+    connect(advancedSettingsPanel_, &AdvancedSettingsPanel::rawStretchCropChanged,
+            chrome_->viewerArea(), &ViewerAreaWidget::setRawStretchCrop);
+    chrome_->viewerArea()->setRawStretchCrop(advancedSettingsPanel_->rawStretchWidth(),
+                                             advancedSettingsPanel_->rawCropLeftColumns());
 }
 
 ConnectionPanel* MainWindowPanelRegistry::connection() const

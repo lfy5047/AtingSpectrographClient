@@ -25,6 +25,8 @@ struct ComputeImageResult {
 };
 
 bool computeMono16Stats(const QByteArray& data, int width, int height, Mono16Stats* out);
+QByteArray stretchCropMono16Horizontal(const QByteArray& data, int width, int height,
+                                       int stretchWidth, int cropLeftColumns);
 QImage makeDisplayImage(int width, int height, int pixfmt, const QByteArray& data);
 QImage makeMono16DisplayImage(int width, int height, const QByteArray& data,
                               quint16 displayMin, quint16 displayMax);

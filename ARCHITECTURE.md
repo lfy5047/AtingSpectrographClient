@@ -20,7 +20,7 @@
 - `ViewerAreaWidget` 管理 Raw16、NucRaw16、SliceStitch16、Spectral、SpectralPreview、Playback、Binning 对比和 ROI 对比页，以及图像统计 overlay 和 Spectral progress overlay。
 - `BinningTestController` 管理 Binning 测试会话、配置回读、稳帧采集、超时/取消和原配置恢复。
 - `RoiTestController` 管理开窗测试会话、静态采集启停、全幅/ROI 后续数据帧抓取、超时/取消，以及 ROI 与门控配置恢复。
-- `ImageFrameUtils` 提供 Mono8/Mono16 显示图转换与 Mono16 统计计算。
+- `ImageFrameUtils` 提供 Mono8/Mono16 显示图转换、Mono16 统计计算，以及保持输出尺寸不变的 Raw16 水平拉伸裁剪。
 - `SpectralScanController` 管理 Live/Playback 的 Raw16/SliceStitch16 光谱扫描缓存、进度状态和渲染入口。
 - `SpectrumAnalysisCoordinator` 管理 SliceStitch16 光谱分析的最新帧缓存、采样线 overlay、曲线窗口和曲线刷新。
 - `WindowSettingsStore` 集中处理窗口级 QSettings 和 Panel index 迁移。
@@ -37,6 +37,7 @@
   - `RoiTestPanel`：是否应用开窗功能的开关、一键静态采集测试、进度和全幅/开窗尺寸结果；界面不显示开窗边界参数。
 - `RecordPlaybackPanel`：远程录制数据查询、保留时间设置、`raw/tif` 下载缓存、Playback 播放控制和 tif 渲染参数。
   - `SpectrumAnalysisPanel`：SliceStitch16 光谱分析参数、水平采样线列表、曲线处理和曲线窗口入口。
+  - `AdvancedSettingsPanel`：连接、相机、采集高级参数，以及持久化的 Raw16 拉伸目标宽度和左侧裁剪列数。
   - `DashboardPanel`：连接、转镜、流统计、运行时间等摘要信息。
   - `LogPanel`：显示 TCP raw log。
 - `src/Ui/widgets/` 提供侧栏、顶部栏、图像视图、QCustomPlot 等复用部件。

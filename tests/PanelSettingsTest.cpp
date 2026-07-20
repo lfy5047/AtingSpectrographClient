@@ -55,6 +55,7 @@ private slots:
     void calibrationPanelProvidesColumnNucWorkflow();
     void advancedSettingsPanelProvidesConnectionAndCameraSettings();
     void advancedSettingsPanelProvidesCollectionSettings();
+    void advancedSettingsPanelRestoresRawStretchCropSettings();
     void tempControlPanelRestoresSavedUserInputs();
     void tempControlStatusRefreshKeepsTargetInput();
     void tempControlCommonSaveButtonsSendSaveCommands();
@@ -456,6 +457,37 @@ void PanelSettingsTest::advancedSettingsPanelProvidesCollectionSettings()
     QVERIFY(collect->findChild<QSpinBox*>(QStringLiteral("collectDiscardBackMsSpin")));
     QVERIFY(collect->findChild<QSpinBox*>(QStringLiteral("collectForwardOffsetFramesSpin")));
     QVERIFY(collect->findChild<QSpinBox*>(QStringLiteral("collectReverseOffsetFramesSpin")));
+    auto* stretchWidth = panel.findChild<QSpinBox*>(QStringLiteral("rawStretchWidthSpin"));
+    auto* cropLeft = panel.findChild<QSpinBox*>(QStringLiteral("rawCropLeftColumnsSpin"));
+    QVERIFY(stretchWidth);
+    QVERIFY(cropLeft);
+    QCOMPARE(stretchWidth->value(), 0);
+    QCOMPARE(cropLeft->value(), 0);
+}
+
+void PanelSettingsTest::advancedSettingsPanelRestoresRawStretchCropSettings()
+{
+    QSettings settings;
+    const QString p = QStringLiteral("panels/advanced/");
+    settings.setValue(p + QStringLiteral("rawStretchWidth"), 700);
+    settings.setValue(p + QStringLiteral("rawCropLeftColumns"), 10);
+
+    DeviceClient device;
+    AdvancedSettingsPanel panel(&device);
+
+    auto* stretchWidth = panel.findChild<QSpinBox*>(QStringLiteral("rawStretchWidthSpin"));
+    auto* cropLeft = panel.findChild<QSpinBox*>(QStringLiteral("rawCropLeftColumnsSpin"));
+    QVERIFY(stretchWidth);
+    QVERIFY(cropLeft);
+    QCOMPARE(stretchWidth->value(), 700);
+    QCOMPARE(cropLeft->value(), 10);
+    QCOMPARE(panel.rawStretchWidth(), 700);
+    QCOMPARE(panel.rawCropLeftColumns(), 10);
+
+    QSignalSpy spy(&panel, &AdvancedSettingsPanel::rawStretchCropChanged);
+    stretchWidth->setValue(720);
+    QCOMPARE(spy.count(), 1);
+    QCOMPARE(QSettings().value(p + QStringLiteral("rawStretchWidth")).toInt(), 720);
 }
 
 void PanelSettingsTest::tempControlPanelRestoresSavedUserInputs()

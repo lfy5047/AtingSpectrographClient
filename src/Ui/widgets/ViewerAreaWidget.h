@@ -46,6 +46,7 @@ public:
     void setSpectralProgressVisible(bool visible, int percent, const QString& text);
     void setSliceAnalysisOverlay(bool enabled, const QVector<SpectrumSampleLine>& lines);
     void setSpectralSegmentTestEnabled(bool enabled);
+    void setRawStretchCrop(int stretchWidth, int cropLeftColumns);
 
 signals:
     void channelChanged(int channel);
@@ -111,4 +112,6 @@ private:
     bool spectralSegmentTestEnabled_ = false;
     int spectralSegmentImageWidth_ = 0;
     std::array<int, 2> spectralSegmentLineXs_ = {{-1, -1}};
+    int rawStretchWidth_ = 0;
+    int rawCropLeftColumns_ = 0;
 };
